@@ -286,15 +286,17 @@ private fun DrawScope.drawTriangle(
     style: DrawStyle = Fill,
 ) {
     val path = polygon(
-        Offset(bottomCenter.x, bottomCenter.y - height),
-        Offset(bottomCenter.x + halfWidth, bottomCenter.y),
-        Offset(bottomCenter.x - halfWidth, bottomCenter.y),
+        listOf(
+            Offset(bottomCenter.x, bottomCenter.y - height),
+            Offset(bottomCenter.x + halfWidth, bottomCenter.y),
+            Offset(bottomCenter.x - halfWidth, bottomCenter.y),
+        ),
     )
     drawPath(path, color, style = style)
 }
 
-/** [points] を順に結んで閉じた多角形。 */
-private fun polygon(vararg points: Offset): Path = Path().apply {
+/** [points] を順に結んで閉じた多角形。Offset は value class で vararg にできないため List で受ける。 */
+private fun polygon(points: List<Offset>): Path = Path().apply {
     moveTo(points[0].x, points[0].y)
     for (p in points.drop(1)) lineTo(p.x, p.y)
     close()
@@ -314,10 +316,10 @@ private fun DrawScope.drawSummit(
     val u = 1.dp.toPx()
     fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + y * u)
 
-    val rock = polygon(at(-16f, 10f), at(-8f, -2f), at(-4f, 1f), at(2f, -8f), at(16f, 10f))
+    val rock = polygon(listOf(at(-16f, 10f), at(-8f, -2f), at(-4f, 1f), at(2f, -8f), at(16f, 10f)))
     // 日の当たる面。右の尾根を明るくして立体に見せる。
-    val lit = polygon(at(2f, -8f), at(16f, 10f), at(7f, 10f))
-    val flag = polygon(at(2f, -24f), at(13f, -20.5f), at(2f, -17f))
+    val lit = polygon(listOf(at(2f, -8f), at(16f, 10f), at(7f, 10f)))
+    val flag = polygon(listOf(at(2f, -24f), at(13f, -20.5f), at(2f, -17f)))
     val poleTop = at(2f, -24f)
     val poleBottom = at(2f, -8f)
 
@@ -452,9 +454,11 @@ private fun DrawScope.drawReadout(
     val caret = 6.dp.toPx()
     drawPath(
         polygon(
-            Offset(center, tapeHeight),
-            Offset(center + caret, tapeHeight + caret),
-            Offset(center - caret, tapeHeight + caret),
+            listOf(
+                Offset(center, tapeHeight),
+                Offset(center + caret, tapeHeight + caret),
+                Offset(center - caret, tapeHeight + caret),
+            ),
         ),
         NorthRed,
     )
