@@ -60,15 +60,13 @@ struct DialCanvasView: View {
             draw(context, size: size)
         }
         .contentShape(Rectangle())
-        .gesture(
-            SpatialTapGesture().onEnded { value in
-                if hitTargets.hitsObserver(value.location, slop: 8) {
-                    onObserverTap()
-                } else if let m = hitTargets.find(value.location, slop: 8) {
-                    onMountainTap(m)
-                }
+        .onTapLocation { location in
+            if hitTargets.hitsObserver(location, slop: 8) {
+                onObserverTap()
+            } else if let m = hitTargets.find(location, slop: 8) {
+                onMountainTap(m)
             }
-        )
+        }
     }
 
     private func draw(_ ctx: GraphicsContext, size: CGSize) {
@@ -423,4 +421,21 @@ private func line(_ from: CGPoint, _ to: CGPoint) -> Path {
     path.move(to: from)
     path.addLine(to: to)
     return path
+}
+
+private extension View {
+    /// タップした位置を渡す。iOS 15 には位置の分かるタップがないので、ほとんど動かさずに離したドラッグをタップとみなす。
+    @ViewBuilder
+    func onTapLocation(_ action: @escaping (CGPoint) -> Void) -> some View {
+        if #available(iOS 16, *) {
+            gesture(SpatialTapGesture().onEnded { action($0.location) })
+        } else {
+            gesture(DragGesture(minimumDistance: 0).onEnded { value in
+                // ピンチやスクロールのつもりで指を動かしたときは山を開かない。
+                if hypot(value.translation.width, value.translation.height) < 10 {
+                    action(value.location)
+                }
+            })
+        }
+    }
 }

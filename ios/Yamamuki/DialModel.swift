@@ -1,6 +1,6 @@
+import Combine
 import CoreLocation
 import Foundation
-import Observation
 import os
 import YamamukiCore
 
@@ -12,33 +12,32 @@ struct GeoPoint: Equatable {
 }
 
 /// 現在地と表示範囲に応じて山データを取得し、方位盤に出す山の一覧を保つ(Android 版の DialViewModel に相当)。
-@Observable
-final class DialModel {
-    private(set) var location: GeoPoint?
+final class DialModel: ObservableObject {
+    @Published private(set) var location: GeoPoint?
     /// 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。
-    private(set) var mountains: [NearbyMountain] = []
+    @Published private(set) var mountains: [NearbyMountain] = []
     /// 現在地がほぼ山頂([summitRadiusKm] 以内)のとき、その山。
     /// 最低標高の絞り込みとは関係なく探し、[mountains] からは除く(現在地の位置に別のアイコンで出す)。
-    private(set) var summit: NearbyMountain?
+    @Published private(set) var summit: NearbyMountain?
     /// 端末を向けている方位(真北基準)。センサーの値が届くまでは nil。
-    private(set) var heading: Double?
+    @Published private(set) var heading: Double?
     /// 現在地から画面上端までの距離。
-    private(set) var rangeKm: Double
-    private(set) var loading = false
+    @Published private(set) var rangeKm: Double
+    @Published private(set) var loading = false
     /// 通信に失敗し、キャッシュだけで表示している。
-    private(set) var offline = false
+    @Published private(set) var offline = false
     /// 端末が通信できる状態か。圏外や機内モードでは false になり、取得を控えて保存済みのデータで表示する。
-    private(set) var isConnected = true
+    @Published private(set) var isConnected = true
     /// 通信に失敗したときに画面中央で知らせる文言。閉じるまで保つ。
-    private(set) var fetchErrorMessage: String?
+    @Published private(set) var fetchErrorMessage: String?
     /// 範囲内に一度も取得できていない地域がある。
-    private(set) var incomplete = false
+    @Published private(set) var incomplete = false
     /// 手動取得モードのため、未取得または古い地域があっても通信しなかった。
-    private(set) var networkSkipped = false
-    private(set) var settings: Settings
+    @Published private(set) var networkSkipped = false
+    @Published private(set) var settings: Settings
     /// 設定画面に出すキャッシュの状況。読み込むまでは nil。
-    private(set) var cacheInfo: CacheInfo?
-    private(set) var authorization: CLAuthorizationStatus = .notDetermined
+    @Published private(set) var cacheInfo: CacheInfo?
+    @Published private(set) var authorization: CLAuthorizationStatus = .notDetermined
 
     var hasLocationPermission: Bool {
         authorization == .authorizedWhenInUse || authorization == .authorizedAlways
@@ -49,12 +48,12 @@ final class DialModel {
     private let settingsStore = SettingsStore()
     private let locationService = LocationService()
     private let networkMonitor = NetworkMonitor()
-    @ObservationIgnored private var peaks: [Mountain] = []
-    @ObservationIgnored private var fetchedCenter: GeoPoint?
-    @ObservationIgnored private var fetchedRadiusKm = 0.0
-    @ObservationIgnored private var fetchTask: Task<Void, Never>?
+    private var peaks: [Mountain] = []
+    private var fetchedCenter: GeoPoint?
+    private var fetchedRadiusKm = 0.0
+    private var fetchTask: Task<Void, Never>?
     /// 圏外のため取得を控えた。値は手動の取得だったか。つながったらその続きを取得する。
-    @ObservationIgnored private var skippedWhileDisconnected: Bool?
+    private var skippedWhileDisconnected: Bool?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "DialModel")
 
     /// これ以上移動したら取り直す。取得済みの地域ならキャッシュから読むだけで通信しない。

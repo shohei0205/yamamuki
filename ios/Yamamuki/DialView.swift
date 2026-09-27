@@ -1,10 +1,11 @@
+import Combine
 import SwiftUI
 import UIKit
 import YamamukiCore
 
 /// 方位盤の画面。位置情報の許可、現在地、方位をつないで [DialCanvasView] に渡す。
 struct DialView: View {
-    let model: DialModel
+    @ObservedObject var model: DialModel
 
     @Environment(\.scenePhase) private var scenePhase
     /// 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
@@ -60,20 +61,21 @@ struct DialView: View {
             }
         }
         .simultaneousGesture(
-            MagnifyGesture()
-                .onChanged { value in
+            MagnificationGesture()
+                .onChanged { magnification in
                     // 前回からの変化分だけを渡す(Android 版のピンチと同じ扱い)。
-                    model.onZoom(Double(value.magnification / lastMagnification))
-                    lastMagnification = value.magnification
+                    model.onZoom(Double(magnification / lastMagnification))
+                    lastMagnification = magnification
                 }
                 .onEnded { _ in lastMagnification = 1 }
         )
         .onAppear { model.start() }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { phase in
             if phase == .active { model.start() } else { model.stop() }
         }
         // 屋外で山を見比べている間に画面が消えないようにする(設定で選んだときだけ)。
-        .onChange(of: model.settings.keepScreenOn, initial: true) { _, on in
+        // @Published は購読した時点の値も流すので、起動時の設定もここで反映される。
+        .onReceive(model.$settings.map(\.keepScreenOn).removeDuplicates()) { on in
             UIApplication.shared.isIdleTimerDisabled = on
         }
         .alert("山データの取得", isPresented: .constant(!model.settings.networkConsentAsked)) {
@@ -152,7 +154,7 @@ struct DialView: View {
 
 /// 通信に失敗したら画面中央で知らせる。方位を待つ表示などに隠れて気づけないことがないようにする。
 private struct FetchErrorAlert: ViewModifier {
-    let model: DialModel
+    @ObservedObject var model: DialModel
 
     func body(content: Content) -> some View {
         content.alert(
@@ -258,13 +260,13 @@ private struct MountainDetailView: View {
             Spacer()
         }
         .padding(24)
-        .presentationDetents([.medium])
+        .mediumDetent()
     }
 }
 
 /// 双眼鏡(現在地)をタップしたときの詳細。距離は常に 0 なので出さない。
 private struct ObserverDetailView: View {
-    let model: DialModel
+    @ObservedObject var model: DialModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -281,7 +283,7 @@ private struct ObserverDetailView: View {
             Spacer()
         }
         .padding(24)
-        .presentationDetents([.medium])
+        .mediumDetent()
     }
 }
 
@@ -293,6 +295,18 @@ private struct DetailRow: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label).font(.caption).foregroundStyle(.secondary)
             Text(value).font(.body)
+        }
+    }
+}
+
+private extension View {
+    /// 詳細のシートを半分の高さで出す。iOS 15 には高さの指定がないので、全画面のシートになる。
+    @ViewBuilder
+    func mediumDetent() -> some View {
+        if #available(iOS 16, *) {
+            presentationDetents([.medium])
+        } else {
+            self
         }
     }
 }

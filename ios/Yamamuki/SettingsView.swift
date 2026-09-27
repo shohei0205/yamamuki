@@ -8,12 +8,12 @@ private let maxPeaksStep = 10
 
 /// 設定画面。方位盤の左下の設定ボタンで開く。
 struct SettingsView: View {
-    let model: DialModel
+    @ObservedObject var model: DialModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         let settings = model.settings
-        NavigationStack {
+        NavigationView {
             Form {
                 Section("表示する山") {
                     StepSlider(
@@ -96,6 +96,8 @@ struct SettingsView: View {
                 }
             }
         }
+        // iOS 15 でも使えるよう NavigationView にする。1 画面だけなので分割表示にはしない。
+        .navigationViewStyle(.stack)
         .onAppear { model.refreshCacheInfo() }
     }
 
