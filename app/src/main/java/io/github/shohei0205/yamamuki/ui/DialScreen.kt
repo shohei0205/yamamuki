@@ -162,7 +162,7 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
             StatusLine(
                 message = statusMessage(state, headingAvailable = heading != null),
                 // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
-                actionLabel = if (state.offline && !state.loading && !state.settings.manualFetch) "再取得" else null,
+                actionLabel = if (state.offline && state.connected && !state.loading && !state.settings.manualFetch) "再取得" else null,
                 onAction = viewModel::retry,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 76.dp),
             )
@@ -215,6 +215,15 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
         NetworkConsentDialog(onAnswer = viewModel::answerNetworkConsent)
     }
 
+    // 通信の失敗は、方位を待つ表示などに隠れて気づけないことがないよう、画面中央で知らせる。
+    state.fetchErrorMessage?.let { message ->
+        FetchErrorDialog(
+            message = message,
+            onRetry = viewModel::retryAfterFetchError,
+            onDismiss = viewModel::dismissFetchError,
+        )
+    }
+
     if (selected != null && !showSettings) {
         MountainDetailDialog(selected, onDismiss = { selectedId = null })
     }
@@ -238,6 +247,18 @@ private fun NetworkConsentDialog(onAnswer: (Boolean) -> Unit) {
         },
         confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text("はい") } },
         dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text("いいえ") } },
+    )
+}
+
+/** 山データの取得に失敗したことを知らせ、再取得できるようにする。 */
+@Composable
+private fun FetchErrorDialog(message: String, onRetry: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("山データを取得できませんでした") },
+        text = { Text(message) },
+        confirmButton = { TextButton(onClick = onRetry) { Text("再取得") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
     )
 }
 
@@ -271,6 +292,8 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
     state.location == null -> "現在地を取得しています…"
     !headingAvailable -> "方位センサーの値を待っています…"
     state.loading -> "山データを取得中…"
+    !state.connected && state.incomplete -> "圏外のため、この付近の山データがありません"
+    !state.connected -> "圏外: 保存済みのデータで表示中"
     state.offline && state.incomplete -> "通信できず、この付近の山データがありません"
     state.offline -> "オフライン: 保存済みのデータで表示中"
     state.settings.manualFetch && state.incomplete -> "この付近の山データがありません。左下の更新ボタンで取得できます"
