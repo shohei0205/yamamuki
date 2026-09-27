@@ -1,0 +1,34 @@
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+
+# 外部からの PR でも動くので、トークンはリポジトリの読み取りだけに絞る。
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: core のテスト
+        working-directory: ios/YamamukiCore
+        run: swift test
+      - name: Xcode プロジェクトの生成
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: アプリのビルド(シミュレーター向け、署名なし)
+        working-directory: ios
+        run: |
+          xcodebuild build \
+            -project Yamamuki.xcodeproj \
+            -scheme Yamamuki \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

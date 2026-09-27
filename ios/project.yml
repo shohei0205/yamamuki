@@ -1,0 +1,33 @@
+# XcodeGen の設定。`xcodegen generate` で Yamamuki.xcodeproj を作る(生成物は git 管理外)。
+name: Yamamuki
+options:
+  bundleIdPrefix: io.github.shohei0205
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  YamamukiCore:
+    path: YamamukiCore
+targets:
+  Yamamuki:
+    type: application
+    platform: iOS
+    sources: [Yamamuki]
+    dependencies:
+      - package: YamamukiCore
+    settings:
+      base:
+        PRODUCT_NAME: Yamamuki
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.shohei0205.yamamuki
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: 山むき
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: 現在地から見える山の方位と距離を計算するために使います。
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+    scheme:
+      gatherCoverageData: false

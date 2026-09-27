@@ -1,16 +1,22 @@
 # yamamuki
 
-スマホを向けた方向に見える山を、山名付きで表示する Android アプリ。山をタップすると標高などの詳細が見られる。
+スマホを向けた方向に見える山を、山名付きで表示する Android / iOS アプリ。山をタップすると標高などの詳細が見られる。
 
-- Kotlin + Jetpack Compose
-- 山データは OpenStreetMap の Overpass API から取得し、端末内 (Room) にキャッシュしてオフラインでも使えるようにする
+- Android 版: Kotlin + Jetpack Compose
+- iOS 版: Swift + SwiftUI（Android 版とほぼ同じ機能）
+- 山データは OpenStreetMap の Overpass API から取得し、端末内にキャッシュしてオフラインでも使えるようにする
 
 ## 構成
 
 - `core/` Android に依存しないデータ取得ロジック（Overpass API の問い合わせ・解析、距離と方位の計算、キャッシュ方針）。単体でテストできる。
 - `app/` Android アプリ。Room によるキャッシュ実装、設定、画面。
+- `ios/YamamukiCore/` iOS に依存しないロジックの Swift パッケージ。`core/` を Swift に移植したもので、単体でテストできる。キャッシュはタイルごとの JSON ファイル（`FileMountainCache`）に保存する。
+- `ios/Yamamuki/` iOS アプリ。方位盤の描画（`DialCanvasView`）、画面（`DialView`）、設定（`SettingsView`）、現在地と方位の取得（`LocationService`）。
+- `ios/project.yml` Xcode プロジェクトの設定（[XcodeGen](https://github.com/yonaskolb/XcodeGen) 用）。`ios/Yamamuki.xcodeproj` はここから生成し、git には入れない。
 
 ## 開発環境
+
+### Android 版
 
 | 必要なもの | バージョン |
 |---|---|
@@ -27,7 +33,20 @@
 - SDK のライセンスに未同意だとビルドが止まる。`sdkmanager --licenses` で同意しておく。
 - Visual Studio に付属する SDK（`C:\Program Files (x86)\Android\android-sdk`）は書き込みできないため、ビルドのたびに「Probably the SDK is read-only」と出るが、ビルドには影響しない。足りないパッケージを Gradle が自動で入れられないので、必要なものは管理者権限の `sdkmanager` で入れる。
 
+### iOS 版
+
+| 必要なもの | バージョン |
+|---|---|
+| Mac + Xcode | Xcode 16 以上（16.4 で動作確認） |
+| XcodeGen | `brew install xcodegen` で入れる |
+| 実行する端末 | iOS 17 以上の iPhone（縦向き固定） |
+
+- iOS アプリのビルドと iPhone への転送には Mac が必要。Mac が無くても、ビルドが通るかは GitHub Actions（`.github/workflows/ios.yml`）で確認できる。
+- シミュレーターでも起動できるが、方位センサーが無いので方位盤は回らない。現在地はシミュレーターのメニュー（Features > Location）で指定する。
+
 ## ビルドと実行
+
+### Android 版
 
 ```bash
 # core の単体テスト
@@ -47,6 +66,42 @@
   ```
 - 山データの取得に失敗したときは、原因を logcat にタグ `DialViewModel` で出している。
 - 開発版はアプリ ID が `io.github.shohei0205.yamamuki.debug`、名前が「山むき(開発版)」になり、配布版と同じ端末に並べて入れられる。
+
+### iOS 版
+
+```bash
+cd ios
+
+# core の単体テスト
+(cd YamamukiCore && swift test)
+
+# Xcode プロジェクトを生成して開く（project.yml を変えたら生成し直す）
+xcodegen generate
+open Yamamuki.xcodeproj
+```
+
+- Xcode で `Yamamuki` ターゲットの「Signing & Capabilities」の Team に自分の Apple ID を選ぶ。無料の Apple ID でも、自分の iPhone に 7 日間有効な開発用署名で入れられる（期限が切れたら Xcode から入れ直す）。
+- iPhone を USB でつなぎ、Xcode 上部の実行先に選んで Run（⌘R）する。初回は iPhone の「設定 > プライバシーとセキュリティ > デベロッパモード」をオンにし、「設定 > 一般 > VPN とデバイス管理」で開発元を信頼する。
+- コマンドラインでビルドだけ確認するときは、CI と同じ次のコマンドを使う。
+  ```bash
+  xcodebuild build -project Yamamuki.xcodeproj -scheme Yamamuki \
+    -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+  ```
+- 山データの取得に失敗したときは、原因を Xcode のコンソール（または Mac の「コンソール」アプリ）にカテゴリ `DialModel` で出している。
+
+## Android 版と iOS 版の違い
+
+画面の構成、設定項目、キャッシュの仕組み、通信量は同じ。端末の機能に合わせて次の点が違う。
+
+| 項目 | Android 版 | iOS 版 |
+|---|---|---|
+| 方位 | 回転ベクトルセンサーから計算し、偏角を足して真北に直す | Core Location の heading。iOS が偏角を補正した真方位を返す |
+| 現在地の標高 | GPS の楕円体高を Android 14 以降のジオイドモデルで海抜に直す | Core Location の altitude（海抜）をそのまま使う |
+| キャッシュ | Room（SQLite） | タイルごとの JSON ファイル（アプリの Application Support 内） |
+| 設定の保存 | SharedPreferences | UserDefaults |
+| 山の詳細 | ダイアログ | 下から出るシート |
+| 圏外のとき | 通信を試し、失敗したらキャッシュで表示する | 圏外・機内モードを先に判定して通信せず、キャッシュで表示する。つながったら自動で取得する |
+| 位置情報を断ったとき | 許可を求め直す | 設定アプリを開くボタンを出す（iOS はアプリから再度聞けない） |
 
 ## 方位盤の画面
 
@@ -71,7 +126,7 @@
 | 取得したデータを使う期間 | この期間を過ぎた地域は取り直す（7日〜1年） | 30日 |
 | キャッシュ | 保存している山の件数・容量の確認と消去 | — |
 
-設定は端末内 (SharedPreferences) に保存する。
+設定は端末内（Android は SharedPreferences、iOS は UserDefaults）に保存する。
 
 初回起動時は、位置情報の許可より先に「山データを自動で取得してよいか」を聞き、答えるまでは通信しない。「いいえ」なら手動取得モードで起動する。
 
