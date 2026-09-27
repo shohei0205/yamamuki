@@ -11,3 +11,10 @@ captures/
 *.jks
 *.keystore
 *-release.properties
+
+# iOS(XcodeGen の生成物と Xcode の作業ファイル)
+ios/Yamamuki.xcodeproj/
+ios/YamamukiCore/.build/
+ios/YamamukiCore/.swiftpm/
+xcuserdata/
+DerivedData/

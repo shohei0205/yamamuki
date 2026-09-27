@@ -9,6 +9,7 @@
 
 - `core/` Android に依存しないデータ取得ロジック（Overpass API の問い合わせ・解析、距離と方位の計算、キャッシュ方針）。単体でテストできる。
 - `app/` Android アプリ。Room によるキャッシュ実装、設定、画面。
+- `ios/` ほぼ同じ機能の iOS アプリ（Swift + SwiftUI）。ビルド方法は [ios/README.md](ios/README.md)。
 
 ## 開発環境
 
