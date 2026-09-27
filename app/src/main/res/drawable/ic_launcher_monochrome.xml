@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- テーマアイコン(Android 13 以降)用の単色版。形は ic_launcher_foreground と同じ。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+        <!-- 方位目盛り -->
+        <path
+            android:pathData="M34,26v4M40,26v3M46,26v4M62,26v4M68,26v3M74,26v4"
+            android:strokeColor="#FF000000"
+            android:strokeLineCap="round"
+            android:strokeWidth="1.2" />
+        <!-- 北を示す N -->
+        <path
+            android:pathData="M50.5,32V22.5L57.5,32V22.5"
+            android:strokeColor="#FF000000"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="2.4" />
+        <!-- 山(中の小さい三角は抜く) -->
+        <path
+            android:fillColor="#FF000000"
+            android:fillType="evenOdd"
+            android:pathData="M54,38L74,72H34Z M54,55L62,68H46Z" />
+        <!-- 現在地 -->
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M54,81m-3.2,0a3.2,3.2 0 1,0 6.4,0a3.2,3.2 0 1,0 -6.4,0" />
+    </group>
+</vector>
