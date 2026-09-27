@@ -32,13 +32,12 @@
             android:strokeLineCap="round"
             android:strokeLineJoin="round"
             android:strokeWidth="2.4" />
-        <!-- 山 -->
-        <path
-            android:fillColor="#FF22B14C"
-            android:pathData="M54,38L74,72H34Z" />
+        <!-- 山。方位盤の 1000m 台の山と同じく黄緑の ▲ を緑で縁取る(縁は画面と同じ比率の細さ)。 -->
         <path
             android:fillColor="#FFB5E61D"
-            android:pathData="M54,55L62,68H46Z" />
+            android:pathData="M54,38L74,72H34Z"
+            android:strokeColor="#FF22B14C"
+            android:strokeWidth="2.8" />
         <!-- 現在地 -->
         <path
             android:fillColor="#FF111111"

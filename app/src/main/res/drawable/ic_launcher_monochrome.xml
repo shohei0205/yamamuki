@@ -23,11 +23,11 @@
             android:strokeLineCap="round"
             android:strokeLineJoin="round"
             android:strokeWidth="2.4" />
-        <!-- 山(中の小さい三角は抜く) -->
+        <!-- 山(縁取りだけ) -->
         <path
-            android:fillColor="#FF000000"
-            android:fillType="evenOdd"
-            android:pathData="M54,38L74,72H34Z M54,55L62,68H46Z" />
+            android:pathData="M54,38L74,72H34Z"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2.8" />
         <!-- 現在地 -->
         <path
             android:fillColor="#FF000000"
