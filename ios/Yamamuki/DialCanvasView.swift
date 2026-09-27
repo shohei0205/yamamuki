@@ -36,6 +36,7 @@ private let outlineWidth: CGFloat = 1.5
 /// アイコンの色と形は標高の区分([ElevationClass])で変える。
 /// [mountains] は表示の優先順(標高の高い順)に並んでいること。重なる山は優先度の低いほうを省く。
 /// 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。
+/// 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
 /// 現在地がほぼ山頂([summit] が非 nil)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
 struct DialCanvasView: View {
     let headingDeg: Double
@@ -50,6 +51,7 @@ struct DialCanvasView: View {
     /// 文字の大きさ(標準 = 1.0 に対する倍率)。
     let textScale: Double
     let onMountainTap: (NearbyMountain) -> Void
+    let onObserverTap: () -> Void
 
     @State private var hitTargets = HitTargets()
 
@@ -60,7 +62,11 @@ struct DialCanvasView: View {
         .contentShape(Rectangle())
         .gesture(
             SpatialTapGesture().onEnded { value in
-                if let m = hitTargets.find(value.location, slop: 8) { onMountainTap(m) }
+                if hitTargets.hitsObserver(value.location, slop: 8) {
+                    onObserverTap()
+                } else if let m = hitTargets.find(value.location, slop: 8) {
+                    onMountainTap(m)
+                }
             }
         )
     }
@@ -80,8 +86,9 @@ struct DialCanvasView: View {
         }
         if let summit {
             hitTargets.summit = drawSummit(ctx, center: observer, summit: summit, styles: styles)
+            hitTargets.observer = nil
         } else {
-            drawBinoculars(ctx, center: observer)
+            hitTargets.observer = drawBinoculars(ctx, center: observer)
             hitTargets.summit = nil
         }
         drawTape(ctx, size: size, tapeHeight: tapeHeight)
@@ -226,7 +233,8 @@ struct DialCanvasView: View {
 
     /// 現在地を表す双眼鏡。対物レンズを上(向いている方位)に向け、前方へ広がる視野を薄く描いて
     /// 「前を覗いている」ように見せる。同心円や山と重なっても埋もれないよう、白い縁取りを付ける。
-    private func drawBinoculars(_ ctx: GraphicsContext, center: CGPoint) {
+    /// タップの当たり判定用に、白い縁取りまで含めた範囲を返す。
+    private func drawBinoculars(_ ctx: GraphicsContext, center: CGPoint) -> CGRect {
         /// 中心からのずれで角丸の矩形を描く。[grow] だけ四方に広げる。
         func part(x: CGFloat, top: CGFloat, width: CGFloat, bottom: CGFloat, corner: CGFloat, color: Color, grow: CGFloat) {
             let rect = CGRect(
@@ -257,6 +265,7 @@ struct DialCanvasView: View {
             ctx.fill(Path(ellipseIn: CGRect(x: lens.x - 5.5, y: lens.y - 2.5, width: 11, height: 5)), with: .color(lensBlue))
             ctx.fill(Path(ellipseIn: CGRect(x: lens.x - 3.5, y: lens.y - 1.5, width: 3, height: 1.4)), with: .color(.white.opacity(0.8)))
         }
+        return CGRect(x: center.x - 20, y: center.y - 15, width: 40, height: 29)
     }
 
     /// 画面上部の方位目盛り。向いている方位が中央に来る。上端は高さが決まっているので文字の倍率を掛けない。
@@ -333,6 +342,13 @@ private final class HitTargets {
     var peaks: [PlacedPeak] = []
     /// 現在地の山頂アイコンと山名。山と重なっても優先する。
     var summit: PlacedPeak?
+    /// 双眼鏡の範囲。山頂アイコンを描いているときは nil。山と重なっても優先する。
+    var observer: CGRect?
+
+    /// [tap] が双眼鏡に当たったか。枠を [slop] だけ広げて判定する。
+    func hitsObserver(_ tap: CGPoint, slop: CGFloat) -> Bool {
+        observer?.insetBy(dx: -slop, dy: -slop).contains(tap) ?? false
+    }
 
     /// [tap] を含む山のうち、アイコンが最も近いもの。枠を [slop] だけ広げて判定する。
     func find(_ tap: CGPoint, slop: CGFloat) -> NearbyMountain? {

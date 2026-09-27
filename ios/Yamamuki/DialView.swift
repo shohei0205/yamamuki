@@ -10,6 +10,7 @@ struct DialView: View {
     /// 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     @State private var selectedId: Int64?
     @State private var showSettings = false
+    @State private var showObserver = false
     @State private var lastMagnification: CGFloat = 1
 
     var body: some View {
@@ -24,7 +25,9 @@ struct DialView: View {
                 altitudeM: model.location?.mslAltitudeM,
                 maxPeaks: model.settings.maxPeaks,
                 textScale: model.settings.textScale,
-                onMountainTap: { selectedId = $0.mountain.osmId }
+                onMountainTap: { selectedId = $0.mountain.osmId },
+                // 現在地を取れる前は出す値がないので開かない。
+                onObserverTap: { if model.location != nil { showObserver = true } }
             )
 
             if model.settings.networkConsentAsked && !model.hasLocationPermission {
@@ -92,6 +95,10 @@ struct DialView: View {
         }
         .sheet(item: selectedMountain) { nearby in
             MountainDetailView(nearby: nearby).fetchErrorAlert(model)
+        }
+        // 開いている間も歩けば値が更新される。
+        .sheet(isPresented: $showObserver) {
+            ObserverDetailView(model: model).fetchErrorAlert(model)
         }
     }
 
@@ -248,6 +255,29 @@ private struct MountainDetailView: View {
             DetailRow(label: "標高", value: m.elevationText)
             DetailRow(label: "緯度経度", value: m.coordinateText)
             DetailRow(label: "現在地からの距離", value: distanceText(nearby.distanceKm))
+            Spacer()
+        }
+        .padding(24)
+        .presentationDetents([.medium])
+    }
+}
+
+/// 双眼鏡(現在地)をタップしたときの詳細。距離は常に 0 なので出さない。
+private struct ObserverDetailView: View {
+    let model: DialModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("現在地").font(.title2.bold())
+                Spacer()
+                Button("閉じる") { dismiss() }
+            }
+            if let here = model.location {
+                DetailRow(label: "緯度経度", value: coordinateText(latitude: here.latitude, longitude: here.longitude))
+                DetailRow(label: "標高", value: elevationText(here.mslAltitudeM))
+            }
             Spacer()
         }
         .padding(24)

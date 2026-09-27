@@ -48,18 +48,22 @@ fun Mountain.elevationClass(): ElevationClass {
     }
 }
 
-/** 詳細表示の標高。「1,212 m」、不明なら「不明」。 */
-fun Mountain.elevationText(): String {
+/** 詳細表示の標高。「1,212 m」、不明なら「不明」。山と現在地で共通に使う。 */
+fun elevationText(elevationM: Double?): String {
     val ele = elevationM ?: return "不明"
     return String.format(Locale.US, "%,d m", Math.round(ele))
 }
 
-/** 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。 */
-fun Mountain.coordinateText(): String {
+fun Mountain.elevationText(): String = elevationText(elevationM)
+
+/** 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。山と現在地で共通に使う。 */
+fun coordinateText(latitude: Double, longitude: Double): String {
     val lat = String.format(Locale.US, "%.5f°", abs(latitude))
     val lon = String.format(Locale.US, "%.5f°", abs(longitude))
     return "${if (latitude >= 0) "北緯" else "南緯"} $lat\n${if (longitude >= 0) "東経" else "西経"} $lon"
 }
+
+fun Mountain.coordinateText(): String = coordinateText(latitude, longitude)
 
 /** 詳細表示の距離。1km 未満は「850 m」、以上は「12.3 km」。 */
 fun distanceText(distanceKm: Double): String =

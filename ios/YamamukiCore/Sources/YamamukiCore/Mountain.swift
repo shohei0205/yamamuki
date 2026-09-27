@@ -61,17 +61,10 @@ extension Mountain {
     }
 
     /// 詳細表示の標高。「1,212 m」、不明なら「不明」。
-    public var elevationText: String {
-        guard let ele = elevationM else { return "不明" }
-        return "\(groupedInteger(Int(ele.rounded()))) m"
-    }
+    public var elevationText: String { YamamukiCore.elevationText(elevationM) }
 
     /// 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。
-    public var coordinateText: String {
-        let lat = String(format: "%.5f°", abs(latitude))
-        let lon = String(format: "%.5f°", abs(longitude))
-        return "\(latitude >= 0 ? "北緯" : "南緯") \(lat)\n\(longitude >= 0 ? "東経" : "西経") \(lon)"
-    }
+    public var coordinateText: String { YamamukiCore.coordinateText(latitude: latitude, longitude: longitude) }
 
     /// 標高が [minElevationM] 以上か。0 以下なら絞り込まない。
     /// 絞り込むときは、標高が不明な山は基準を満たすか分からないので除く。
@@ -80,6 +73,19 @@ extension Mountain {
         guard let ele = elevationM else { return false }
         return ele >= Double(minElevationM)
     }
+}
+
+/// 詳細表示の標高。「1,212 m」、不明なら「不明」。山と現在地で共通に使う。
+public func elevationText(_ elevationM: Double?) -> String {
+    guard let ele = elevationM else { return "不明" }
+    return "\(groupedInteger(Int(ele.rounded()))) m"
+}
+
+/// 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。山と現在地で共通に使う。
+public func coordinateText(latitude: Double, longitude: Double) -> String {
+    let lat = String(format: "%.5f°", abs(latitude))
+    let lon = String(format: "%.5f°", abs(longitude))
+    return "\(latitude >= 0 ? "北緯" : "南緯") \(lat)\n\(longitude >= 0 ? "東経" : "西経") \(lon)"
 }
 
 /// 詳細表示の距離。1km 未満は「850 m」、以上は「12.3 km」。

@@ -119,6 +119,7 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
     // 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showObserver by remember { mutableStateOf(false) }
     val selected = state.mountains.firstOrNull { it.mountain.osmId == selectedId }
         ?: state.summit?.takeIf { it.mountain.osmId == selectedId }
     // 取り直しで一覧から消えたら選択も解く。残しておくと、その山が一覧に戻ったときにダイアログが勝手に開く。
@@ -142,6 +143,7 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
             rangeKm = state.rangeKm,
             modifier = Modifier.fillMaxSize(),
             onMountainTap = { selectedId = it.mountain.osmId },
+            onObserverTap = { showObserver = true },
             summit = state.summit,
             altitudeM = state.location?.mslAltitudeM,
             maxPeaks = state.settings.maxPeaks,
@@ -227,6 +229,11 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
     if (selected != null && !showSettings) {
         MountainDetailDialog(selected, onDismiss = { selectedId = null })
     }
+
+    // 現在地を取れる前は出す値がないので開かない。開いている間も歩けば値が更新される。
+    if (showObserver && location != null && !showSettings) {
+        ObserverDetailDialog(location, onDismiss = { showObserver = false })
+    }
 }
 
 /** 初回起動時に、山データを自動で取得してよいかを聞く。どちらかを選ぶまで閉じない。 */
@@ -275,6 +282,22 @@ private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) 
                 DetailRow("標高", m.elevationText())
                 DetailRow("緯度経度", m.coordinateText())
                 DetailRow("現在地からの距離", distanceText(nearby.distanceKm))
+            }
+        },
+    )
+}
+
+/** 双眼鏡(現在地)をタップしたときの詳細。距離は常に 0 なので出さない。 */
+@Composable
+private fun ObserverDetailDialog(location: GeoPoint, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
+        title = { Text("現在地") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                DetailRow("緯度経度", coordinateText(location.latitude, location.longitude))
+                DetailRow("標高", elevationText(location.mslAltitudeM))
             }
         },
     )
