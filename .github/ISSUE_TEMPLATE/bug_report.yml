@@ -1,0 +1,56 @@
+name: 不具合の報告
+description: アプリが期待どおりに動かないときに報告する
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: プラットフォーム
+      options:
+        - Android
+        - iOS
+        - 両方
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: アプリの版
+      description: 設定画面に表示される版
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 端末と OS の版
+      placeholder: Pixel 8 / Android 15、iPhone 15 / iOS 18.5 など
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 起きたこと
+      description: 何が起きたか、期待した動きとどう違うか
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. アプリを起動する
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 状況
+      description: 場所（おおよその地域や山名）、圏外かどうか、位置情報の許可など、関係しそうなこと
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: スクリーンショット・ログ
+      description: 画像や動画はドラッグ＆ドロップで貼り付けられます。正確な現在地が写っている場合は注意してください
