@@ -59,9 +59,14 @@ import io.github.shohei0205.yamamuki.core.elevationText
 import io.github.shohei0205.yamamuki.sensor.locationUpdates
 import io.github.shohei0205.yamamuki.sensor.magneticHeadingUpdates
 import io.github.shohei0205.yamamuki.sensor.mslAltitudeM
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+
+/** これより小さい方位の変化は画面に反映しない。 */
+private const val MIN_HEADING_CHANGE_DEG = 0.1
 
 private val LOCATION_PERMISSIONS = arrayOf(
     Manifest.permission.ACCESS_FINE_LOCATION,
@@ -104,7 +109,11 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
     // センサーは磁北基準なので、現在地の偏角(日本ではおよそ西へ 7〜10°)を足して真北基準にする。
     val magneticHeading by remember(context) {
         val filter = HeadingFilter()
-        magneticHeadingUpdates(context).map { filter.update(it) }
+        magneticHeadingUpdates(context)
+            .map { filter.update(it) }
+            // センサーは毎秒 50 回ほど届く。端末を止めているときの細かな揺れで画面全体を描き直さないよう、
+            // 画面上でほぼ動かない変化(表示範囲の上端でも数 px)は流さない。
+            .distinctUntilChanged { old, new -> abs(Heading.delta(old, new)) < MIN_HEADING_CHANGE_DEG }
     }.collectAsStateWithLifecycle<Double?>(initialValue = null)
     val location = state.location
     val declination = remember(location) {
