@@ -36,7 +36,7 @@ struct DialView: View {
                     StatusLine(
                         message: statusMessage,
                         // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
-                        actionLabel: model.offline && !model.loading && !model.settings.manualFetch ? "再取得" : nil,
+                        actionLabel: model.offline && model.isConnected && !model.loading && !model.settings.manualFetch ? "再取得" : nil,
                         onAction: model.retry
                     )
                     .padding(.top, 76)
@@ -134,6 +134,8 @@ struct DialView: View {
         if model.location == nil { return "現在地を取得しています…" }
         if model.heading == nil { return "方位センサーの値を待っています…" }
         if model.loading { return "山データを取得中…" }
+        if !model.isConnected && model.incomplete { return "圏外のため、この付近の山データがありません" }
+        if !model.isConnected { return "圏外: 保存済みのデータで表示中" }
         if model.offline && model.incomplete { return "通信できず、この付近の山データがありません" }
         if model.offline { return "オフライン: 保存済みのデータで表示中" }
         if model.settings.manualFetch && model.incomplete { return "この付近の山データがありません。左下の更新ボタンで取得できます" }

@@ -27,6 +27,8 @@ final class DialModel {
     private(set) var loading = false
     /// 通信に失敗し、キャッシュだけで表示している。
     private(set) var offline = false
+    /// 端末が通信できる状態か。圏外や機内モードでは false になり、取得を控えて保存済みのデータで表示する。
+    private(set) var isConnected = true
     /// 通信に失敗したときに画面中央で知らせる文言。閉じるまで保つ。
     private(set) var fetchErrorMessage: String?
     /// 範囲内に一度も取得できていない地域がある。
@@ -46,10 +48,13 @@ final class DialModel {
     private let repository: MountainRepository
     private let settingsStore = SettingsStore()
     private let locationService = LocationService()
+    private let networkMonitor = NetworkMonitor()
     @ObservationIgnored private var peaks: [Mountain] = []
     @ObservationIgnored private var fetchedCenter: GeoPoint?
     @ObservationIgnored private var fetchedRadiusKm = 0.0
     @ObservationIgnored private var fetchTask: Task<Void, Never>?
+    /// 圏外のため取得を控えた。値は手動の取得だったか。つながったらその続きを取得する。
+    @ObservationIgnored private var skippedWhileDisconnected: Bool?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "DialModel")
 
     /// これ以上移動したら取り直す。取得済みの地域ならキャッシュから読むだけで通信しない。
@@ -70,6 +75,7 @@ final class DialModel {
 
         locationService.onLocation = { [weak self] in self?.onLocation($0) }
         locationService.onHeading = { [weak self] in self?.heading = $0 }
+        networkMonitor.onChange = { [weak self] in self?.onConnectivity($0) }
         locationService.onAuthorizationChange = { [weak self] status in
             guard let self else { return }
             authorization = status
@@ -104,6 +110,16 @@ final class DialModel {
             return
         }
         fetch()
+    }
+
+    private func onConnectivity(_ connected: Bool) {
+        guard connected != isConnected else { return }
+        isConnected = connected
+        // 圏外で控えていた取得を、つながったところで行う。
+        if connected, let manual = skippedWhileDisconnected {
+            skippedWhileDisconnected = nil
+            fetch(manual: manual)
+        }
     }
 
     /// ピンチの倍率(前回からの変化分)。
@@ -179,7 +195,10 @@ final class DialModel {
         let radius = DialGeometry.fetchRadiusKm(rangeKm)
         let settings = self.settings
         // 初回の問い合わせに答えるまでは、キャッシュだけで表示して通信しない。
-        let allowNetwork = manual || (!settings.manualFetch && settings.networkConsentAsked)
+        let wantsNetwork = manual || (!settings.manualFetch && settings.networkConsentAsked)
+        // 圏外と分かっていれば通信を試さない(失敗を待たず、エラーの知らせも出さない)。
+        let connected = isConnected
+        let allowNetwork = wantsNetwork && connected
         fetchedCenter = here
         fetchedRadiusKm = radius
         fetchTask?.cancel()
@@ -202,9 +221,22 @@ final class DialModel {
                 }
                 peaks = result.mountains.map(\.mountain)
                 updatePeaks(at: location ?? here)
-                offline = result.error != nil
+                let skippedOffline = wantsNetwork && !connected && result.networkSkipped
+                if skippedOffline {
+                    skippedWhileDisconnected = manual
+                } else if allowNetwork {
+                    skippedWhileDisconnected = nil
+                }
+                offline = result.error != nil || skippedOffline
                 let hasCache = !peaks.isEmpty
-                fetchErrorMessage = result.error.map { Self.errorNotice(for: $0, hasCache: hasCache) }
+                if let error = result.error {
+                    fetchErrorMessage = Self.errorNotice(for: error, hasCache: hasCache)
+                } else if skippedOffline && manual {
+                    // 自分で取得を押したときだけ、圏外で取得できなかったことを知らせる。
+                    fetchErrorMessage = Self.offlineNotice(hasCache: hasCache)
+                } else if !skippedOffline {
+                    fetchErrorMessage = nil
+                }
                 incomplete = result.incomplete
                 networkSkipped = result.networkSkipped
                 loading = false
@@ -218,9 +250,13 @@ final class DialModel {
 
     /// 通信エラーの知らせの文言。端末がつながっていないのか、サーバー側の問題かで案内を変える。
     private static func errorNotice(for error: Error, hasCache: Bool) -> String {
-        let cause = isOffline(error)
-            ? "インターネットに接続されていません。電波の届く場所で再取得してください。"
-            : "山データのサーバーが混み合っているか、応答がありません。しばらくしてから再取得してください。"
+        if isOffline(error) { return offlineNotice(hasCache: hasCache) }
+        let cause = "山データのサーバーが混み合っているか、応答がありません。しばらくしてから再取得してください。"
+        return hasCache ? cause + "\n\n保存済みのデータで表示しています。" : cause
+    }
+
+    private static func offlineNotice(hasCache: Bool) -> String {
+        let cause = "インターネットに接続されていません。電波の届く場所で再取得してください。"
         return hasCache ? cause + "\n\n保存済みのデータで表示しています。" : cause
     }
 
