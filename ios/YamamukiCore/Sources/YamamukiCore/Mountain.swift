@@ -19,10 +19,12 @@ public struct Mountain: Codable, Hashable, Sendable {
 }
 
 /// 現在地から見た山。距離と方位角(真北基準、時計回り 0〜360°)を持つ。
-public struct NearbyMountain: Hashable, Sendable {
+public struct NearbyMountain: Hashable, Sendable, Identifiable {
     public let mountain: Mountain
     public let distanceKm: Double
     public let bearingDeg: Double
+
+    public var id: Int64 { mountain.osmId }
 
     public init(mountain: Mountain, distanceKm: Double, bearingDeg: Double) {
         self.mountain = mountain

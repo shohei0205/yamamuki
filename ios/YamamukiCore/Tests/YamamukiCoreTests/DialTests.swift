@@ -16,12 +16,6 @@ final class HeadingTests: XCTestCase {
         XCTAssertEqual(Heading.directionName(-90), "西")
     }
 
-    func testFilterFollowsAcrossNorth() {
-        let filter = HeadingFilter(alpha: 0.5)
-        XCTAssertEqual(filter.update(350), 350, accuracy: 1e-9)
-        XCTAssertEqual(filter.update(0), 355, accuracy: 1e-9)
-        XCTAssertEqual(filter.update(0), 357.5, accuracy: 1e-9)
-    }
 }
 
 final class DialGeometryTests: XCTestCase {

@@ -3,6 +3,8 @@ import CoreLocation
 /// 現在地と、端末を向けている方位角(真北基準)を流す。
 /// 方位は Core Location の heading を使う。現在地が分かっていれば iOS が偏角を補正した真方位(trueHeading)を返すので、
 /// Android 版のように自分で偏角を足す必要はない。
+/// iOS の heading はすでに平滑化されており、[headingFilter] 以上変わったときしか届かないので、アプリ側では平滑化しない
+/// (届いた値を平滑化すると、端末を止めたときに追いつく前に値が来なくなり、ずれたまま止まる)。
 final class LocationService: NSObject, CLLocationManagerDelegate {
     var onLocation: ((CLLocation) -> Void)?
     var onHeading: ((Double) -> Void)?

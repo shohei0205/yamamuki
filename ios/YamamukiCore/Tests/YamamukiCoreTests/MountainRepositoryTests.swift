@@ -169,4 +169,13 @@ final class MountainRepositoryTests: XCTestCase {
         let empty = try await reopened.mountains(in: BoundingBox.around(lat, lon, radiusKm: 50))
         XCTAssertTrue(empty.isEmpty)
     }
+
+    func testFileCacheIsExcludedFromBackup() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("yamamuki-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        _ = try await repo(FakeRemote([fuji]), FileMountainCache(directory: dir)).mountainsAround(latitude: lat, longitude: lon, radiusKm: 50)
+
+        let values = try dir.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        XCTAssertEqual(values.isExcludedFromBackup, true)
+    }
 }

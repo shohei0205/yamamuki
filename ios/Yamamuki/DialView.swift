@@ -2,10 +2,6 @@ import SwiftUI
 import UIKit
 import YamamukiCore
 
-extension NearbyMountain: Identifiable {
-    public var id: Int64 { mountain.osmId }
-}
-
 /// 方位盤の画面。位置情報の許可、現在地、方位をつないで [DialCanvasView] に渡す。
 struct DialView: View {
     let model: DialModel
@@ -89,11 +85,13 @@ struct DialView: View {
                     "「いいえ」なら、画面左下の更新ボタンを押したときだけ通信します。設定はあとから変更できます。"
             )
         }
+        .fetchErrorAlert(model)
+        // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
         .sheet(isPresented: $showSettings) {
-            SettingsView(model: model)
+            SettingsView(model: model).fetchErrorAlert(model)
         }
         .sheet(item: selectedMountain) { nearby in
-            MountainDetailView(nearby: nearby)
+            MountainDetailView(nearby: nearby).fetchErrorAlert(model)
         }
     }
 
@@ -140,6 +138,32 @@ struct DialView: View {
         if model.offline { return "オフライン: 保存済みのデータで表示中" }
         if model.settings.manualFetch && model.incomplete { return "この付近の山データがありません。左下の更新ボタンで取得できます" }
         return nil
+    }
+}
+
+/// 通信に失敗したら画面中央で知らせる。方位を待つ表示などに隠れて気づけないことがないようにする。
+private struct FetchErrorAlert: ViewModifier {
+    let model: DialModel
+
+    func body(content: Content) -> some View {
+        content.alert(
+            "山データを取得できませんでした",
+            isPresented: Binding(
+                get: { model.fetchErrorMessage != nil },
+                set: { if !$0 { model.dismissFetchError() } }
+            )
+        ) {
+            Button("再取得") { model.retryAfterFetchError() }
+            Button("閉じる", role: .cancel) { model.dismissFetchError() }
+        } message: {
+            Text(model.fetchErrorMessage ?? "")
+        }
+    }
+}
+
+private extension View {
+    func fetchErrorAlert(_ model: DialModel) -> some View {
+        modifier(FetchErrorAlert(model: model))
     }
 }
 

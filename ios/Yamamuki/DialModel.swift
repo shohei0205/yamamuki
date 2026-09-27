@@ -27,6 +27,8 @@ final class DialModel {
     private(set) var loading = false
     /// 通信に失敗し、キャッシュだけで表示している。
     private(set) var offline = false
+    /// 通信に失敗したときに画面中央で知らせる文言。閉じるまで保つ。
+    private(set) var fetchErrorMessage: String?
     /// 範囲内に一度も取得できていない地域がある。
     private(set) var incomplete = false
     /// 手動取得モードのため、未取得または古い地域があっても通信しなかった。
@@ -44,7 +46,6 @@ final class DialModel {
     private let repository: MountainRepository
     private let settingsStore = SettingsStore()
     private let locationService = LocationService()
-    private let headingFilter = HeadingFilter()
     @ObservationIgnored private var peaks: [Mountain] = []
     @ObservationIgnored private var fetchedCenter: GeoPoint?
     @ObservationIgnored private var fetchedRadiusKm = 0.0
@@ -68,10 +69,7 @@ final class DialModel {
         authorization = locationService.authorization
 
         locationService.onLocation = { [weak self] in self?.onLocation($0) }
-        locationService.onHeading = { [weak self] raw in
-            guard let self else { return }
-            heading = headingFilter.update(raw)
-        }
+        locationService.onHeading = { [weak self] in self?.heading = $0 }
         locationService.onAuthorizationChange = { [weak self] status in
             guard let self else { return }
             authorization = status
@@ -115,6 +113,15 @@ final class DialModel {
     }
 
     func retry() { fetch(forceRefresh: true) }
+
+    /// 通信エラーの知らせを閉じる。
+    func dismissFetchError() { fetchErrorMessage = nil }
+
+    /// 通信エラーの知らせから取り直す。利用者が求めたので、手動取得モードでも通信する。
+    func retryAfterFetchError() {
+        fetchErrorMessage = nil
+        fetch(manual: true)
+    }
 
     /// 左下の更新ボタン(山データを取得)。今の表示範囲のうち、未取得または古い地域を取得する。
     func fetchManually() { fetch(manual: true) }
@@ -196,6 +203,8 @@ final class DialModel {
                 peaks = result.mountains.map(\.mountain)
                 updatePeaks(at: location ?? here)
                 offline = result.error != nil
+                let hasCache = !peaks.isEmpty
+                fetchErrorMessage = result.error.map { Self.errorNotice(for: $0, hasCache: hasCache) }
                 incomplete = result.incomplete
                 networkSkipped = result.networkSkipped
                 loading = false
@@ -205,6 +214,25 @@ final class DialModel {
                 loading = false
             }
         }
+    }
+
+    /// 通信エラーの知らせの文言。端末がつながっていないのか、サーバー側の問題かで案内を変える。
+    private static func errorNotice(for error: Error, hasCache: Bool) -> String {
+        let cause = isOffline(error)
+            ? "インターネットに接続されていません。電波の届く場所で再取得してください。"
+            : "山データのサーバーが混み合っているか、応答がありません。しばらくしてから再取得してください。"
+        return hasCache ? cause + "\n\n保存済みのデータで表示しています。" : cause
+    }
+
+    /// 端末が通信できない状態で失敗したか。Overpass はエンドポイントごとの原因をまとめて返すので、すべてを見る。
+    private static func isOffline(_ error: Error) -> Bool {
+        if let e = error as? URLError {
+            return [.notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff].contains(e.code)
+        }
+        if let e = error as? OverpassError {
+            return !e.causes.isEmpty && e.causes.allSatisfy(isOffline)
+        }
+        return false
     }
 
     /// [p] から見た山の一覧と、山頂にいるならその山を入れ直す。

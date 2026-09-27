@@ -25,28 +25,6 @@ public enum Heading {
     }
 }
 
-/// 方位角のぶれを抑える指数平滑。359°→1° のような 0° をまたぐ変化も最短方向に追従する。
-/// [alpha] は新しい値の重み(0〜1)。大きいほど反応が速い。
-public final class HeadingFilter {
-    private let alpha: Double
-    private var current: Double?
-
-    public init(alpha: Double = 0.15) {
-        self.alpha = alpha
-    }
-
-    public func update(_ rawDeg: Double) -> Double {
-        let next: Double
-        if let prev = current {
-            next = Heading.normalize(prev + alpha * Heading.delta(prev, rawDeg))
-        } else {
-            next = Heading.normalize(rawDeg)
-        }
-        current = next
-        return next
-    }
-}
-
 /// 画面上の矩形(pt)。
 public struct ScreenBox: Hashable, Sendable {
     public let left: Double

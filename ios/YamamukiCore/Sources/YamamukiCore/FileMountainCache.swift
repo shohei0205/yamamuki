@@ -40,7 +40,7 @@ public actor FileMountainCache: MountainCache {
 
     public func replaceTiles(_ tiles: [Tile], mountains: [Mountain], fetchedAt: Date) async throws {
         let byTile = Dictionary(grouping: mountains) { Tile.of($0.latitude, $0.longitude) }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try createDirectory()
         let encoder = JSONEncoder()
         for tile in tiles {
             let file = TileFile(fetchedAt: fetchedAt, mountains: byTile[tile] ?? [])
@@ -66,6 +66,16 @@ public actor FileMountainCache: MountainCache {
     public func clear() {
         for url in tileFiles() { try? FileManager.default.removeItem(at: url) }
         loaded = [:]
+    }
+
+    /// 保存先を作る。山データは取り直せるので iCloud バックアップから外す
+    /// (Caches に置くと OS に消されてオフラインで使えなくなるため、置き場所はそのままにする)。
+    private func createDirectory() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var url = directory
+        try url.setResourceValues(values)
     }
 
     private func load(_ tile: Tile) -> TileFile? {
