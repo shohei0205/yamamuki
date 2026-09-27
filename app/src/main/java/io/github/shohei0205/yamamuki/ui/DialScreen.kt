@@ -233,7 +233,7 @@ private fun NetworkConsentDialog(onAnswer: (Boolean) -> Unit) {
                     "問い合わせには現在地周辺の範囲が含まれます。" +
                     "通信量は 1 回あたり数十 KB 程度で、取得したデータは端末に保存して使い回します。\n\n" +
                     "自動で取得してよいですか？\n" +
-                    "「いいえ」なら、画面左下の更新ボタンを押したときだけ通信します。設定はあとから変えられます。",
+                    "「いいえ」なら、画面左下の更新ボタンを押したときだけ通信します。設定はあとから変更できます。",
             )
         },
         confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text("はい") } },
