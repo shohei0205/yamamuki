@@ -35,9 +35,9 @@
         <!-- 山。方位盤の 1000m 台の山と同じく黄緑の ▲ を緑で縁取る(縁は画面と同じ比率の細さ)。 -->
         <path
             android:fillColor="#FFB5E61D"
-            android:pathData="M54,38L74,72H34Z"
+            android:pathData="M54,43L70,70H38Z"
             android:strokeColor="#FF22B14C"
-            android:strokeWidth="2.8" />
+            android:strokeWidth="2.3" />
         <!-- 現在地 -->
         <path
             android:fillColor="#FF111111"

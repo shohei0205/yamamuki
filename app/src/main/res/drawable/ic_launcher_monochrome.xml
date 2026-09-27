@@ -25,9 +25,9 @@
             android:strokeWidth="2.4" />
         <!-- 山(縁取りだけ) -->
         <path
-            android:pathData="M54,38L74,72H34Z"
+            android:pathData="M54,43L70,70H38Z"
             android:strokeColor="#FF000000"
-            android:strokeWidth="2.8" />
+            android:strokeWidth="2.3" />
         <!-- 現在地 -->
         <path
             android:fillColor="#FF000000"
