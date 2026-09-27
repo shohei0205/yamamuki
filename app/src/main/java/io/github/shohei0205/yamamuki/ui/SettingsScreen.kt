@@ -75,25 +75,19 @@ fun SettingsScreen(
 
             SectionTitle("表示する山")
             StepSlider(
-                title = if (settings.minElevationM == 0) {
-                    "すべての山を表示"
-                } else {
-                    String.format(Locale.US, "標高 %,d m 以上の山だけ表示", settings.minElevationM)
-                },
                 value = settings.minElevationM,
                 range = 0..MAX_MIN_ELEVATION_M,
                 step = MIN_ELEVATION_STEP_M,
-                preview = { if (it == 0) "すべての山を表示" else String.format(Locale.US, "標高 %,d m 以上の山だけ表示", it) },
-                description = "0 m にするとすべての山を表示します。絞り込み中は、標高が分からない山は表示しません。",
+                label = ::minElevationLabel,
+                description = "0 m ですべての山を表示します。絞り込み中は標高不明の山を表示しません。",
                 onChange = { m -> onSettingsChange { it.copy(minElevationM = m) } },
             )
             StepSlider(
-                title = "一度に表示する山 最大 ${settings.maxPeaks} 件",
                 value = settings.maxPeaks,
                 range = Settings.MAX_PEAKS_RANGE,
                 step = MAX_PEAKS_STEP,
-                preview = { "一度に表示する山 最大 $it 件" },
-                description = "多いと山名が重なりやすく、少ないと高い山だけになります。重なる山は標高の低いほうを省きます。",
+                label = { "一度に表示する山 最大 $it 件" },
+                description = "多いと画面が混み合い、少ないと高い山だけになります。重なる山は標高の低いほうを省きます。",
                 onChange = { n -> onSettingsChange { it.copy(maxPeaks = n) } },
             )
 
@@ -129,8 +123,8 @@ fun SettingsScreen(
             SectionTitle("通信とキャッシュ")
             SwitchRow(
                 title = "山データを手動で取得",
-                description = "自動では通信せず、保存済みのデータだけで表示します。方位盤の左下の更新ボタンを押したときだけ、" +
-                    "今の表示範囲を取得します。山に入る前に、電波の届く場所で広めに(ピンチで縮小してから)取得しておくと安心です。",
+                description = "自動では通信せず、保存済みのデータで表示します。方位盤の左下の更新ボタンを押したときだけ、" +
+                    "今の表示範囲を取得します。山に入る前に、電波の届く場所で縮小して広めに取得しておくと安心です。",
                 checked = settings.manualFetch,
                 onChange = { v -> onSettingsChange { it.copy(manualFetch = v) } },
             )
@@ -146,7 +140,7 @@ fun SettingsScreen(
                         else -> "${it}日"
                     }
                 },
-                description = "この期間を過ぎた地域は取り直します。山のデータはほとんど変わらないので、長くすると通信が減ります。",
+                description = "この期間を過ぎた地域は取り直します。山データはめったに変わらないので、長くすると通信が減ります。",
                 onSelect = { v -> onSettingsChange { it.copy(cacheMaxAgeDays = v) } },
             )
             CacheSection(cacheInfo, onClearCache)
@@ -172,6 +166,9 @@ private fun AboutSection() {
     }
 }
 
+private fun minElevationLabel(m: Int): String =
+    if (m == 0) "すべての山を表示" else String.format(Locale.US, "標高 %,d m 以上の山だけ表示", m)
+
 private fun textScaleLabel(scale: Float): String = when (scale) {
     0.85f -> "小"
     1.0f -> "標準"
@@ -185,21 +182,20 @@ private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 }
 
-/** [step] 刻みのスライダー。ドラッグ中は画面内だけで値を動かし、指を離したときに保存する。 */
+/** [step] 刻みのスライダー。ドラッグ中は画面内だけで値を動かし、指を離したときに保存する。見出しは [label] で作る。 */
 @Composable
 private fun StepSlider(
-    title: String,
     value: Int,
     range: IntRange,
     step: Int,
-    preview: (Int) -> String,
+    label: (Int) -> String,
     description: String,
     onChange: (Int) -> Unit,
 ) {
     var dragging by remember(value) { mutableFloatStateOf(value.toFloat()) }
     val snapped = (dragging / step).roundToInt() * step
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(if (snapped == value) title else preview(snapped), style = MaterialTheme.typography.bodyLarge)
+        Text(label(snapped), style = MaterialTheme.typography.bodyLarge)
         Slider(
             value = dragging,
             onValueChange = { dragging = it },
@@ -267,7 +263,7 @@ private fun CacheSection(info: CacheInfo?, onClear: () -> Unit) {
             )
         }
         Text(
-            "消去すると、現在地の周辺を取り直すため通信が発生します。",
+            "消去すると現在地の周辺を取り直すので、通信が発生します。",
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.padding(top = 4.dp))
@@ -282,7 +278,7 @@ private fun CacheSection(info: CacheInfo?, onClear: () -> Unit) {
         AlertDialog(
             onDismissRequest = { confirming = false },
             title = { Text("キャッシュを消去しますか？") },
-            text = { Text("保存している山データをすべて消去します。現在地の周辺はすぐに取り直します。") },
+            text = { Text("保存している山データをすべて消去し、現在地の周辺を取り直します。") },
             confirmButton = {
                 TextButton(onClick = {
                     confirming = false

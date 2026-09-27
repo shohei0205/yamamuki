@@ -11,6 +11,7 @@ import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.displayPriority
 import io.github.shohei0205.yamamuki.core.meetsMinElevation
+import io.github.shohei0205.yamamuki.core.seenFrom
 import io.github.shohei0205.yamamuki.core.summitAt
 import io.github.shohei0205.yamamuki.data.CacheInfo
 import io.github.shohei0205.yamamuki.settings.Settings
@@ -32,10 +33,7 @@ data class GeoPoint(
 
 data class DialUiState(
     val location: GeoPoint? = null,
-    /**
-     * 現在地から見た山。表示の優先順(標高の高い順)。現在地が変わるたびに距離と方位を計算し直す。
-     * 設定の「表示する最低標高」で絞り込んだ後のもの。
-     */
+    /** 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。 */
     val mountains: List<NearbyMountain> = emptyList(),
     /**
      * 現在地がほぼ山頂([io.github.shohei0205.yamamuki.core.SUMMIT_RADIUS_KM] 以内)のとき、その山。
@@ -100,10 +98,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     /** 左下の更新ボタン(山データを取得)。今の表示範囲のうち、未取得または古い地域を取得する。 */
     fun fetchManually() = fetch(manual = true)
 
-    /**
-     * 初回起動時の「山データを自動で取得してよいか」への答え。
-     * いいえなら手動取得モードにする(左下の更新ボタンを押したときだけ通信する)。
-     */
+    /** 初回起動時の「山データを自動で取得してよいか」への答え。いいえなら手動取得モードにする。 */
     fun answerNetworkConsent(allow: Boolean) {
         updateSettings { it.copy(networkConsentAsked = true, manualFetch = !allow) }
         if (allow) fetch()
@@ -180,13 +175,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
 
     /** [p] から見た山の一覧と、山頂にいるならその山を入れた状態。 */
     private fun DialUiState.withPeaksAt(p: GeoPoint): DialUiState {
-        val all = peaks.map {
-            NearbyMountain(
-                mountain = it,
-                distanceKm = GeoMath.distanceKm(p.latitude, p.longitude, it.latitude, it.longitude),
-                bearingDeg = GeoMath.bearingDeg(p.latitude, p.longitude, it.latitude, it.longitude),
-            )
-        }
+        val all = peaks.map { it.seenFrom(p.latitude, p.longitude) }
         val summit = summitAt(all)
         val minElevation = settings.minElevationM
         return copy(

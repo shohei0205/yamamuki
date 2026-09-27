@@ -37,7 +37,7 @@ class MountainRepository(
         longitude: Double,
         radiusKm: Double,
         forceRefresh: Boolean = false,
-        /** false ならキャッシュだけで返す(モバイル通信で取得を控えるときなど)。 */
+        /** false ならキャッシュだけで返す(手動取得モードや、初回の同意前)。 */
         allowNetwork: Boolean = true,
         /** これより古いタイルは取り直す。 */
         maxAgeMillis: Long = this.maxAgeMillis,
@@ -68,13 +68,7 @@ class MountainRepository(
         }
 
         val nearby = cache.mountainsIn(box)
-            .map {
-                NearbyMountain(
-                    mountain = it,
-                    distanceKm = GeoMath.distanceKm(latitude, longitude, it.latitude, it.longitude),
-                    bearingDeg = GeoMath.bearingDeg(latitude, longitude, it.latitude, it.longitude),
-                )
-            }
+            .map { it.seenFrom(latitude, longitude) }
             .filter { it.distanceKm <= radiusKm }
             .sortedBy { it.distanceKm }
 

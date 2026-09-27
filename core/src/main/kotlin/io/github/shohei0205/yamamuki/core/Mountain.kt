@@ -1,5 +1,8 @@
 package io.github.shohei0205.yamamuki.core
 
+import java.util.Locale
+import kotlin.math.abs
+
 /** OSM の山頂ノード1件。 */
 data class Mountain(
     val osmId: Long,
@@ -15,6 +18,13 @@ data class NearbyMountain(
     val mountain: Mountain,
     val distanceKm: Double,
     val bearingDeg: Double,
+)
+
+/** ([latitude], [longitude]) から見たこの山の距離と方位。 */
+fun Mountain.seenFrom(latitude: Double, longitude: Double): NearbyMountain = NearbyMountain(
+    mountain = this,
+    distanceKm = GeoMath.distanceKm(latitude, longitude, this.latitude, this.longitude),
+    bearingDeg = GeoMath.bearingDeg(latitude, longitude, this.latitude, this.longitude),
 )
 
 /** 方位盤で山アイコンの色と形を分ける標高の区分。 */
@@ -41,13 +51,13 @@ fun Mountain.elevationClass(): ElevationClass {
 /** 詳細表示の標高。「1,212 m」、不明なら「不明」。 */
 fun Mountain.elevationText(): String {
     val ele = elevationM ?: return "不明"
-    return String.format(java.util.Locale.US, "%,d m", Math.round(ele))
+    return String.format(Locale.US, "%,d m", Math.round(ele))
 }
 
 /** 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。 */
 fun Mountain.coordinateText(): String {
-    val lat = String.format(java.util.Locale.US, "%.5f°", kotlin.math.abs(latitude))
-    val lon = String.format(java.util.Locale.US, "%.5f°", kotlin.math.abs(longitude))
+    val lat = String.format(Locale.US, "%.5f°", abs(latitude))
+    val lon = String.format(Locale.US, "%.5f°", abs(longitude))
     return "${if (latitude >= 0) "北緯" else "南緯"} $lat\n${if (longitude >= 0) "東経" else "西経"} $lon"
 }
 
@@ -56,7 +66,7 @@ fun distanceText(distanceKm: Double): String =
     if (distanceKm < 1.0) {
         "${Math.round(distanceKm * 1000)} m"
     } else {
-        String.format(java.util.Locale.US, "%,.1f km", distanceKm)
+        String.format(Locale.US, "%,.1f km", distanceKm)
     }
 
 /**
@@ -73,7 +83,7 @@ fun Mountain.meetsMinElevation(minElevationM: Int): Boolean {
 fun byteSizeText(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
     bytes < 1024 * 1024 -> "${Math.round(bytes / 1024.0)} KB"
-    else -> String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+    else -> String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
 }
 
 /**

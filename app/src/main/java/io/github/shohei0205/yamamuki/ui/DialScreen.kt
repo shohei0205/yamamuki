@@ -15,13 +15,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -60,8 +60,8 @@ import io.github.shohei0205.yamamuki.sensor.locationUpdates
 import io.github.shohei0205.yamamuki.sensor.magneticHeadingUpdates
 import io.github.shohei0205.yamamuki.sensor.mslAltitudeM
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 private val LOCATION_PERMISSIONS = arrayOf(
     Manifest.permission.ACCESS_FINE_LOCATION,
@@ -229,12 +229,11 @@ private fun NetworkConsentDialog(onAnswer: (Boolean) -> Unit) {
         title = { Text("山データの取得") },
         text = {
             Text(
-                "周辺の山の名前・位置・標高を、OpenStreetMap のサーバー（Overpass API）から取得します。" +
-                    "問い合わせには現在地の周辺の範囲が含まれます。" +
-                    "通信量は 1 回あたり数十 KB 程度で、取得したデータは端末に保存して繰り返し使います。\n\n" +
+                "周辺の山の名前・位置・標高を OpenStreetMap（Overpass API）から取得します。" +
+                    "問い合わせには現在地周辺の範囲が含まれます。" +
+                    "通信量は 1 回あたり数十 KB 程度で、取得したデータは端末に保存して使い回します。\n\n" +
                     "自動で取得してよいですか？\n" +
-                    "「いいえ」を選ぶと手動取得になり、画面左下の更新ボタンを押したときだけ通信します。" +
-                    "あとから設定を変更できます。",
+                    "「いいえ」なら、画面左下の更新ボタンを押したときだけ通信します。設定はあとから変えられます。",
             )
         },
         confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text("はい") } },
@@ -271,9 +270,9 @@ private fun DetailRow(label: String, value: String) {
 private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String? = when {
     state.location == null -> "現在地を取得しています…"
     !headingAvailable -> "方位センサーの値を待っています…"
-    state.loading -> "山のデータを取得中…"
+    state.loading -> "山データを取得中…"
     state.offline && state.incomplete -> "通信できず、この付近の山データがありません"
-    state.offline -> "オフライン: 保存済みのデータを表示中"
+    state.offline -> "オフライン: 保存済みのデータで表示中"
     state.settings.manualFetch && state.incomplete -> "この付近の山データがありません。左下の更新ボタンで取得できます"
     else -> null
 }
@@ -303,8 +302,8 @@ private fun PermissionRequest(onRequest: () -> Unit, modifier: Modifier = Modifi
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            "現在地のまわりの山を表示するため、位置情報の利用を許可してください。\n" +
-                "許可のダイアログが出ない場合は、設定アプリからこのアプリに位置情報を許可してください。",
+            "周辺の山を表示するには、位置情報の許可が必要です。\n" +
+                "許可の画面が出ないときは、端末の設定アプリから許可してください。",
             textAlign = TextAlign.Center,
         )
         Button(onClick = onRequest) { Text("許可する") }

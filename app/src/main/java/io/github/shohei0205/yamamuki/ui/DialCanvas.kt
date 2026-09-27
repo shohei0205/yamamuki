@@ -16,9 +16,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -229,7 +229,7 @@ private enum class PeakIcon(val halfWidthDp: Float, val heightDp: Float) {
     ;
 
     companion object {
-        const val MAX_HEIGHT_DP = 25f
+        val MAX_HEIGHT_DP = entries.maxOf { it.heightDp }
 
         fun of(cls: ElevationClass): PeakIcon = when (cls) {
             ElevationClass.LOW -> HILL
@@ -285,20 +285,25 @@ private fun DrawScope.drawTriangle(
     color: Color,
     style: DrawStyle = Fill,
 ) {
-    val path = Path().apply {
-        moveTo(bottomCenter.x, bottomCenter.y - height)
-        lineTo(bottomCenter.x + halfWidth, bottomCenter.y)
-        lineTo(bottomCenter.x - halfWidth, bottomCenter.y)
-        close()
-    }
+    val path = polygon(
+        Offset(bottomCenter.x, bottomCenter.y - height),
+        Offset(bottomCenter.x + halfWidth, bottomCenter.y),
+        Offset(bottomCenter.x - halfWidth, bottomCenter.y),
+    )
     drawPath(path, color, style = style)
 }
 
+/** [points] を順に結んで閉じた多角形。 */
+private fun polygon(vararg points: Offset): Path = Path().apply {
+    moveTo(points[0].x, points[0].y)
+    for (p in points.drop(1)) lineTo(p.x, p.y)
+    close()
+}
+
 /**
- * 現在地がほぼ山頂のときに双眼鏡の代わりに描く、旗の立った岩山のアイコンと山名。
- * 向いている方位が分かるよう、双眼鏡と同じ視野の扇形を山頂から前方へ描く(旗はその上に重ねる)。
- * 方位盤の山アイコン(丘・緑の ▲・雪の ▲)と見分けられるよう、灰色の岩肌に赤い旗を立てる。
- * 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤なので)。タップの当たり判定用の範囲を返す。
+ * 現在地がほぼ山頂のときに双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
+ * 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ視野の扇形を前方へ描く。
+ * 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤のため)。タップの当たり判定用の範囲を返す。
  */
 private fun DrawScope.drawSummit(
     center: Offset,
@@ -309,27 +314,10 @@ private fun DrawScope.drawSummit(
     val u = 1.dp.toPx()
     fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + y * u)
 
-    val rock = Path().apply {
-        moveTo(at(-16f, 10f).x, at(-16f, 10f).y)
-        lineTo(at(-8f, -2f).x, at(-8f, -2f).y)
-        lineTo(at(-4f, 1f).x, at(-4f, 1f).y)
-        lineTo(at(2f, -8f).x, at(2f, -8f).y)
-        lineTo(at(16f, 10f).x, at(16f, 10f).y)
-        close()
-    }
+    val rock = polygon(at(-16f, 10f), at(-8f, -2f), at(-4f, 1f), at(2f, -8f), at(16f, 10f))
     // 日の当たる面。右の尾根を明るくして立体に見せる。
-    val lit = Path().apply {
-        moveTo(at(2f, -8f).x, at(2f, -8f).y)
-        lineTo(at(16f, 10f).x, at(16f, 10f).y)
-        lineTo(at(7f, 10f).x, at(7f, 10f).y)
-        close()
-    }
-    val flag = Path().apply {
-        moveTo(at(2f, -24f).x, at(2f, -24f).y)
-        lineTo(at(13f, -20.5f).x, at(13f, -20.5f).y)
-        lineTo(at(2f, -17f).x, at(2f, -17f).y)
-        close()
-    }
+    val lit = polygon(at(2f, -8f), at(16f, 10f), at(7f, 10f))
+    val flag = polygon(at(2f, -24f), at(13f, -20.5f), at(2f, -17f))
     val poleTop = at(2f, -24f)
     val poleBottom = at(2f, -8f)
 
@@ -462,13 +450,14 @@ private fun DrawScope.drawReadout(
 ) {
     val center = size.width / 2
     val caret = 6.dp.toPx()
-    val path = Path().apply {
-        moveTo(center, tapeHeight)
-        lineTo(center + caret, tapeHeight + caret)
-        lineTo(center - caret, tapeHeight + caret)
-        close()
-    }
-    drawPath(path, NorthRed)
+    drawPath(
+        polygon(
+            Offset(center, tapeHeight),
+            Offset(center + caret, tapeHeight + caret),
+            Offset(center - caret, tapeHeight + caret),
+        ),
+        NorthRed,
+    )
     val deg = headingDeg.roundToInt() % 360
     val altitude = altitudeM?.let { String.format(java.util.Locale.US, "　標高 %,dm", Math.round(it)) } ?: ""
     val label = textMeasurer.measure("${Heading.directionName(headingDeg)} $deg°$altitude", styles.readout)
