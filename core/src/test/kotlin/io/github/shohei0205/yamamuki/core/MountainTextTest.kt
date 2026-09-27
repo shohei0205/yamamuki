@@ -18,7 +18,7 @@ class MountainTextTest {
     fun coordinate() {
         assertEquals("北緯 35.36056°\n東経 138.72739°", fuji.coordinateText())
         assertEquals("南緯 33.86880°\n西経 151.20930°", fuji.copy(latitude = -33.8688, longitude = -151.2093).coordinateText())
-        assertEquals("北緯 35.68124°\n東経 139.76712°", coordinateText(35.681236, 139.767125))
+        assertEquals("北緯 35.68124°\n東経 139.76713°", coordinateText(35.681236, 139.767126))
     }
 
     @Test

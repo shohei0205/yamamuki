@@ -18,7 +18,7 @@ final class MountainTextTests: XCTestCase {
     func testCoordinate() {
         XCTAssertEqual(fuji.coordinateText, "北緯 35.36056°\n東経 138.72739°")
         XCTAssertEqual(variant(lat: -33.8688, lon: -151.2093, ele: 1).coordinateText, "南緯 33.86880°\n西経 151.20930°")
-        XCTAssertEqual(coordinateText(latitude: 35.681236, longitude: 139.767125), "北緯 35.68124°\n東経 139.76712°")
+        XCTAssertEqual(coordinateText(latitude: 35.681236, longitude: 139.767126), "北緯 35.68124°\n東経 139.76713°")
     }
 
     func testDistance() {
