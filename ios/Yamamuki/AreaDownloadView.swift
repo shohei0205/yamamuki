@@ -1,7 +1,7 @@
 import SwiftUI
 import YamamukiCore
 
-/// 山データの事前ダウンロード画面。方位盤の左下のダウンロードボタンで開く。
+/// 山データのダウンロード画面。方位盤の左下のダウンロードボタンで開く。
 struct AreaDownloadView: View {
     @ObservedObject var model: DialModel
     @ObservedObject var download: AreaDownloadModel
@@ -22,7 +22,7 @@ struct AreaDownloadView: View {
         NavigationView {
             List {
                 Section {
-                    Text("圏外になりそうな目的地の山データを、電波の届く場所で前もって保存しておけます。保存した地域は、キャッシュを消去しても残ります。")
+                    Text("目的地域周辺の山データを、電波の届く場所で事前に端末へ保存する事ができます。\n事前に保存した山データは、キャッシュを消去しても残ります。")
                         .font(.subheadline)
                     if !model.isConnected {
                         Text("圏外のため、今はダウンロードできません。電波の届く場所で開いてください。")
@@ -32,13 +32,11 @@ struct AreaDownloadView: View {
                 }
 
                 if let running = download.running {
-                    Section("ダウンロード中") {
+                    Section {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(running.prefecture.name).font(.headline)
+                            Text("\(running.prefecture.name)をダウンロード中（\(running.progress.doneTiles) / \(running.progress.totalTiles) 区画）")
+                                .font(.headline)
                             ProgressView(value: running.progress.fraction)
-                            Text("\(running.progress.doneTiles) / \(running.progress.totalTiles) 区画。数区画ずつ保存するので、中断しても取得済みの分は残ります。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
                         }
                         Button("中断", role: .destructive) { download.cancel() }
                     }
@@ -99,7 +97,7 @@ struct AreaDownloadView: View {
                     }
                 }
             }
-            .navigationTitle("事前ダウンロード")
+            .navigationTitle("山データのダウンロード")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

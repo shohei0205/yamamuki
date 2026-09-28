@@ -34,7 +34,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** 山データの事前ダウンロード画面。方位盤の左下のダウンロードボタンで開く。 */
+/** 山データのダウンロード画面。方位盤の左下のダウンロードボタンで開く。 */
 @Composable
 fun AreaDownloadScreen(
     state: AreaDownloadUiState,
@@ -60,12 +60,12 @@ fun AreaDownloadScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("山データの事前ダウンロード", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                Text("山データのダウンロード", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
                 TextButton(onClick = onClose) { Text("閉じる") }
             }
             Text(
-                "圏外になりそうな目的地の山データを、電波の届く場所で前もって保存しておけます。" +
-                    "保存した地域は、キャッシュを消去しても残ります。",
+                "目的地域周辺の山データを、電波の届く場所で事前に端末へ保存する事ができます。\n" +
+                    "事前に保存した山データは、キャッシュを消去しても残ります。",
                 style = MaterialTheme.typography.bodyMedium,
             )
 
@@ -155,13 +155,11 @@ fun AreaDownloadScreen(
 private fun RunningCard(running: RunningDownload, onCancel: () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("${running.prefecture.name}をダウンロード中", style = MaterialTheme.typography.titleMedium)
-            LinearProgressIndicator(progress = { running.progress.fraction }, modifier = Modifier.fillMaxWidth())
             Text(
-                "${running.progress.doneTiles} / ${running.progress.totalTiles} 区画。" +
-                    "数区画ずつ保存するので、中断しても取得済みの分は残ります。",
-                style = MaterialTheme.typography.bodySmall,
+                "${running.prefecture.name}をダウンロード中（${running.progress.doneTiles} / ${running.progress.totalTiles} 区画）",
+                style = MaterialTheme.typography.titleMedium,
             )
+            LinearProgressIndicator(progress = { running.progress.fraction }, modifier = Modifier.fillMaxWidth())
             OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("中断") }
         }
     }
