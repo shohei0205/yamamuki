@@ -143,8 +143,8 @@ struct DialView: View {
         if model.location == nil { return "現在地を取得しています…" }
         if model.heading == nil { return "方位センサーの値を待っています…" }
         if model.loading { return "山データを取得中…" }
-        // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。山を表示できていれば「一部」と言う。
-        let missing = model.mountains.isEmpty && model.summit == nil ? "この付近の山データがありません" : "表示範囲の一部の山データがありません"
+        // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。欠けているのはたいてい取得半径の外縁なので、周辺に保存済みの山があれば「周辺の一部」と言う。
+        let missing = model.mountains.isEmpty && model.summit == nil ? "この付近の山データがありません" : "周辺の一部の山データがありません"
         if !model.isConnected && model.incomplete { return "圏外のため、\(missing)" }
         if !model.isConnected { return "圏外: 保存済みのデータで表示中" }
         if model.offline && model.incomplete { return "通信できず、\(missing)" }

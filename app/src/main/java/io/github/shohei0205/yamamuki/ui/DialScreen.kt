@@ -321,8 +321,8 @@ private fun DetailRow(label: String, value: String) {
 }
 
 private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String? {
-    // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。山を表示できていれば「一部」と言う。
-    val missing = if (state.mountains.isEmpty() && state.summit == null) "この付近の山データがありません" else "表示範囲の一部の山データがありません"
+    // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。欠けているのはたいてい取得半径の外縁なので、周辺に保存済みの山があれば「周辺の一部」と言う。
+    val missing = if (state.mountains.isEmpty() && state.summit == null) "この付近の山データがありません" else "周辺の一部の山データがありません"
     return when {
         state.location == null -> "現在地を取得しています…"
         !headingAvailable -> "方位センサーの値を待っています…"
