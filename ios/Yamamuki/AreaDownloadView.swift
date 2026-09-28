@@ -22,7 +22,7 @@ struct AreaDownloadView: View {
         NavigationView {
             List {
                 Section {
-                    Text("目的地域周辺の山データを、電波の届く場所で事前に端末へ保存する事ができます。\n事前に保存した山データは、キャッシュを消去しても残ります。")
+                    Text("目的地周辺の山データを、電波の届く場所で事前に端末へ保存することができます。\n事前に保存した山データは、キャッシュを消去しても残ります。")
                         .font(.subheadline)
                     if !model.isConnected {
                         Text("圏外のため、今はダウンロードできません。電波の届く場所で開いてください。")
@@ -38,7 +38,7 @@ struct AreaDownloadView: View {
                                 .font(.headline)
                             ProgressView(value: running.progress.fraction)
                             if running.progress.retry > 0 {
-                                Text("サーバーが混み合っているため、取り直しています（\(running.progress.retry) 回目）")
+                                Text("通信に失敗したため、取り直しています（\(running.progress.retry) 回目）")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }

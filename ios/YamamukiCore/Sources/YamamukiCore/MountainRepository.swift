@@ -90,7 +90,7 @@ public final class MountainRepository: Sendable {
                 let targets = Set(toFetch)
                 try await cache.replaceTiles(
                     toFetch,
-                    mountains: (peaks ?? []).filter { targets.contains(Tile.of($0.latitude, $0.longitude)) },
+                    mountains: peaks.filter { targets.contains(Tile.of($0.latitude, $0.longitude)) },
                     fetchedAt: now
                 )
                 missing = []

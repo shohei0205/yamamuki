@@ -64,7 +64,7 @@ fun AreaDownloadScreen(
                 TextButton(onClick = onClose) { Text("閉じる") }
             }
             Text(
-                "目的地域周辺の山データを、電波の届く場所で事前に端末へ保存する事ができます。\n" +
+                "目的地周辺の山データを、電波の届く場所で事前に端末へ保存することができます。\n" +
                     "事前に保存した山データは、キャッシュを消去しても残ります。",
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -164,7 +164,7 @@ private fun RunningCard(running: RunningDownload, onCancel: () -> Unit) {
             )
             if (running.progress.retry > 0) {
                 Text(
-                    "サーバーが混み合っているため、取り直しています（${running.progress.retry} 回目）",
+                    "通信に失敗したため、取り直しています（${running.progress.retry} 回目）",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
