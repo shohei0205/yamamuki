@@ -109,9 +109,10 @@ class AreaDownloadTest {
 
     @Test
     fun prefecturesCoverJapanWithReasonableTileCounts() {
-        assertEquals((1..47).toList(), Prefecture.ALL.map { it.code })
+        assertEquals((101..104).toList() + (2..47).toList(), Prefecture.ALL.map { it.code })
+        assertEquals(Prefecture.ALL.size, Prefecture.ALL.map { it.name }.toSet().size)
         for (p in Prefecture.ALL) {
-            assertTrue(p.tiles.size in 1..150, "${p.name}: ${p.tiles.size} タイル")
+            assertTrue(p.tiles.size in 1..50, "${p.name}: ${p.tiles.size} タイル")
             for (box in p.areas) {
                 assertTrue(box.south < box.north && box.west < box.east, p.name)
                 assertTrue(box.south in 24.0..46.0 && box.west in 122.0..146.0, p.name)
@@ -119,5 +120,11 @@ class AreaDownloadTest {
         }
         assertTrue(Prefecture.byCode(20)!!.areas.first().contains(yari.latitude, yari.longitude))
         assertTrue(Prefecture.byCode(46)!!.areas.any { it.contains(30.3358, 130.5047) }, "鹿児島県に屋久島(宮之浦岳)が入る")
+        // 北海道の主な山が、分けたどれかの地域に入る(旭岳・羊蹄山・駒ヶ岳・羅臼岳・利尻山)。
+        val hokkaido = Prefecture.HOKKAIDO_CODES.map { Prefecture.byCode(it)!! }
+        for ((lat, lon) in listOf(43.6636 to 142.8544, 42.8267 to 140.8114, 42.0631 to 140.6772, 44.0758 to 145.1222, 45.1789 to 141.2419)) {
+            assertTrue(hokkaido.any { p -> p.areas.any { it.contains(lat, lon) } }, "北海道の $lat, $lon")
+        }
+        assertEquals("北海道・東北", hokkaido.first().region)
     }
 }

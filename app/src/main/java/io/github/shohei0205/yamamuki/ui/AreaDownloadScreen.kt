@@ -34,7 +34,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** 山データのダウンロード画面。方位盤の左下のダウンロードボタンで開く。 */
+/** 山データの事前ダウンロード画面。方位盤の左下のダウンロードボタンで開く。 */
 @Composable
 fun AreaDownloadScreen(
     state: AreaDownloadUiState,
@@ -60,7 +60,7 @@ fun AreaDownloadScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("山データのダウンロード", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                Text("事前ダウンロード", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
                 TextButton(onClick = onClose) { Text("閉じる") }
             }
             Text(
@@ -101,7 +101,7 @@ fun AreaDownloadScreen(
                 HorizontalDivider()
             }
 
-            SectionTitle("都道府県を選ぶ")
+            SectionTitle("都道府県を選択")
             val saved = state.savedAreas.map { it.prefecture.code }.toSet()
             Prefecture.ALL.groupBy { it.region }.forEach { (region, prefectures) ->
                 Text(region, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
@@ -124,8 +124,8 @@ fun AreaDownloadScreen(
             text = {
                 Text(
                     "${prefecture.tiles.size} 区画の山データを OpenStreetMap（Overpass API）から取得します。" +
-                        "サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは続きます。" +
-                        "アプリを終了すると止まりますが、次に開いたときに続きから再開できます。",
+                        "サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは継続します。" +
+                        "アプリを終了すると一時停止しますが、次に開いた時に再開できます。",
                 )
             },
             confirmButton = {

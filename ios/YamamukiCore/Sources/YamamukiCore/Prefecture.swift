@@ -3,7 +3,8 @@ import Foundation
 /// 山データを事前ダウンロードする単位としての都道府県。
 /// 範囲は境界を囲む矩形なので、隣の県の山も一部含む(県境付近から見える山なので、むしろ都合がよい)。
 public struct Prefecture: Hashable, Identifiable, Sendable {
-    /// JIS X 0401 の都道府県コード(北海道 = 1 〜 沖縄県 = 47)。
+    /// JIS X 0401 の都道府県コード(青森県 = 2 〜 沖縄県 = 47)。保存済みの地域の記録に使う。
+    /// 北海道は 1 つでは区画が多すぎる(約 130)ので、道央・道南・道北・道東に分けて 101〜104 を使う。
     public let code: Int
     public let name: String
     /// 本土(県庁所在地を含む範囲)と、山のある主な離島の矩形。
@@ -26,7 +27,7 @@ public struct Prefecture: Hashable, Identifiable, Sendable {
     /// 一覧で見出しにする地方。
     public var region: String {
         switch code {
-        case 1...7: return "北海道・東北"
+        case 1...7, Self.hokkaidoCodes: return "北海道・東北"
         case 8...14: return "関東"
         case 15...23: return "中部"
         case 24...30: return "近畿"
@@ -36,6 +37,9 @@ public struct Prefecture: Hashable, Identifiable, Sendable {
         }
     }
 
+    /// 北海道を分けた 4 地域のコード。
+    public static let hokkaidoCodes = 101...104
+
     public static func byCode(_ code: Int) -> Prefecture? { all.first { $0.code == code } }
 
     /// 本土の矩形は japanmap (Apache-2.0、国土数値情報をもとにした簡略な境界) から求め、0.01° 単位で外側に丸めた。
@@ -43,7 +47,11 @@ public struct Prefecture: Hashable, Identifiable, Sendable {
     /// 鹿児島県の屋久島・奄美大島、沖縄県の石垣島・西表島を足した(小笠原諸島などは含まない)。
     /// Android 版の core/Prefecture.kt と同じ値。
     public static let all: [Prefecture] = [
-        Prefecture(code: 1, name: "北海道", areas: [.init(south: 41.39, west: 139.77, north: 45.53, east: 145.83)]),
+        // 北海道は総合振興局の範囲をおおまかに囲んだ矩形。境目の区画は隣の地域と重なる。
+        Prefecture(code: 101, name: "北海道（道央）", areas: [.init(south: 41.90, west: 139.77, north: 44.00, east: 143.20)]),
+        Prefecture(code: 102, name: "北海道（道南）", areas: [.init(south: 41.39, west: 139.77, north: 42.70, east: 141.20)]),
+        Prefecture(code: 103, name: "北海道（道北）", areas: [.init(south: 43.30, west: 141.10, north: 45.53, east: 143.20)]),
+        Prefecture(code: 104, name: "北海道（道東）", areas: [.init(south: 41.90, west: 142.60, north: 44.60, east: 145.83)]),
         Prefecture(code: 2, name: "青森県", areas: [.init(south: 40.21, west: 139.86, north: 41.55, east: 141.69)]),
         Prefecture(code: 3, name: "岩手県", areas: [.init(south: 38.74, west: 140.66, north: 40.45, east: 142.08)]),
         Prefecture(code: 4, name: "宮城県", areas: [.init(south: 37.77, west: 140.28, north: 39.00, east: 141.68)]),

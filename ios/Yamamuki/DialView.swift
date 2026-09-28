@@ -210,7 +210,7 @@ private struct AreaDownloadButton: View {
     let action: () -> Void
 
     var body: some View {
-        RoundButton(label: "山データのダウンロード") {
+        RoundButton(label: "山データの事前ダウンロード") {
             if let running = download.running, running.progress.doneTiles > 0 {
                 ProgressView(value: running.progress.fraction)
                     .progressViewStyle(.circular)

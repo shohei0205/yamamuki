@@ -214,7 +214,7 @@ fun DialScreen(
                     } else {
                         Icon(
                             painterResource(R.drawable.ic_area_download),
-                            contentDescription = "山データのダウンロード",
+                            contentDescription = "山データの事前ダウンロード",
                             Modifier.size(28.dp),
                         )
                     }

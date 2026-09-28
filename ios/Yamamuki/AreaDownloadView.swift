@@ -1,7 +1,7 @@
 import SwiftUI
 import YamamukiCore
 
-/// 山データのダウンロード画面。方位盤の左下のダウンロードボタンで開く。
+/// 山データの事前ダウンロード画面。方位盤の左下のダウンロードボタンで開く。
 struct AreaDownloadView: View {
     @ObservedObject var model: DialModel
     @ObservedObject var download: AreaDownloadModel
@@ -104,7 +104,7 @@ struct AreaDownloadView: View {
                     }
                 }
             }
-            .navigationTitle("山データのダウンロード")
+            .navigationTitle("事前ダウンロード")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -122,7 +122,7 @@ struct AreaDownloadView: View {
             }
             Button("キャンセル", role: .cancel) {}
         } message: { c in
-            Text("\(c.prefecture.tiles.count) 区画の山データを OpenStreetMap（Overpass API）から取得します。サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは続きます。アプリを終了すると止まりますが、次に開いたときに続きから再開できます。")
+            Text("\(c.prefecture.tiles.count) 区画の山データを OpenStreetMap（Overpass API）から取得します。サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは継続します。アプリを終了すると一時停止しますが、次に開いた時に再開できます。")
         }
         .alert(
             deleting.map { "\($0.prefecture.name)を削除しますか？" } ?? "",

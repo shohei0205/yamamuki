@@ -133,9 +133,10 @@ final class AreaDownloadTests: XCTestCase {
     }
 
     func testPrefecturesCoverJapanWithReasonableTileCounts() {
-        XCTAssertEqual(Prefecture.all.map(\.code), Array(1...47))
+        XCTAssertEqual(Prefecture.all.map(\.code), Array(101...104) + Array(2...47))
+        XCTAssertEqual(Set(Prefecture.all.map(\.name)).count, Prefecture.all.count)
         for p in Prefecture.all {
-            XCTAssertTrue((1...150).contains(p.tiles.count), "\(p.name): \(p.tiles.count) タイル")
+            XCTAssertTrue((1...50).contains(p.tiles.count), "\(p.name): \(p.tiles.count) タイル")
             for box in p.areas {
                 XCTAssertTrue(box.south < box.north && box.west < box.east, p.name)
                 XCTAssertTrue((24.0...46.0).contains(box.south) && (122.0...146.0).contains(box.west), p.name)
@@ -143,6 +144,12 @@ final class AreaDownloadTests: XCTestCase {
         }
         XCTAssertTrue(nagano.areas[0].contains(yari.latitude, yari.longitude))
         XCTAssertTrue(Prefecture.byCode(46)!.areas.contains { $0.contains(30.3358, 130.5047) }, "鹿児島県に屋久島(宮之浦岳)が入る")
+        // 北海道の主な山が、分けたどれかの地域に入る(旭岳・羊蹄山・駒ヶ岳・羅臼岳・利尻山)。
+        let hokkaido = Prefecture.hokkaidoCodes.compactMap(Prefecture.byCode)
+        for (lat, lon) in [(43.6636, 142.8544), (42.8267, 140.8114), (42.0631, 140.6772), (44.0758, 145.1222), (45.1789, 141.2419)] {
+            XCTAssertTrue(hokkaido.contains { p in p.areas.contains { $0.contains(lat, lon) } }, "北海道の \(lat), \(lon)")
+        }
+        XCTAssertEqual(hokkaido.first?.region, "北海道・東北")
     }
 
     func testFileCacheClearKeepsSavedTilesAndRemovesSelected() async throws {

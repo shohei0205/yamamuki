@@ -5,7 +5,10 @@ package io.github.shohei0205.yamamuki.core
  * 範囲は境界を囲む矩形なので、隣の県の山も一部含む(県境付近から見える山なので、むしろ都合がよい)。
  */
 data class Prefecture(
-    /** JIS X 0401 の都道府県コード(北海道 = 1 〜 沖縄県 = 47)。 */
+    /**
+     * JIS X 0401 の都道府県コード(青森県 = 2 〜 沖縄県 = 47)。保存済みの地域の記録に使う。
+     * 北海道は 1 つでは区画が多すぎる(約 130)ので、道央・道南・道北・道東に分けて 101〜104 を使う。
+     */
     val code: Int,
     val name: String,
     /** 本土(県庁所在地を含む範囲)と、山のある主な離島の矩形。 */
@@ -17,7 +20,7 @@ data class Prefecture(
     /** 一覧で見出しにする地方。 */
     val region: String
         get() = when (code) {
-            in 1..7 -> "北海道・東北"
+            in 1..7, in HOKKAIDO_CODES -> "北海道・東北"
             in 8..14 -> "関東"
             in 15..23 -> "中部"
             in 24..30 -> "近畿"
@@ -27,6 +30,9 @@ data class Prefecture(
         }
 
     companion object {
+        /** 北海道を分けた 4 地域のコード。 */
+        val HOKKAIDO_CODES = 101..104
+
         fun byCode(code: Int): Prefecture? = ALL.firstOrNull { it.code == code }
 
         /**
@@ -35,7 +41,11 @@ data class Prefecture(
          * 鹿児島県の屋久島・奄美大島、沖縄県の石垣島・西表島を足した(小笠原諸島などは含まない)。
          */
         val ALL: List<Prefecture> = listOf(
-        Prefecture(1, "北海道", listOf(BoundingBox(41.39, 139.77, 45.53, 145.83))),
+        // 北海道は総合振興局の範囲をおおまかに囲んだ矩形。境目の区画は隣の地域と重なる。
+        Prefecture(101, "北海道（道央）", listOf(BoundingBox(41.90, 139.77, 44.00, 143.20))),
+        Prefecture(102, "北海道（道南）", listOf(BoundingBox(41.39, 139.77, 42.70, 141.20))),
+        Prefecture(103, "北海道（道北）", listOf(BoundingBox(43.30, 141.10, 45.53, 143.20))),
+        Prefecture(104, "北海道（道東）", listOf(BoundingBox(41.90, 142.60, 44.60, 145.83))),
         Prefecture(2, "青森県", listOf(BoundingBox(40.21, 139.86, 41.55, 141.69))),
         Prefecture(3, "岩手県", listOf(BoundingBox(38.74, 140.66, 40.45, 142.08))),
         Prefecture(4, "宮城県", listOf(BoundingBox(37.77, 140.28, 39.00, 141.68))),
