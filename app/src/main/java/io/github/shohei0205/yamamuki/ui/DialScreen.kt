@@ -320,16 +320,20 @@ private fun DetailRow(label: String, value: String) {
     }
 }
 
-private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String? = when {
-    state.location == null -> "現在地を取得しています…"
-    !headingAvailable -> "方位センサーの値を待っています…"
-    state.loading -> "山データを取得中…"
-    !state.connected && state.incomplete -> "圏外のため、この付近の山データがありません"
-    !state.connected -> "圏外: 保存済みのデータで表示中"
-    state.offline && state.incomplete -> "通信できず、この付近の山データがありません"
-    state.offline -> "オフライン: 保存済みのデータで表示中"
-    state.settings.manualFetch && state.incomplete -> "この付近の山データがありません。左下の更新ボタンで取得できます"
-    else -> null
+private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String? {
+    // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。山を表示できていれば「一部」と言う。
+    val missing = if (state.mountains.isEmpty() && state.summit == null) "この付近の山データがありません" else "表示範囲の一部の山データがありません"
+    return when {
+        state.location == null -> "現在地を取得しています…"
+        !headingAvailable -> "方位センサーの値を待っています…"
+        state.loading -> "山データを取得中…"
+        !state.connected && state.incomplete -> "圏外のため、$missing"
+        !state.connected -> "圏外: 保存済みのデータで表示中"
+        state.offline && state.incomplete -> "通信できず、$missing"
+        state.offline -> "オフライン: 保存済みのデータで表示中"
+        state.settings.manualFetch && state.incomplete -> "$missing。左下の更新ボタンで取得できます"
+        else -> null
+    }
 }
 
 @Composable
