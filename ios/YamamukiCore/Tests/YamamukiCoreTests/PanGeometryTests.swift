@@ -4,6 +4,122 @@ import XCTest
 final class PanGeometryTests: XCTestCase {
     private let tokyo = MapCenter(35.696, 139.814)
 
+    func testReturnPathIsStraightOnScreenWhileHeadingAndGpsChange() {
+        for offset in [PlanOffset(x: 12, y: -8), PlanOffset(x: -30, y: 20), PlanOffset(x: 0, y: 0)] {
+            for targetHeading in [10.0, 90.0, 180.0, 270.0] {
+                for t in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                    let fraction = t * t * (3 - 2 * t)
+                    let observer = PanGeometry.interpolateCenter(tokyo, to: MapCenter(35.7, 139.82), fraction: fraction)
+                    let heading = Heading.normalize(350 + Heading.delta(350, targetHeading) * fraction)
+                    let viewport = PanGeometry.returnViewport(observer, initialOffset: offset, heading: heading, fraction: fraction)
+                    let actual = PanGeometry.observerOffset(observer, viewport: viewport, heading: heading)
+                    XCTAssertEqual(actual.x, offset.x * (1 - fraction), accuracy: 1e-7)
+                    XCTAssertEqual(actual.y, offset.y * (1 - fraction), accuracy: 1e-7)
+                    if t == 1 { XCTAssertEqual(observer, viewport) }
+                }
+            }
+        }
+    }
+
+    func testReturnToLocationInterpolatesContinuouslyAndEndsExactlyAtTarget() {
+        for (from, to) in [(tokyo, MapCenter(35.75, 139.9)), (MapCenter(0, 179.9), MapCenter(0, -179.9))] {
+            let distance = GeoMath.distanceKm(from.latitude, from.longitude, to.latitude, to.longitude)
+            XCTAssertEqual(PanGeometry.interpolateCenter(from, to: to, fraction: 0), from)
+            XCTAssertEqual(PanGeometry.interpolateCenter(from, to: to, fraction: 1), to)
+            for fraction in [0.25, 0.5, 0.75] {
+                let point = PanGeometry.interpolateCenter(from, to: to, fraction: fraction)
+                XCTAssertEqual(GeoMath.distanceKm(from.latitude, from.longitude, point.latitude, point.longitude), distance * fraction, accuracy: 1e-6)
+            }
+        }
+        XCTAssertEqual(PanGeometry.interpolateCenter(tokyo, to: tokyo, fraction: 0.5), tokyo)
+        XCTAssertEqual(Heading.normalize(350 + Heading.delta(350, 10) * 0.5), 0, accuracy: 1e-8)
+    }
+
+    func testHeadingDragKeepsChosenPivotAcrossNorthAndRepeatedUpdates() {
+        for aroundCenter in [false, true] {
+            var viewport = PanGeometry.drag(tokyo, dx: -100, dy: -100, scale: 10, heading: 359)
+            var heading = 359.0
+            let pivot = aroundCenter ? PlanOffset(x: 0, y: -348) : screen(tokyo, viewport: viewport, heading: heading, scale: 10)
+            let landmark = aroundCenter ? PanGeometry.transformViewport(tokyo, viewport: viewport,
+                previous: pivot, midpoint: PlanOffset(x: 0, y: 0), oldScale: 10, newScale: 10,
+                oldHeading: heading, newHeading: heading) : tokyo
+            for dx in [-12.0, -60.0, 180.0, -360.0] {
+                let nextHeading = DialGeometry.swipedHeading(heading, dx: dx, width: 360)
+                viewport = PanGeometry.rotateViewport(tokyo, viewport: viewport, heading: heading, nextHeading: nextHeading,
+                    rangeKm: 67.2, canvasHeight: 800, aroundCenter: aroundCenter)
+                heading = nextHeading
+                let actual = screen(landmark, viewport: viewport, heading: heading, scale: 10)
+                XCTAssertEqual(actual.x, pivot.x, accuracy: 1e-6)
+                XCTAssertEqual(actual.y, pivot.y, accuracy: 1e-6)
+            }
+        }
+    }
+
+    func testVisibleBinocularsStayFixedEvenAfterPanning() {
+        for heading in [45.0, 90.0, 270.0, 359.0] {
+            let viewport = PanGeometry.drag(tokyo, dx: -100, dy: -100, scale: 10, heading: heading)
+            XCTAssertTrue(PanGeometry.isObserverVisible(tokyo, viewport: viewport, heading: heading,
+                rangeKm: 67.2, canvasWidth: 360, canvasHeight: 800))
+            let before = screen(tokyo, viewport: viewport, heading: heading, scale: 10)
+            for progress in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                let next = PanGeometry.northUpViewport(tokyo, viewport: viewport, heading: heading,
+                    rangeKm: 67.2, canvasHeight: 800, progress: progress, aroundCenter: false)
+                let after = screen(tokyo, viewport: next, heading: PanGeometry.northUpHeading(heading, progress: progress), scale: 10)
+                XCTAssertEqual(before.x, after.x, accuracy: 1e-6)
+                XCTAssertEqual(before.y, after.y, accuracy: 1e-6)
+            }
+            for (dx, dy) in [(300.0, -100.0), (-300.0, -100.0), (0.0, -750.0), (0.0, 100.0)] {
+                let outside = PanGeometry.drag(tokyo, dx: dx, dy: dy, scale: 10, heading: heading)
+                XCTAssertFalse(PanGeometry.isObserverVisible(tokyo, viewport: outside, heading: heading,
+                    rangeKm: 67.2, canvasWidth: 360, canvasHeight: 800))
+            }
+        }
+    }
+
+    func testNorthUpKeepsScreenCenterAfterPanningAtDifferentSizesAndRanges() {
+        let panned = PanGeometry.drag(tokyo, dx: 100, dy: -50, scale: 10, heading: 30)
+        for viewport in [tokyo, panned] {
+            for height in [480.0, 900.0] {
+                for range in [10.0, 80.0] {
+                    for heading in [0.0, 45.0, 90.0, 180.0, 359.0] {
+                        let scale = (height - 128) / range
+                        let pivotY = 52 - height / 2
+                        let center = DialGeometry.project(
+                            distanceKm: GeoMath.distanceKm(tokyo.latitude, tokyo.longitude, viewport.latitude, viewport.longitude),
+                            bearingDeg: GeoMath.bearingDeg(tokyo.latitude, tokyo.longitude, viewport.latitude, viewport.longitude),
+                            headingDeg: 0)
+                        let angle = heading * .pi / 180
+                        let east = -pivotY * sin(angle) / scale
+                        let north = -pivotY * cos(angle) / scale
+                        let landmark = PanGeometry.drag(tokyo, dx: -(center.x + east), dy: center.y + north, scale: 1, heading: 0)
+                        let before = screen(landmark, viewport: viewport, heading: heading, scale: scale)
+                        XCTAssertEqual(before.x, 0, accuracy: 1e-6)
+                        XCTAssertEqual(before.y, pivotY, accuracy: 1e-6)
+                        for progress in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                            let animated = PanGeometry.northUpViewport(tokyo, viewport: viewport, heading: heading,
+                                rangeKm: range, canvasHeight: height, progress: progress)
+                            let angle = PanGeometry.northUpHeading(heading, progress: progress)
+                            let position = screen(landmark, viewport: animated, heading: angle, scale: scale)
+                            XCTAssertEqual(position.x, before.x, accuracy: 1e-6)
+                            XCTAssertEqual(position.y, before.y, accuracy: 1e-6)
+                            let normal = PanGeometry.northUpViewport(tokyo, viewport: tokyo, heading: heading,
+                                rangeKm: range, canvasHeight: height, progress: progress, aroundCenter: false)
+                            XCTAssertEqual(normal, tokyo)
+                            let binoculars = screen(tokyo, viewport: normal, heading: angle, scale: scale)
+                            XCTAssertEqual(binoculars.x, 0, accuracy: 1e-6)
+                            XCTAssertEqual(binoculars.y, 0, accuracy: 1e-6)
+                        }
+                        let next = PanGeometry.northUpViewport(tokyo, viewport: viewport, heading: heading, rangeKm: range, canvasHeight: height)
+                        let after = screen(landmark, viewport: next, heading: 0, scale: scale)
+                        XCTAssertEqual(after.x, before.x, accuracy: 1e-6)
+                        XCTAssertEqual(after.y, before.y, accuracy: 1e-6)
+                        XCTAssertEqual(next, PanGeometry.northUpViewport(tokyo, viewport: next, heading: 0, rangeKm: range, canvasHeight: height))
+                    }
+                }
+            }
+        }
+    }
+
     private func screen(_ point: MapCenter, viewport: MapCenter, heading: Double, scale: Double) -> PlanOffset {
         let p = DialGeometry.project(
             distanceKm: GeoMath.distanceKm(tokyo.latitude, tokyo.longitude, point.latitude, point.longitude),
@@ -11,6 +127,14 @@ final class PanGeometryTests: XCTestCase {
             headingDeg: heading)
         let offset = PanGeometry.observerOffset(tokyo, viewport: viewport, heading: heading)
         return PlanOffset(x: (p.x + offset.x) * scale, y: -(p.y + offset.y) * scale)
+    }
+
+    func testNorthUpAnimationUsesShortestTurnAndStopsExactlyAtNorth() {
+        XCTAssertEqual(PanGeometry.northUpHeading(90, progress: 0.5), 45, accuracy: 1e-8)
+        XCTAssertEqual(PanGeometry.northUpHeading(270, progress: 0.5), 315, accuracy: 1e-8)
+        XCTAssertEqual(PanGeometry.northUpHeading(359, progress: 0.5), 359.5, accuracy: 1e-8)
+        XCTAssertEqual(PanGeometry.northUpHeading(90, progress: 0), 90)
+        XCTAssertEqual(PanGeometry.northUpHeading(359, progress: 1), 0)
     }
 
     func testHeadingSwipeAcrossNorth() {

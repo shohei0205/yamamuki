@@ -5,7 +5,7 @@ import YamamukiCore
 /// Canvasと同じ座標系でタップと複数指を扱う。上に重なるボタンは通常のSwiftUI操作を保つ。
 struct DialTouchSurface: UIViewRepresentable {
     let onPan: (Double, Double, Double) -> Void
-    let onHeadingSwipe: (Double, Double) -> Void
+    let onHeadingSwipe: (Double, Double, Bool) -> Void
     let onTransform: (Double, Double, PlanOffset, PlanOffset, Double) -> Void
     let onTap: (CGPoint) -> Void
 
@@ -49,8 +49,9 @@ struct DialTouchSurface: UIViewRepresentable {
                 let distance = headingGesture ? abs(p.x - start.x) : hypot(p.x - start.x, p.y - start.y)
                 guard dragging || distance > 8 else { return }
                 let old = dragging ? previous[0] : start
+                let started = !dragging
                 dragging = true
-                if headingGesture { callbacks?.onHeadingSwipe(Double(p.x - old.x), Double(bounds.width)) }
+                if headingGesture { callbacks?.onHeadingSwipe(Double(p.x - old.x), Double(bounds.width), started) }
                 else { callbacks?.onPan(Double(p.x - old.x), Double(p.y - old.y), Double(bounds.height - 128)) }
             } else if points.count == 2 && !headingGesture {
                 let a = previous[0], b = previous[1], c = points[0], d = points[1]

@@ -10,6 +10,59 @@ public struct MapCenter: Equatable, Sendable {
 }
 
 public enum PanGeometry {
+    /// 方角が変わっても双眼鏡を画面上の直線に沿って描画原点へ戻す。offsetはkm、yは上向き。
+    public static func returnViewport(_ observer: MapCenter, initialOffset: PlanOffset, heading: Double, fraction: Double) -> MapCenter {
+        let remaining = 1 - min(1, max(0, fraction))
+        return drag(observer, dx: initialOffset.x * remaining, dy: -initialOffset.y * remaining, scale: 1, heading: heading)
+    }
+
+    public static func interpolateCenter(_ from: MapCenter, to: MapCenter, fraction: Double) -> MapCenter {
+        if fraction <= 0 { return from }
+        if fraction >= 1 || from == to { return to }
+        let offset = DialGeometry.project(
+            distanceKm: GeoMath.distanceKm(from.latitude, from.longitude, to.latitude, to.longitude),
+            bearingDeg: GeoMath.bearingDeg(from.latitude, from.longitude, to.latitude, to.longitude), headingDeg: 0)
+        return drag(from, dx: -offset.x * fraction, dy: offset.y * fraction, scale: 1, heading: 0)
+    }
+
+    public static func northUpHeading(_ heading: Double, progress: Double) -> Double {
+        let t = min(1, max(0, progress))
+        return t == 1 ? 0 : Heading.normalize(heading + Heading.delta(heading, 0) * t * t * (3 - 2 * t))
+    }
+
+    /// 描画される双眼鏡の中心が画面内にあるか。寸法はpt。
+    public static func isObserverVisible(_ observer: MapCenter, viewport: MapCenter, heading: Double,
+        rangeKm: Double, canvasWidth: Double, canvasHeight: Double) -> Bool {
+        guard canvasWidth > 0, canvasHeight > 128, rangeKm > 0 else { return false }
+        let scale = (canvasHeight - 128) / rangeKm
+        let offset = observerOffset(observer, viewport: viewport, heading: heading)
+        let x = canvasWidth / 2 + offset.x * scale
+        let y = canvasHeight - 52 - offset.y * scale
+        return x >= 0 && x <= canvasWidth && y >= 76 && y <= canvasHeight
+    }
+
+    /// 選んだ回転中心をアニメーション中も固定する。高さはpt。
+    public static func northUpViewport(_ observer: MapCenter, viewport: MapCenter, heading: Double,
+        rangeKm: Double, canvasHeight: Double, progress: Double = 1, aroundCenter: Bool = true) -> MapCenter {
+        guard progress > 0, aroundCenter || observer != viewport else { return viewport }
+        return rotateViewport(observer, viewport: viewport, heading: heading, nextHeading: northUpHeading(heading, progress: progress),
+            rangeKm: rangeKm, canvasHeight: canvasHeight, aroundCenter: aroundCenter)
+    }
+
+    /// 双眼鏡または画面中央を固定して方角を変える。
+    public static func rotateViewport(_ observer: MapCenter, viewport: MapCenter, heading: Double, nextHeading: Double,
+        rangeKm: Double, canvasHeight: Double, aroundCenter: Bool) -> MapCenter {
+        guard canvasHeight.isFinite, canvasHeight > 128, rangeKm.isFinite, rangeKm > 0,
+              heading != nextHeading, aroundCenter || observer != viewport else { return viewport }
+        // 描画原点は画面下端から52pt、地図上端は76pt。
+        let scale = (canvasHeight - 128) / rangeKm
+        let offset = observerOffset(observer, viewport: viewport, heading: heading)
+        let pivot = aroundCenter ? PlanOffset(x: 0, y: 52 - canvasHeight / 2)
+            : PlanOffset(x: offset.x * scale, y: -offset.y * scale)
+        return transformViewport(observer, viewport: viewport, previous: pivot, midpoint: pivot,
+            oldScale: scale, newScale: scale, oldHeading: heading, newHeading: nextHeading)
+    }
+
     public static func drag(_ center: MapCenter, dx: Double, dy: Double, scale: Double, heading: Double) -> MapCenter {
         guard scale.isFinite, scale > 0, dx.isFinite, dy.isFinite, heading.isFinite else { return center }
         let x = -dx / scale, y = dy / scale

@@ -54,7 +54,7 @@ struct DialCanvasView: View {
     let viewportLocation: GeoPoint?
     let compassHeading: Double
     let onPan: (Double, Double, Double) -> Void
-    let onHeadingSwipe: (Double, Double) -> Void
+    let onHeadingSwipe: (Double, Double, Bool) -> Void
     let onTransform: (Double, Double, PlanOffset, PlanOffset, Double) -> Void
     let onMountainTap: (NearbyMountain) -> Void
     let onObserverTap: () -> Void
@@ -126,18 +126,30 @@ struct DialCanvasView: View {
         var ctx = ctx
         ctx.clip(to: Path(CGRect(x: 0, y: chartTop, width: size.width, height: max(0, size.height - 52 - chartTop))))
         var i = max(1, Int(nearest / (step * pxPerKm)))
+        var labels: [(MeasuredText, CGRect)] = []
+        var angles: [Double: Double] = [:]
         while step * CGFloat(i) * pxPerKm <= farthest {
             let km = step * CGFloat(i)
             let radius = km * pxPerKm
             let circle = Path(ellipseIn: CGRect(x: observer.x - radius, y: observer.y - radius, width: radius * 2, height: radius * 2))
             ctx.stroke(circle, with: .color(ringGray), lineWidth: 3)
-            let label = measuredText(ctx, DialGeometry.ringLabel(Double(km)), size: styles.ringLabel, color: ringGray)
-            let y = observer.y - radius - label.size.height - 2
-            if y >= chartTop {
-                ctx.draw(label.text, at: CGPoint(x: observer.x - label.size.width / 2, y: y), anchor: .topLeading)
+            let label = measuredText(ctx, DialGeometry.ringLabel(Double(km)), size: styles.ringLabel, color: Color(white: 0.4))
+            if let anchor = RingLabelGeometry.place(cx: Double(observer.x), cy: Double(observer.y), radius: Double(radius),
+                left: 0, top: Double(chartTop), right: Double(size.width), bottom: Double(size.height - 52),
+                width: Double(label.size.width + 6), height: Double(label.size.height + 6), gap: 2,
+                previousAngle: hitTargets.ringAngles[Double(km)]) {
+                angles[Double(km)] = anchor.angle
+                let box = CGRect(x: CGFloat(anchor.x) - label.size.width / 2 - 3,
+                    y: CGFloat(anchor.y) - label.size.height / 2 - 3, width: label.size.width + 6, height: label.size.height + 6)
+                if !labels.contains(where: { $0.1.intersects(box) }) { labels.append((label, box)) }
             }
             i += 1
         }
+        for (label, box) in labels {
+            ctx.fill(Path(roundedRect: box, cornerRadius: 3), with: .color(.white.opacity(0.85)))
+            ctx.draw(label.text, at: CGPoint(x: box.minX + 3, y: box.minY + 3), anchor: .topLeading)
+        }
+        hitTargets.ringAngles = angles
     }
 
     private func drawPeaks(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, pxPerKm: CGFloat, chartTop: CGFloat, styles: TextStyles) -> [PlacedPeak] {
@@ -366,6 +378,7 @@ private struct PlacedPeak {
 
 /// 直近に描いた山。描画のたびに差し替え、タップ位置から山を引く。
 private final class HitTargets {
+    var ringAngles: [Double: Double] = [:]
     var peaks: [PlacedPeak] = []
     /// 現在地の山頂アイコンと山名。山と重なっても優先する。
     var summit: PlacedPeak?

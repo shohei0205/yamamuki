@@ -60,6 +60,8 @@ final class DialModel: ObservableObject {
     private var fetchedCenter: GeoPoint?
     private var fetchedRadiusKm = 0.0
     private var fetchTask: Task<Void, Never>?
+    private var northUpTask: Task<Void, Never>?
+    private var headingSwipeAroundCenter = false
     /// 圏外のため取得を控えた。値は手動の取得だったか。つながったらその続きを取得する。
     private var skippedWhileDisconnected: Bool?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "DialModel")
@@ -102,6 +104,7 @@ final class DialModel: ObservableObject {
     }
 
     func stop() {
+        northUpTask?.cancel()
         locationService.stop()
     }
 
@@ -137,11 +140,13 @@ final class DialModel: ObservableObject {
 
     /// ピンチの倍率(前回からの変化分)。
     func onZoom(_ zoom: Double) {
+        northUpTask?.cancel()
         rangeKm = DialGeometry.zoomedRange(rangeKm, zoom: zoom)
         if DialGeometry.fetchRadiusKm(rangeKm) > fetchedRadiusKm { fetch() }
     }
 
     func onPan(dx: Double, dy: Double, chartHeight: Double) {
+        northUpTask?.cancel()
         guard let here = location else { return }
         let next = PanGeometry.drag(MapCenter(here.latitude, here.longitude), dx: dx, dy: dy,
             scale: chartHeight / rangeKm, heading: displayHeading)
@@ -157,13 +162,56 @@ final class DialModel: ObservableObject {
         exploring = true
     }
 
-    func onHeadingSwipe(dx: Double, width: Double) {
-        guard location != nil, dx.isFinite, dx != 0, width.isFinite, width > 0 else { return }
+    /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。
+    func faceNorth(canvasWidth: Double, canvasHeight: Double) {
+        guard let viewport = location, canvasHeight.isFinite, canvasHeight > 128 else { return }
+        northUpTask?.cancel()
+        let observer = observerLocation ?? viewport
+        let startHeading = displayHeading
+        let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
+            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
+            rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
+        let range = rangeKm
         beginExploring()
-        lockedHeading = DialGeometry.swipedHeading(displayHeading, dx: dx, width: width)
+        northUpTask = Task { @MainActor [weak self] in
+            let started = ProcessInfo.processInfo.systemUptime
+            while !Task.isCancelled {
+                let progress = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
+                let next = PanGeometry.northUpViewport(MapCenter(observer.latitude, observer.longitude),
+                    viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
+                    rangeKm: range, canvasHeight: canvasHeight, progress: progress, aroundCenter: aroundCenter)
+                self?.location = next == MapCenter(viewport.latitude, viewport.longitude) ? viewport
+                    : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+                self?.lockedHeading = PanGeometry.northUpHeading(startHeading, progress: progress)
+                if progress >= 1 { break }
+                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
+            }
+            if !Task.isCancelled { self?.fetchForViewport() }
+        }
+    }
+
+    func onHeadingSwipe(dx: Double, width: Double, canvasHeight: Double, started: Bool) {
+        northUpTask?.cancel()
+        guard let here = location, dx.isFinite, width.isFinite, width > 0, canvasHeight > 128 else { return }
+        let observer = observerLocation ?? here
+        let observerPoint = MapCenter(observer.latitude, observer.longitude)
+        let viewport = MapCenter(here.latitude, here.longitude)
+        let oldHeading = displayHeading
+        if started {
+            headingSwipeAroundCenter = !PanGeometry.isObserverVisible(observerPoint, viewport: viewport,
+                heading: oldHeading, rangeKm: rangeKm, canvasWidth: width, canvasHeight: canvasHeight)
+        }
+        let nextHeading = DialGeometry.swipedHeading(oldHeading, dx: dx, width: width)
+        let next = PanGeometry.rotateViewport(observerPoint, viewport: viewport, heading: oldHeading, nextHeading: nextHeading,
+            rangeKm: rangeKm, canvasHeight: canvasHeight, aroundCenter: headingSwipeAroundCenter)
+        beginExploring()
+        location = next == viewport ? here : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+        lockedHeading = nextHeading
+        fetchForViewport()
     }
 
     func onTransform(zoom: Double, rotation: Double, previous: PlanOffset, midpoint: PlanOffset, chartHeight: Double) {
+        northUpTask?.cancel()
         guard exploring, let oldHeading = lockedHeading else { onZoom(zoom); return }
         guard let observer = observerLocation, let viewport = location,
               rotation.isFinite, chartHeight.isFinite, chartHeight > 0 else { return }
@@ -180,13 +228,37 @@ final class DialModel: ObservableObject {
     }
 
     func resetCenter() {
-        guard let here = gpsLocation else { return }
-        location = here
-        observerLocation = here
-        exploring = false
-        lockedHeading = nil
-        updatePeaks(at: here)
-        fetch()
+        northUpTask?.cancel()
+        guard let startLocation = location, gpsLocation != nil else { return }
+        let startObserver = observerLocation ?? startLocation
+        let startHeading = displayHeading
+        let initialOffset = PanGeometry.observerOffset(MapCenter(startObserver.latitude, startObserver.longitude),
+            viewport: MapCenter(startLocation.latitude, startLocation.longitude), heading: startHeading)
+        northUpTask = Task { @MainActor [weak self] in
+            let started = ProcessInfo.processInfo.systemUptime
+            while !Task.isCancelled {
+                guard let self, let target = gpsLocation else { return }
+                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
+                let fraction = t * t * (3 - 2 * t)
+                func interpolate(_ from: GeoPoint) -> GeoPoint {
+                    let point = PanGeometry.interpolateCenter(MapCenter(from.latitude, from.longitude),
+                        to: MapCenter(target.latitude, target.longitude), fraction: fraction)
+                    return GeoPoint(latitude: point.latitude, longitude: point.longitude, mslAltitudeM: target.mslAltitudeM)
+                }
+                let observer = interpolate(startObserver)
+                let nextHeading = Heading.normalize(startHeading + Heading.delta(startHeading, heading ?? startHeading) * fraction)
+                let viewport = PanGeometry.returnViewport(MapCenter(observer.latitude, observer.longitude),
+                    initialOffset: initialOffset, heading: nextHeading, fraction: fraction)
+                location = GeoPoint(latitude: viewport.latitude, longitude: viewport.longitude, mslAltitudeM: target.mslAltitudeM)
+                observerLocation = observer
+                lockedHeading = t < 1 ? nextHeading : nil
+                exploring = t < 1
+                updatePeaks(at: observer)
+                if t >= 1 { break }
+                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
+            }
+            if !Task.isCancelled { self?.fetch() }
+        }
     }
 
     private func fetchForViewport() {

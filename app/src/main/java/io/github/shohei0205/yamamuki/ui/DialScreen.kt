@@ -48,6 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
@@ -92,6 +94,9 @@ fun DialScreen(
     downloadViewModel: AreaDownloadViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
+    var canvasHeight by remember { mutableStateOf(0.0) }
+    var canvasWidth by remember { mutableStateOf(0.0) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.state.collectAsStateWithLifecycle()
     val download by downloadViewModel.state.collectAsStateWithLifecycle()
@@ -142,6 +147,7 @@ fun DialScreen(
     val compassHeading = magneticHeading?.let { Heading.normalize(it + declination) }
     val heading = state.lockedHeading ?: compassHeading
     val currentHeading by rememberUpdatedState(heading ?: 0.0)
+    val currentCompassHeading by rememberUpdatedState(compassHeading ?: heading ?: 0.0)
 
     // 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     var selectedId by remember { mutableStateOf<Long?>(null) }
@@ -161,6 +167,10 @@ fun DialScreen(
             .fillMaxSize()
             .background(DialBeige)
             .windowInsetsPadding(WindowInsets.safeDrawing)
+            .onSizeChanged {
+                canvasHeight = it.height / density.density.toDouble()
+                canvasWidth = it.width / density.density.toDouble()
+            }
             .pointerInput(showSettings) {
                 if (showSettings) return@pointerInput
                 awaitEachGesture {
@@ -180,7 +190,8 @@ fun DialScreen(
                             if (started) dragging = true
                             if (dragging) {
                                 val delta = if (started) pendingPan else pan
-                                if (headingGesture) viewModel.onHeadingSwipe(delta.x, size.width.toFloat(), currentHeading)
+                                if (headingGesture) viewModel.onHeadingSwipe(delta.x, size.width.toFloat(), currentHeading,
+                                    size.width / density.density.toDouble(), size.height / density.density.toDouble(), started)
                                 else viewModel.onPan(delta.x, delta.y, size.height - 128.dp.toPx(), currentHeading)
                                 event.changes.forEach { it.consume() }
                             }
@@ -235,19 +246,7 @@ fun DialScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
         } else {
-            Column(Modifier.align(Alignment.TopCenter).padding(top = 76.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (state.exploring) {
-                    Row(Modifier.background(DialBeige).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column {
-                            Text("手動移動・2本指で地図を回転", style = MaterialTheme.typography.labelMedium)
-                            state.location?.let { center ->
-                                Text(String.format(java.util.Locale.US, "%.4f, %.4f", center.latitude, center.longitude),
-                                    style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                        TextButton(onClick = viewModel::resetCenter) { Text("現在地に戻る") }
-                    }
-                }
+            Column(Modifier.align(Alignment.TopCenter).padding(top = 76.dp, end = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 StatusLine(
                     message = statusMessage(state, headingAvailable = compassHeading != null),
                     // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
@@ -256,6 +255,23 @@ fun DialScreen(
                 )
             }
         }
+
+        CompassIndicator(
+            heading = heading,
+            onClick = { viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight) },
+            enabled = state.location != null && canvasHeight > 128,
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp),
+        )
+
+        MapModeButton(
+            manual = state.exploring,
+            enabled = hasPermission && state.gpsLocation != null && canvasHeight > 128,
+            onClick = {
+                if (state.exploring) viewModel.resetCenter { currentCompassHeading }
+                else viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight)
+            },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
+        )
 
         // 左下: 設定、事前ダウンロード、手動取得モードなら山データの取得。屋外で押しやすいよう既定(40dp)より大きくする。
         Row(

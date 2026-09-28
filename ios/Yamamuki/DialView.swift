@@ -15,69 +15,96 @@ struct DialView: View {
     @State private var showObserver = false
 
     var body: some View {
-        ZStack {
-            dialBeige.ignoresSafeArea()
+        GeometryReader { geometry in
+            ZStack {
+                dialBeige.ignoresSafeArea()
 
-            DialCanvasView(
-                headingDeg: model.displayHeading,
-                mountains: model.mountains,
-                rangeKm: model.rangeKm,
-                summit: model.summit,
-                altitudeM: model.observerLocation?.mslAltitudeM,
-                maxPeaks: model.settings.maxPeaks,
-                textScale: model.settings.textScale,
-                observerLocation: model.observerLocation,
-                viewportLocation: model.location,
-                compassHeading: model.heading ?? model.displayHeading,
-                onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
-                onHeadingSwipe: { model.onHeadingSwipe(dx: $0, width: $1) },
-                onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
-                onMountainTap: { selectedId = $0.mountain.osmId },
-                // 現在地を取れる前は出す値がないので開かない。
-                onObserverTap: { if model.gpsLocation != nil { showObserver = true } }
-            )
+                DialCanvasView(
+                    headingDeg: model.displayHeading,
+                    mountains: model.mountains,
+                    rangeKm: model.rangeKm,
+                    summit: model.summit,
+                    altitudeM: model.observerLocation?.mslAltitudeM,
+                    maxPeaks: model.settings.maxPeaks,
+                    textScale: model.settings.textScale,
+                    observerLocation: model.observerLocation,
+                    viewportLocation: model.location,
+                    compassHeading: model.heading ?? model.displayHeading,
+                    onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
+                    onHeadingSwipe: { model.onHeadingSwipe(dx: $0, width: $1, canvasHeight: Double(geometry.size.height), started: $2) },
+                    onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
+                    onMountainTap: { selectedId = $0.mountain.osmId },
+                    // 現在地を取れる前は出す値がないので開かない。
+                    onObserverTap: { if model.gpsLocation != nil { showObserver = true } }
+                )
 
-            if model.settings.networkConsentAsked && !model.hasLocationPermission {
-                PermissionRequest(denied: model.authorization == .denied || model.authorization == .restricted) {
-                    model.requestLocationPermission()
-                }
-            } else if model.hasLocationPermission {
-                VStack {
-                    if model.exploring {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("手動移動・2本指で地図を回転").font(.caption)
-                                if let center = model.location {
-                                    Text(String(format: "%.4f, %.4f", center.latitude, center.longitude)).font(.caption2)
-                                }
-                            }
-                            Button("現在地に戻る", action: model.resetCenter)
-                        }
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 8)
-                        .background(dialBeige)
+                if model.settings.networkConsentAsked && !model.hasLocationPermission {
+                    PermissionRequest(denied: model.authorization == .denied || model.authorization == .restricted) {
+                        model.requestLocationPermission()
                     }
-                    StatusLine(
-                        message: statusMessage,
-                        // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
-                        actionLabel: model.offline && model.isConnected && !model.loading && !model.settings.manualFetch ? "再取得" : nil,
-                        onAction: model.retry
-                    )
-                    Spacer()
+                } else if model.hasLocationPermission {
+                    VStack {
+                        StatusLine(
+                            message: statusMessage,
+                            // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
+                            actionLabel: model.offline && model.isConnected && !model.loading && !model.settings.manualFetch ? "再取得" : nil,
+                            onAction: model.retry
+                        )
+                        Spacer()
+                    }
+                    .padding(.top, 76)
+                    .padding(.trailing, 72)
                 }
-                .padding(.top, 76)
-            }
 
-            VStack {
-                Spacer()
-                HStack(alignment: .bottom) {
-                    bottomButtons
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button { model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height)) } label: {
+                            CompassIndicator(heading: model.lockedHeading ?? model.heading)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(model.location == nil || geometry.size.height <= 128)
+                        .accessibilityLabel("北を上にする")
+                    }
                     Spacer()
-                    Text("© OpenStreetMap contributors")
-                        .font(.caption2)
-                        .foregroundStyle(.black)
                 }
-                .padding(8)
+                .padding(.top, 80)
+                .padding(.trailing, 8)
+
+                VStack {
+                    Spacer()
+                    HStack(alignment: .bottom) {
+                        bottomButtons
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 12) {
+                            Button {
+                                if model.exploring {
+                                    model.resetCenter()
+                                } else {
+                                    model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height))
+                                }
+                            } label: {
+                                Image(systemName: model.exploring ? "scope" : "location.north.fill")
+                                    .font(.system(size: 26, weight: .medium))
+                                    .foregroundStyle(model.gpsLocation == nil ? Color.gray.opacity(0.4) :
+                                        (model.exploring ? Color.gray : Color(red: 0.102, green: 0.451, blue: 0.910)))
+                                    .frame(width: 56, height: 56)
+                                    .background(Circle().fill(Color.white))
+                                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!model.hasLocationPermission || model.gpsLocation == nil || geometry.size.height <= 128)
+                            .accessibilityLabel(model.exploring ? "現在地に戻り、進行方向を上にする" : "北を上にして手動位置モードにする")
+                            .accessibilityValue(model.exploring ? "手動位置モード" : "ヘディングアップモード")
+                            .padding(.trailing, 8)
+
+                            Text("© OpenStreetMap contributors")
+                                .font(.caption2)
+                                .foregroundStyle(.black)
+                        }
+                    }
+                    .padding(8)
+                }
             }
         }
         .onAppear { model.start() }

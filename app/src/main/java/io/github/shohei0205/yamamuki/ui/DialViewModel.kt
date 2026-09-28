@@ -83,6 +83,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         appSettings.settings.value.let { DialUiState(settings = it, rangeKm = it.initialRangeKm.toDouble()) },
     )
     val state: StateFlow<DialUiState> = _state.asStateFlow()
+    private var northUpJob: Job? = null
+    private var headingSwipeAroundCenter = false
 
     private var peaks: List<Mountain> = emptyList()
     private var fetchedCenter: GeoPoint? = null
@@ -131,11 +133,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onZoom(zoom: Float) {
+        northUpJob?.cancel()
         _state.update { it.copy(rangeKm = DialGeometry.zoomedRange(it.rangeKm, zoom)) }
         if (DialGeometry.fetchRadiusKm(_state.value.rangeKm) > fetchedRadiusKm) fetch()
     }
 
     fun onPan(dxPx: Float, dyPx: Float, chartHeightPx: Float, headingDeg: Double) {
+        northUpJob?.cancel()
         val here = state.value.location ?: return
         val next = PanGeometry.drag(MapCenter(here.latitude, here.longitude), dxPx.toDouble(), dyPx.toDouble(),
             chartHeightPx / state.value.rangeKm, state.value.lockedHeading ?: headingDeg)
@@ -146,25 +150,97 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         fetchForViewport()
     }
 
-    fun resetCenter() {
-        val here = state.value.gpsLocation ?: return
-        _state.update { it.copy(location = here, observerLocation = here, exploring = false, lockedHeading = null).withPeaksAt(here) }
-        fetch()
+    fun resetCenter(compassHeading: () -> Double) {
+        northUpJob?.cancel()
+        val initial = state.value
+        val startLocation = initial.location ?: return
+        val startObserver = initial.observerLocation ?: startLocation
+        if (initial.gpsLocation == null) return
+        val startHeading = initial.lockedHeading ?: compassHeading()
+        val initialOffset = PanGeometry.observerOffset(MapCenter(startObserver.latitude, startObserver.longitude),
+            MapCenter(startLocation.latitude, startLocation.longitude), startHeading)
+        northUpJob = viewModelScope.launch {
+            val started = System.nanoTime()
+            do {
+                val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+                val fraction = t * t * (3 - 2 * t)
+                val target = state.value.gpsLocation ?: return@launch
+                fun interpolate(from: GeoPoint): GeoPoint {
+                    val point = PanGeometry.interpolateCenter(MapCenter(from.latitude, from.longitude),
+                        MapCenter(target.latitude, target.longitude), fraction)
+                    return target.copy(latitude = point.latitude, longitude = point.longitude)
+                }
+                val observer = interpolate(startObserver)
+                val heading = Heading.normalize(startHeading + Heading.delta(startHeading, compassHeading()) * fraction)
+                val viewport = PanGeometry.returnViewport(MapCenter(observer.latitude, observer.longitude), initialOffset, heading, fraction)
+                _state.update { it.copy(
+                    location = target.copy(latitude = viewport.latitude, longitude = viewport.longitude), observerLocation = observer,
+                    exploring = t < 1.0, lockedHeading = if (t < 1.0) heading else null,
+                ).withPeaksAt(observer) }
+                if (t >= 1.0) break
+                delay(16)
+            } while (true)
+            fetch()
+        }
     }
 
-    fun onHeadingSwipe(dxPx: Float, widthPx: Float, headingDeg: Double) {
-        if (!dxPx.isFinite() || dxPx == 0f || widthPx <= 0) return
-        _state.update {
-            val here = it.location
-            if (here == null) it else it.copy(exploring = true,
-                observerLocation = it.observerLocation ?: here,
-                lockedHeading = DialGeometry.swipedHeading(it.lockedHeading ?: headingDeg,
-                    dxPx.toDouble(), widthPx.toDouble()))
+    /** 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。 */
+    fun faceNorth(headingDeg: Double, canvasWidth: Double, canvasHeight: Double) {
+        if (!canvasHeight.isFinite() || canvasHeight <= 128) return
+        northUpJob?.cancel()
+        val initial = state.value
+        val here = initial.location ?: return
+        val observer = initial.observerLocation ?: here
+        val startHeading = initial.lockedHeading ?: headingDeg
+        val aroundCenter = !PanGeometry.isObserverVisible(
+            MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
+            startHeading, initial.rangeKm, canvasWidth, canvasHeight,
+        )
+        northUpJob = viewModelScope.launch {
+            val started = System.nanoTime()
+            do {
+                val progress = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+                val next = PanGeometry.northUpViewport(
+                    MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
+                    startHeading, initial.rangeKm, canvasHeight, progress, aroundCenter,
+                )
+                _state.update { it.copy(
+                    location = if (next.latitude == here.latitude && next.longitude == here.longitude) here
+                        else GeoPoint(next.latitude, next.longitude),
+                    exploring = true,
+                    observerLocation = observer,
+                    lockedHeading = PanGeometry.northUpHeading(startHeading, progress),
+                ) }
+                if (progress >= 1.0) break
+                delay(16)
+            } while (true)
+            fetchForViewport()
         }
+    }
+
+    fun onHeadingSwipe(dxPx: Float, widthPx: Float, headingDeg: Double,
+        canvasWidth: Double, canvasHeight: Double, started: Boolean) {
+        northUpJob?.cancel()
+        if (!dxPx.isFinite() || widthPx <= 0 || canvasHeight <= 128) return
+        val current = state.value
+        val here = current.location ?: return
+        val observer = current.observerLocation ?: here
+        val oldHeading = current.lockedHeading ?: headingDeg
+        val observerPoint = MapCenter(observer.latitude, observer.longitude)
+        val viewport = MapCenter(here.latitude, here.longitude)
+        if (started) headingSwipeAroundCenter = !PanGeometry.isObserverVisible(
+            observerPoint, viewport, oldHeading, current.rangeKm, canvasWidth, canvasHeight)
+        val nextHeading = DialGeometry.swipedHeading(oldHeading, dxPx.toDouble(), widthPx.toDouble())
+        val next = PanGeometry.rotateViewport(observerPoint, viewport, oldHeading, nextHeading,
+            current.rangeKm, canvasHeight, headingSwipeAroundCenter)
+        _state.update { it.copy(exploring = true, observerLocation = observer,
+            location = if (next == viewport) here else GeoPoint(next.latitude, next.longitude), lockedHeading = nextHeading) }
+        fetchForViewport()
     }
 
     fun onTransform(zoom: Float, rotationDeg: Float, previousMidpoint: PlanOffset,
         midpoint: PlanOffset, chartHeightPx: Float) {
+        northUpJob?.cancel()
         val current = state.value
         val heading = current.lockedHeading
         if (!current.exploring || heading == null) { onZoom(zoom); return }

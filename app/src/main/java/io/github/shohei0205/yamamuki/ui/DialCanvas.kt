@@ -41,6 +41,7 @@ import io.github.shohei0205.yamamuki.core.Heading
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.PlanOffset
+import io.github.shohei0205.yamamuki.core.RingLabelGeometry
 import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.MapCenter
 import io.github.shohei0205.yamamuki.core.declutter
@@ -135,7 +136,7 @@ fun DialCanvas(
         else PlanOffset(0.0, 0.0)
         val observer = origin + Offset((offset.x * pxPerKm).toFloat(), (-offset.y * pxPerKm).toFloat())
         hitTargets.peaks = if (pxPerKm > 0f) {
-            drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles)
+            drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, hitTargets.ringAngles)
             drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
         } else {
             emptyList()
@@ -164,6 +165,7 @@ private fun DrawScope.drawRings(
     chartTop: Float,
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
+    previousAngles: MutableMap<Double, Double>,
 ) {
     val step = DialGeometry.ringStepKm(rangeKm)
     val farthestPx = hypot(max(kotlin.math.abs(observer.x), kotlin.math.abs(size.width - observer.x)),
@@ -171,17 +173,36 @@ private fun DrawScope.drawRings(
     val nearestPx = hypot(max(0f, max(-observer.x, observer.x - size.width)),
         max(0f, max(chartTop - observer.y, observer.y - size.height)))
     var i = max(1, (nearestPx / (step * pxPerKm)).toInt())
+    val labels = mutableListOf<Triple<TextLayoutResult, Offset, Box>>()
+    val angles = mutableMapOf<Double, Double>()
+    val pad = 3.dp.toPx()
     clipRect(top = chartTop, bottom = size.height - 52.dp.toPx()) {
-    while (step * i * pxPerKm <= farthestPx) {
-        val km = step * i
-        val radius = (km * pxPerKm).toFloat()
-        drawCircle(RingGray, radius = radius, center = observer, style = Stroke(width = 3.dp.toPx()))
-        val label = textMeasurer.measure(DialGeometry.ringLabel(km), styles.ringLabel)
-        val y = observer.y - radius - label.size.height - 2.dp.toPx()
-        if (y >= chartTop) drawText(label, topLeft = Offset(observer.x - label.size.width / 2f, y))
-        i++
+        while (step * i * pxPerKm <= farthestPx) {
+            val km = step * i
+            val radius = (km * pxPerKm).toFloat()
+            drawCircle(RingGray, radius = radius, center = observer, style = Stroke(width = 3.dp.toPx()))
+            val label = textMeasurer.measure(DialGeometry.ringLabel(km), styles.ringLabel.copy(color = Color(0xFF666666)))
+            val anchor = RingLabelGeometry.place(observer.x.toDouble(), observer.y.toDouble(), radius.toDouble(),
+                0.0, chartTop.toDouble(), size.width.toDouble(), (size.height - 52.dp.toPx()).toDouble(),
+                (label.size.width + pad * 2).toDouble(), (label.size.height + pad * 2).toDouble(),
+                2.dp.toPx().toDouble(), previousAngles[km])
+            if (anchor != null) {
+                angles[km] = anchor.angle
+                val textOrigin = Offset(anchor.x.toFloat() - label.size.width / 2f, anchor.y.toFloat() - label.size.height / 2f)
+                val box = Box(textOrigin.x - pad, textOrigin.y - pad,
+                    textOrigin.x + label.size.width + pad, textOrigin.y + label.size.height + pad)
+                if (labels.none { it.third.intersects(box) }) labels += Triple(label, textOrigin, box)
+            }
+            i++
+        }
+        for ((label, origin, box) in labels) {
+            drawRoundRect(Color.White.copy(alpha = 0.85f), topLeft = Offset(box.left, box.top),
+                size = Size(box.right - box.left, box.bottom - box.top), cornerRadius = CornerRadius(pad, pad))
+            drawText(label, topLeft = origin)
+        }
     }
-    }
+    previousAngles.clear()
+    previousAngles.putAll(angles)
 }
 
 private class PlacedPeak(
@@ -194,6 +215,7 @@ private class PlacedPeak(
 
 /** 直近に描いた山。描画のたびに差し替え、タップ位置から山を引く。 */
 private class HitTargets {
+    val ringAngles = mutableMapOf<Double, Double>()
     var peaks: List<PlacedPeak> = emptyList()
 
     /** 現在地の山頂アイコンと山名。山と重なっても優先する。 */
