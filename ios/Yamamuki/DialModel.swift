@@ -45,6 +45,8 @@ final class DialModel: ObservableObject {
 
     private let cache: FileMountainCache
     private let repository: MountainRepository
+    /// 山データの事前ダウンロード。画面を閉じても続くよう、ここで持つ。
+    let areaDownload: AreaDownloadModel
     private let settingsStore = SettingsStore()
     private let locationService = LocationService()
     private let networkMonitor = NetworkMonitor()
@@ -67,6 +69,7 @@ final class DialModel: ObservableObject {
             remote: OverpassClient(userAgent: "yamamuki-ios/0.1 (+https://github.com/shohei0205/yamamuki)"),
             cache: cache
         )
+        areaDownload = AreaDownloadModel(repository: repository, cache: cache)
         let saved = SettingsStore().load()
         settings = saved
         rangeKm = Double(saved.initialRangeKm)
@@ -75,6 +78,8 @@ final class DialModel: ObservableObject {
         locationService.onLocation = { [weak self] in self?.onLocation($0) }
         locationService.onHeading = { [weak self] in self?.heading = $0 }
         networkMonitor.onChange = { [weak self] in self?.onConnectivity($0) }
+        // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
+        areaDownload.onCacheChanged = { [weak self] in self?.fetch() }
         locationService.onAuthorizationChange = { [weak self] status in
             guard let self else { return }
             authorization = status
@@ -176,11 +181,12 @@ final class DialModel: ObservableObject {
         }
     }
 
-    /// キャッシュを消して、現在地周辺を取り直す。
+    /// キャッシュを消して、現在地周辺を取り直す。事前ダウンロードした地域は残す。
     func clearCache() {
         fetchTask?.cancel()
+        let keep = areaDownload.savedTiles
         Task { @MainActor in
-            await cache.clear()
+            await cache.clear(keeping: keep)
             peaks = []
             mountains = []
             summit = nil

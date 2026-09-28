@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.data.CacheInfo
 import io.github.shohei0205.yamamuki.settings.Settings
@@ -278,7 +279,15 @@ private fun CacheSection(info: CacheInfo?, onClear: () -> Unit) {
         AlertDialog(
             onDismissRequest = { confirming = false },
             title = { Text("キャッシュを消去しますか？") },
-            text = { Text("保存している山データをすべて消去し、現在地の周辺を取り直します。") },
+            text = {
+                Text(
+                    if (Features.AREA_DOWNLOAD) {
+                        "保存している山データを消去し、現在地の周辺を取り直します。事前ダウンロードした地域は残ります。"
+                    } else {
+                        "保存している山データをすべて消去し、現在地の周辺を取り直します。"
+                    },
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     confirming = false

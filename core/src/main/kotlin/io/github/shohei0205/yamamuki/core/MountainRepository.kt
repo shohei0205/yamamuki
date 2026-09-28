@@ -22,6 +22,11 @@ data class MountainQueryResult(
     val networkSkipped: Boolean = false,
 )
 
+/** 事前ダウンロードの進み具合(タイル数)。 */
+data class DownloadProgress(val doneTiles: Int, val totalTiles: Int) {
+    val fraction: Float get() = if (totalTiles == 0) 1f else doneTiles.toFloat() / totalTiles
+}
+
 /**
  * 現在地周辺の山を返す。キャッシュを優先し、未取得または古いタイルだけ Overpass に問い合わせる。
  * 通信に失敗してもキャッシュにあるデータで結果を返す。
@@ -75,7 +80,53 @@ class MountainRepository(
         return MountainQueryResult(nearby, incomplete = missing.isNotEmpty(), error = error, networkSkipped = networkSkipped)
     }
 
+    /**
+     * 目的地など、現在地から離れた地域のタイルを前もって取得する(圏外に備えた事前ダウンロード)。
+     * 数タイルずつ Overpass に問い合わせ、終わるたびに保存して [onProgress] を呼ぶ。
+     * 途中で失敗・中断しても取得済みのタイルは残り、もう一度呼べば残りだけを取得する。
+     *
+     * @param forceRefresh true なら取得済みのタイルも取り直す(保存済みの地域の更新)。
+     * @return 対象タイルにある山の数。
+     * @throws Exception 通信に失敗した。それまでに取得したタイルは保存済み。
+     */
+    suspend fun downloadTiles(
+        tiles: Collection<Tile>,
+        forceRefresh: Boolean = false,
+        maxAgeMillis: Long = this.maxAgeMillis,
+        onProgress: (DownloadProgress) -> Unit = {},
+    ): Int {
+        val all = tiles.distinct()
+        val now = clock()
+        val fetched = cache.fetchedAt(all)
+        val toFetch = all.filter { tile ->
+            val at = fetched[tile]
+            forceRefresh || at == null || now - at > maxAgeMillis
+        }
+        var done = all.size - toFetch.size
+        onProgress(DownloadProgress(done, all.size))
+        for (chunk in downloadChunks(toFetch)) {
+            val peaks = remote.fetchPeaks(Tile.union(chunk))
+            val targets = chunk.toSet()
+            cache.replaceTiles(chunk, peaks.filter { Tile.of(it.latitude, it.longitude) in targets }, clock())
+            done += chunk.size
+            onProgress(DownloadProgress(done, all.size))
+        }
+        if (all.isEmpty()) return 0
+        val targets = all.toSet()
+        return cache.mountainsIn(Tile.union(all)).count { Tile.of(it.latitude, it.longitude) in targets }
+    }
+
     companion object {
         const val DEFAULT_MAX_AGE_MILLIS = 30L * 24 * 60 * 60 * 1000
+
+        /** 事前ダウンロードで 1 回に問い合わせるタイルの縦横の数。1°四方なら混み合っていても応答が返りやすい。 */
+        const val DOWNLOAD_CHUNK_TILES = 2
+
+        /** タイルを [DOWNLOAD_CHUNK_TILES] 四方ごとにまとめる。北西から順に並べる。 */
+        fun downloadChunks(tiles: Collection<Tile>): List<List<Tile>> =
+            tiles.groupBy { Math.floorDiv(it.latIndex, DOWNLOAD_CHUNK_TILES) to Math.floorDiv(it.lonIndex, DOWNLOAD_CHUNK_TILES) }
+                .entries
+                .sortedWith(compareByDescending<Map.Entry<Pair<Int, Int>, List<Tile>>> { it.key.first }.thenBy { it.key.second })
+                .map { it.value }
     }
 }

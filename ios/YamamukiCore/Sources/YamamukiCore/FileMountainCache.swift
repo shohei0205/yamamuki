@@ -62,10 +62,21 @@ public actor FileMountainCache: MountainCache {
         return CacheInfo(mountainCount: mountains, tileCount: tiles, sizeBytes: bytes)
     }
 
-    /// 山と取得済みタイルをすべて消す。
-    public func clear() {
-        for url in tileFiles() { try? FileManager.default.removeItem(at: url) }
+    /// 山と取得済みタイルを消す(keeping のタイルは残す)。
+    public func clear(keeping: Set<Tile> = []) {
+        for url in tileFiles() {
+            if let tile = tileIndex(of: url), keeping.contains(tile) { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
         loaded = [:]
+    }
+
+    /// 指定したタイルだけを消す(事前ダウンロードした地域の削除)。
+    public func remove(_ tiles: [Tile]) {
+        for tile in tiles {
+            try? FileManager.default.removeItem(at: url(of: tile))
+            loaded[tile] = .some(nil)
+        }
     }
 
     /// 保存先を作る。山データは取り直せるので iCloud バックアップから外す

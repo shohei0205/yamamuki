@@ -11,6 +11,7 @@ struct DialView: View {
     /// 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     @State private var selectedId: Int64?
     @State private var showSettings = false
+    @State private var showDownload = false
     @State private var showObserver = false
     @State private var lastMagnification: CGFloat = 1
 
@@ -95,6 +96,9 @@ struct DialView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(model: model).fetchErrorAlert(model)
         }
+        .sheet(isPresented: $showDownload) {
+            AreaDownloadView(model: model, download: model.areaDownload).fetchErrorAlert(model)
+        }
         .sheet(item: selectedMountain) { nearby in
             MountainDetailView(nearby: nearby).fetchErrorAlert(model)
         }
@@ -104,13 +108,16 @@ struct DialView: View {
         }
     }
 
-    /// 左下: 設定と、手動取得モードなら山データの取得。屋外で押しやすいよう大きめにする。
+    /// 左下: 設定、事前ダウンロード、手動取得モードなら山データの取得。屋外で押しやすいよう大きめにする。
     private var bottomButtons: some View {
         HStack(spacing: 8) {
             RoundButton(label: "設定") {
                 Image(systemName: "gearshape.fill")
             } action: {
                 showSettings = true
+            }
+            if Features.areaDownload {
+                AreaDownloadButton(download: model.areaDownload) { showDownload = true }
             }
             if model.hasLocationPermission && model.settings.manualFetch {
                 RoundButton(label: "山データを取得") {
@@ -192,6 +199,25 @@ private struct RoundButton<Content: View>: View {
         }
         .tint(.black)
         .accessibilityLabel(label)
+    }
+}
+
+/// 事前ダウンロードの画面を開くボタン。ダウンロード中は画面を閉じていても進み具合が分かるよう、ボタンに出す。
+private struct AreaDownloadButton: View {
+    @ObservedObject var download: AreaDownloadModel
+    let action: () -> Void
+
+    var body: some View {
+        RoundButton(label: "山データの事前ダウンロード") {
+            if let running = download.running {
+                ProgressView(value: running.progress.fraction)
+                    .progressViewStyle(.circular)
+            } else {
+                Image(systemName: "arrow.down.circle")
+            }
+        } action: {
+            action()
+        }
     }
 }
 

@@ -1,0 +1,135 @@
+package io.github.shohei0205.yamamuki.ui
+
+import android.app.Application
+import android.util.Log
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import io.github.shohei0205.yamamuki.YamamukiApp
+import io.github.shohei0205.yamamuki.core.DownloadProgress
+import io.github.shohei0205.yamamuki.core.Prefecture
+import io.github.shohei0205.yamamuki.data.SavedArea
+import io.github.shohei0205.yamamuki.sensor.connectivityUpdates
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/** ダウンロード中の地域と進み具合。 */
+data class RunningDownload(
+    val prefecture: Prefecture,
+    val progress: DownloadProgress,
+)
+
+/** ダウンロードが終わった・中断した・失敗したことの知らせ。[resume] があれば続きから取得できる。 */
+data class DownloadNotice(
+    val message: String,
+    val resume: Prefecture? = null,
+    val resumeRefresh: Boolean = false,
+)
+
+data class AreaDownloadUiState(
+    val savedAreas: List<SavedArea> = emptyList(),
+    val running: RunningDownload? = null,
+    val notice: DownloadNotice? = null,
+    /** 端末が通信できる状態か。圏外ではダウンロードを始めさせない。 */
+    val connected: Boolean = true,
+)
+
+/**
+ * 山データの事前ダウンロード。画面を閉じてもダウンロードは続くよう、方位盤と同じくアクティビティ単位で持つ。
+ * 同時に進めるのは 1 地域だけ。
+ */
+class AreaDownloadViewModel(application: Application) : AndroidViewModel(application) {
+    private val app = application as YamamukiApp
+    private val repository = app.mountainRepository
+    private val savedAreas = app.savedAreas
+
+    private val _state = MutableStateFlow(AreaDownloadUiState(savedAreas = savedAreas.areas.value))
+    val state: StateFlow<AreaDownloadUiState> = _state.asStateFlow()
+
+    private var job: Job? = null
+
+    init {
+        viewModelScope.launch { savedAreas.areas.collect { areas -> _state.update { it.copy(savedAreas = areas) } } }
+        viewModelScope.launch { connectivityUpdates(application).collect { c -> _state.update { it.copy(connected = c) } } }
+    }
+
+    /**
+     * [prefecture] をダウンロードする。取得済みで新しいタイルは飛ばすので、中断や失敗のあとは続きから取得する。
+     * @param refresh 保存済みの地域を取り直す(取得済みのタイルも問い合わせる)。
+     */
+    fun start(prefecture: Prefecture, refresh: Boolean = false) {
+        if (_state.value.running != null) return
+        _state.update {
+            it.copy(running = RunningDownload(prefecture, DownloadProgress(0, prefecture.tiles.size)), notice = null)
+        }
+        job = viewModelScope.launch {
+            try {
+                val count = repository.downloadTiles(
+                    prefecture.tiles,
+                    forceRefresh = refresh,
+                    maxAgeMillis = app.settings.settings.value.cacheMaxAgeMillis,
+                ) { progress -> _state.update { it.copy(running = RunningDownload(prefecture, progress)) } }
+                savedAreas.put(SavedArea(prefecture, System.currentTimeMillis(), count))
+                _state.update {
+                    it.copy(running = null, notice = DownloadNotice("${prefecture.name}のダウンロードが完了しました（山 ${"%,d".format(count)} 件）。"))
+                }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(running = null) }
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "事前ダウンロードに失敗\n${e.stackTraceToString()}")
+                _state.update {
+                    val done = it.running?.progress
+                    it.copy(
+                        running = null,
+                        notice = DownloadNotice(
+                            "${prefecture.name}のダウンロード中に通信に失敗しました" +
+                                (done?.let { p -> "（${p.doneTiles} / ${p.totalTiles} 区画まで保存済み）" } ?: "") +
+                                "。サーバーが混み合っているか、電波が弱い可能性があります。",
+                            resume = prefecture,
+                            resumeRefresh = refresh,
+                        ),
+                    )
+                }
+            } finally {
+                app.cacheChanges.tryEmit(Unit)
+            }
+        }
+    }
+
+    /** ダウンロードを中断する。取得済みの区画は残り、もう一度ダウンロードすると続きから取得する。 */
+    fun cancel() {
+        val running = _state.value.running ?: return
+        job?.cancel()
+        _state.update {
+            it.copy(
+                running = null,
+                notice = DownloadNotice(
+                    "${running.prefecture.name}のダウンロードを中断しました（${running.progress.doneTiles} / ${running.progress.totalTiles} 区画まで保存済み）。",
+                    resume = running.prefecture,
+                ),
+            )
+        }
+    }
+
+    fun dismissNotice() = _state.update { it.copy(notice = null) }
+
+    /** 保存済みの地域を消す。ほかの保存済みの地域と重なる区画は残す。 */
+    fun delete(area: SavedArea) {
+        if (_state.value.running != null) return
+        viewModelScope.launch {
+            savedAreas.remove(area.prefecture)
+            val keep = savedAreas.tiles()
+            app.cacheManager.removeTiles(area.prefecture.tiles.filter { it !in keep })
+            app.cacheChanges.tryEmit(Unit)
+        }
+    }
+
+    private companion object {
+        const val TAG = "AreaDownloadViewModel"
+    }
+}

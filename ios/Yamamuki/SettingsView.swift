@@ -217,7 +217,11 @@ private struct CacheSection: View {
                 Button("消去", role: .destructive, action: onClear)
                 Button("キャンセル", role: .cancel) {}
             } message: {
-                Text("保存している山データをすべて消去し、現在地の周辺を取り直します。")
+                Text(
+                    Features.areaDownload
+                        ? "保存している山データを消去し、現在地の周辺を取り直します。事前ダウンロードした地域は残ります。"
+                        : "保存している山データをすべて消去し、現在地の周辺を取り直します。"
+                )
             }
     }
 }

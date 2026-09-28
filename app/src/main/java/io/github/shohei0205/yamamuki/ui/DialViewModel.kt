@@ -85,6 +85,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch { connectivityUpdates(application).collect(::onConnectivity) }
+        // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
+        viewModelScope.launch { app.cacheChanges.collect { fetch() } }
     }
 
     private fun onConnectivity(connected: Boolean) {
@@ -165,11 +167,11 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** キャッシュを消して、現在地周辺を取り直す。 */
+    /** キャッシュを消して、現在地周辺を取り直す。事前ダウンロードした地域は残す。 */
     fun clearCache() {
         fetchJob?.cancel()
         viewModelScope.launch {
-            cacheManager.clear()
+            cacheManager.clear(keep = app.savedAreas.tiles())
             peaks = emptyList()
             _state.update { it.copy(mountains = emptyList(), summit = null, cacheInfo = cacheManager.info()) }
             fetch()

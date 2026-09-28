@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -50,6 +51,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.shohei0205.yamamuki.Features
+import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.Heading
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.NearbyMountain
@@ -70,10 +73,14 @@ private val LOCATION_PERMISSIONS = arrayOf(
 
 /** 方位盤の画面。位置情報の権限、現在地、方位センサーをつないで [DialCanvas] に渡す。 */
 @Composable
-fun DialScreen(viewModel: DialViewModel = viewModel()) {
+fun DialScreen(
+    viewModel: DialViewModel = viewModel(),
+    downloadViewModel: AreaDownloadViewModel = viewModel(),
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val download by downloadViewModel.state.collectAsStateWithLifecycle()
 
     var hasPermission by remember {
         mutableStateOf(
@@ -119,6 +126,7 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
     // 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showDownload by rememberSaveable { mutableStateOf(false) }
     var showObserver by remember { mutableStateOf(false) }
     val selected = state.mountains.firstOrNull { it.mountain.osmId == selectedId }
         ?: state.summit?.takeIf { it.mountain.osmId == selectedId }
@@ -170,13 +178,32 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
             )
         }
 
-        // 左下: 設定と、手動取得モードなら山データの取得。屋外で押しやすいよう既定(40dp)より大きくする。
+        // 左下: 設定、事前ダウンロード、手動取得モードなら山データの取得。屋外で押しやすいよう既定(40dp)より大きくする。
         Row(
             Modifier.align(Alignment.BottomStart).padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilledTonalIconButton(onClick = { showSettings = true }, modifier = Modifier.size(52.dp)) {
                 Icon(Icons.Filled.Settings, contentDescription = "設定", Modifier.size(28.dp))
+            }
+            if (Features.AREA_DOWNLOAD) {
+                FilledTonalIconButton(onClick = { showDownload = true }, modifier = Modifier.size(52.dp)) {
+                    // ダウンロード中は画面を閉じていても進み具合が分かるよう、ボタンに出す。
+                    val running = download.running
+                    if (running != null) {
+                        CircularProgressIndicator(
+                            progress = { running.progress.fraction },
+                            modifier = Modifier.size(28.dp),
+                            strokeWidth = 3.dp,
+                        )
+                    } else {
+                        Icon(
+                            painterResource(R.drawable.ic_area_download),
+                            contentDescription = "山データの事前ダウンロード",
+                            Modifier.size(28.dp),
+                        )
+                    }
+                }
             }
             if (hasPermission && state.settings.manualFetch) {
                 FilledTonalIconButton(
@@ -203,6 +230,17 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
                 onClose = { showSettings = false },
             )
         }
+
+        if (Features.AREA_DOWNLOAD && showDownload) {
+            AreaDownloadScreen(
+                state = download,
+                onStart = downloadViewModel::start,
+                onCancel = downloadViewModel::cancel,
+                onDismissNotice = downloadViewModel::dismissNotice,
+                onDelete = downloadViewModel::delete,
+                onClose = { showDownload = false },
+            )
+        }
     }
 
     // 屋外で山を見比べている間に画面が消えないようにする(設定で選んだときだけ)。
@@ -226,12 +264,13 @@ fun DialScreen(viewModel: DialViewModel = viewModel()) {
         )
     }
 
-    if (selected != null && !showSettings) {
+    val overlay = showSettings || showDownload
+    if (selected != null && !overlay) {
         MountainDetailDialog(selected, onDismiss = { selectedId = null })
     }
 
     // 現在地を取れる前は出す値がないので開かない。開いている間も歩けば値が更新される。
-    if (showObserver && location != null && !showSettings) {
+    if (showObserver && location != null && !overlay) {
         ObserverDetailDialog(location, onDismiss = { showObserver = false })
     }
 }

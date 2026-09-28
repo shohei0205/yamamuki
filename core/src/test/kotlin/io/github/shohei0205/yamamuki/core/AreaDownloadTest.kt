@@ -1,0 +1,101 @@
+package io.github.shohei0205.yamamuki.core
+
+import kotlinx.coroutines.test.runTest
+import java.io.IOException
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+
+class AreaDownloadTest {
+    private val fuji = Mountain(1, "富士山", 35.3606, 138.7274, 3776.0)
+    private val yari = Mountain(2, "槍ヶ岳", 36.3420, 137.6476, 3180.0)
+    private val outside = Mountain(3, "範囲外の山", 40.0, 140.0, 1000.0)
+
+    private class FakeRemote(val peaks: List<Mountain>) : MountainRemoteSource {
+        val calls = mutableListOf<BoundingBox>()
+        /** この回数目(1 始まり)の問い合わせで失敗する。 */
+        var failAt: Int? = null
+        override suspend fun fetchPeaks(box: BoundingBox): List<Mountain> {
+            calls += box
+            if (calls.size == failAt) throw IOException("offline")
+            return peaks.filter { box.contains(it.latitude, it.longitude) }
+        }
+    }
+
+    private var now = 1_000_000L
+    private val nagano = Prefecture.byCode(20)!!
+
+    private fun repo(remote: FakeRemote, cache: MountainCache) =
+        MountainRepository(remote, cache, maxAgeMillis = 1000, clock = { now })
+
+    @Test
+    fun downloadsAllTilesInChunksAndReportsProgress() = runTest {
+        val remote = FakeRemote(listOf(fuji, yari, outside))
+        val cache = InMemoryMountainCache()
+        val progress = mutableListOf<DownloadProgress>()
+
+        val count = repo(remote, cache).downloadTiles(nagano.tiles) { progress += it }
+
+        val total = nagano.tiles.size
+        assertEquals(MountainRepository.downloadChunks(nagano.tiles).size, remote.calls.size)
+        assertTrue(remote.calls.size < total, "数タイルずつまとめて問い合わせる")
+        assertEquals(DownloadProgress(0, total), progress.first())
+        assertEquals(DownloadProgress(total, total), progress.last())
+        assertEquals(nagano.tiles.toSet(), cache.tiles.keys)
+        assertEquals(2, count, "タイル単位で取るので、長野県の外の富士山も入る(範囲外の山は入らない)")
+    }
+
+    @Test
+    fun resumesAfterFailureWithoutRefetchingDoneTiles() = runTest {
+        val remote = FakeRemote(listOf(yari)).apply { failAt = 3 }
+        val cache = InMemoryMountainCache()
+        val repo = repo(remote, cache)
+
+        assertFailsWith<IOException> { repo.downloadTiles(nagano.tiles) }
+        val doneBefore = cache.tiles.size
+        assertTrue(doneBefore > 0, "失敗する前に取得したタイルは残る")
+
+        val progress = mutableListOf<DownloadProgress>()
+        repo.downloadTiles(nagano.tiles) { progress += it }
+        assertEquals(doneBefore, progress.first().doneTiles, "取得済みの分は最初から済みとして数える")
+        assertEquals(nagano.tiles.size, cache.tiles.size)
+        val chunks = MountainRepository.downloadChunks(nagano.tiles).size
+        assertEquals(chunks + 1, remote.calls.size, "失敗した 1 回を除き、同じ範囲を二度問い合わせない")
+    }
+
+    @Test
+    fun refreshRefetchesEvenFreshTiles() = runTest {
+        val remote = FakeRemote(listOf(yari))
+        val repo = repo(remote, InMemoryMountainCache())
+        repo.downloadTiles(nagano.tiles)
+        val first = remote.calls.size
+
+        repo.downloadTiles(nagano.tiles)
+        assertEquals(first, remote.calls.size, "新しいタイルは取り直さない")
+        repo.downloadTiles(nagano.tiles, forceRefresh = true)
+        assertEquals(first * 2, remote.calls.size)
+    }
+
+    @Test
+    fun chunksGroupTwoByTwoTiles() {
+        val tiles = (0..2).flatMap { la -> (0..2).map { lo -> Tile(la, lo) } }
+        val chunks = MountainRepository.downloadChunks(tiles)
+        assertEquals(listOf(2, 1, 4, 2), chunks.map { it.size }, "北の行から、西から順に並ぶ")
+        assertEquals(tiles.toSet(), chunks.flatten().toSet())
+    }
+
+    @Test
+    fun prefecturesCoverJapanWithReasonableTileCounts() {
+        assertEquals((1..47).toList(), Prefecture.ALL.map { it.code })
+        for (p in Prefecture.ALL) {
+            assertTrue(p.tiles.size in 1..150, "${p.name}: ${p.tiles.size} タイル")
+            for (box in p.areas) {
+                assertTrue(box.south < box.north && box.west < box.east, p.name)
+                assertTrue(box.south in 24.0..46.0 && box.west in 122.0..146.0, p.name)
+            }
+        }
+        assertTrue(Prefecture.byCode(20)!!.areas.first().contains(yari.latitude, yari.longitude))
+        assertTrue(Prefecture.byCode(46)!!.areas.any { it.contains(30.3358, 130.5047) }, "鹿児島県に屋久島(宮之浦岳)が入る")
+    }
+}

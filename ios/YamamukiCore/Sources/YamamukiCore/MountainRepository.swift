@@ -22,6 +22,19 @@ public struct MountainQueryResult {
     public let networkSkipped: Bool
 }
 
+/// 事前ダウンロードの進み具合(タイル数)。
+public struct DownloadProgress: Equatable, Sendable {
+    public let doneTiles: Int
+    public let totalTiles: Int
+
+    public init(doneTiles: Int, totalTiles: Int) {
+        self.doneTiles = doneTiles
+        self.totalTiles = totalTiles
+    }
+
+    public var fraction: Double { totalTiles == 0 ? 1 : Double(doneTiles) / Double(totalTiles) }
+}
+
 /// 現在地周辺の山を返す。キャッシュを優先し、未取得または古いタイルだけ Overpass に問い合わせる。
 /// 通信に失敗してもキャッシュにあるデータで結果を返す。
 public final class MountainRepository: Sendable {
@@ -91,5 +104,63 @@ public final class MountainRepository: Sendable {
             .sorted { $0.distanceKm < $1.distanceKm }
 
         return MountainQueryResult(mountains: nearby, incomplete: !missing.isEmpty, error: error, networkSkipped: networkSkipped)
+    }
+
+    /// 事前ダウンロードで 1 回に問い合わせるタイルの縦横の数。1°四方なら混み合っていても応答が返りやすい。
+    public static let downloadChunkTiles = 2
+
+    /// 目的地など、現在地から離れた地域のタイルを前もって取得する(圏外に備えた事前ダウンロード)。
+    /// 数タイルずつ Overpass に問い合わせ、終わるたびに保存して onProgress を呼ぶ。
+    /// 途中で失敗・中断しても取得済みのタイルは残り、もう一度呼べば残りだけを取得する。
+    /// - Parameters:
+    ///   - forceRefresh: true なら取得済みのタイルも取り直す(保存済みの地域の更新)。
+    ///   - maxAge: これより古いタイルは取り直す。nil なら初期化時の値。
+    /// - Returns: 対象タイルにある山の数。
+    /// - Throws: 通信に失敗した、または中断された(CancellationError)。それまでに取得したタイルは保存済み。
+    @discardableResult
+    public func downloadTiles(
+        _ tiles: [Tile],
+        forceRefresh: Bool = false,
+        maxAge: TimeInterval? = nil,
+        onProgress: @Sendable (DownloadProgress) async -> Void = { _ in }
+    ) async throws -> Int {
+        let maxAge = maxAge ?? self.maxAge
+        var seen = Set<Tile>()
+        let all = tiles.filter { seen.insert($0).inserted }
+        let now = clock()
+        let fetched = try await cache.fetchedAt(all)
+        let toFetch = all.filter { tile in
+            guard let at = fetched[tile] else { return true }
+            return forceRefresh || now.timeIntervalSince(at) > maxAge
+        }
+        var done = all.count - toFetch.count
+        await onProgress(DownloadProgress(doneTiles: done, totalTiles: all.count))
+        for chunk in Self.downloadChunks(toFetch) {
+            try Task.checkCancellation()
+            let peaks = try await remote.fetchPeaks(Tile.union(chunk))
+            try Task.checkCancellation()
+            let targets = Set(chunk)
+            try await cache.replaceTiles(
+                chunk,
+                mountains: peaks.filter { targets.contains(Tile.of($0.latitude, $0.longitude)) },
+                fetchedAt: clock()
+            )
+            done += chunk.count
+            await onProgress(DownloadProgress(doneTiles: done, totalTiles: all.count))
+        }
+        guard !all.isEmpty else { return 0 }
+        let targets = Set(all)
+        return try await cache.mountains(in: Tile.union(all))
+            .filter { targets.contains(Tile.of($0.latitude, $0.longitude)) }
+            .count
+    }
+
+    /// タイルを downloadChunkTiles 四方ごとにまとめる。北西から順に並べる。
+    public static func downloadChunks(_ tiles: [Tile]) -> [[Tile]] {
+        func floorDiv(_ a: Int, _ b: Int) -> Int { Int(floor(Double(a) / Double(b))) }
+        struct Key: Hashable { let lat: Int; let lon: Int }
+        return Dictionary(grouping: tiles) { Key(lat: floorDiv($0.latIndex, downloadChunkTiles), lon: floorDiv($0.lonIndex, downloadChunkTiles)) }
+            .sorted { $0.key.lat != $1.key.lat ? $0.key.lat > $1.key.lat : $0.key.lon < $1.key.lon }
+            .map(\.value)
     }
 }

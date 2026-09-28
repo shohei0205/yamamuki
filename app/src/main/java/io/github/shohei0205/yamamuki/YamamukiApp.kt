@@ -6,10 +6,12 @@ import io.github.shohei0205.yamamuki.core.OverpassClient
 import io.github.shohei0205.yamamuki.data.CacheManager
 import io.github.shohei0205.yamamuki.data.MountainDatabase
 import io.github.shohei0205.yamamuki.data.RoomMountainCache
+import io.github.shohei0205.yamamuki.data.SavedAreas
 import io.github.shohei0205.yamamuki.settings.AppSettings
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 class YamamukiApp : Application() {
 
@@ -18,6 +20,11 @@ class YamamukiApp : Application() {
     val cacheManager: CacheManager by lazy { CacheManager(this, database) }
 
     val settings: AppSettings by lazy { AppSettings(this) }
+
+    val savedAreas: SavedAreas by lazy { SavedAreas(this) }
+
+    /** 方位盤の外(事前ダウンロード)でキャッシュを書き換えたときに流す。方位盤はキャッシュを読み直す。 */
+    val cacheChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     val mountainRepository: MountainRepository by lazy {
         val http = HttpClient(OkHttp) {

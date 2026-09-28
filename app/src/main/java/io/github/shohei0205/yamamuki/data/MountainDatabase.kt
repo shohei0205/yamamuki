@@ -1,6 +1,7 @@
 package io.github.shohei0205.yamamuki.data
 
 import android.content.Context
+import io.github.shohei0205.yamamuki.core.Tile
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -56,6 +57,12 @@ interface MountainDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTiles(tiles: List<FetchedTileEntity>)
 
+    @Query("SELECT * FROM fetched_tiles")
+    suspend fun allTiles(): List<FetchedTileEntity>
+
+    @Query("DELETE FROM fetched_tiles WHERE tileLat = :tileLat AND tileLon = :tileLon")
+    suspend fun deleteTile(tileLat: Int, tileLon: Int)
+
     @Query("SELECT COUNT(*) FROM mountains")
     suspend fun countMountains(): Int
 
@@ -72,6 +79,15 @@ interface MountainDao {
     suspend fun clearAll() {
         deleteAllMountains()
         deleteAllTiles()
+    }
+
+    /** タイルの山と取得済みの記録を消す。次に表示するときは未取得として扱う。 */
+    @Transaction
+    suspend fun deleteTiles(tiles: List<Tile>) {
+        tiles.forEach {
+            deleteMountainsInTile(it.latIndex, it.lonIndex)
+            deleteTile(it.latIndex, it.lonIndex)
+        }
     }
 
     @Transaction
