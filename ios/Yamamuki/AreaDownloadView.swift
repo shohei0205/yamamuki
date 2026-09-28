@@ -37,6 +37,11 @@ struct AreaDownloadView: View {
                             Text("\(running.prefecture.name)をダウンロード中（\(running.progress.doneTiles) / \(running.progress.totalTiles) 区画）")
                                 .font(.headline)
                             ProgressView(value: running.progress.fraction)
+                            if running.progress.retry > 0 {
+                                Text("サーバーが混み合っているため、取り直しています（\(running.progress.retry) 回目）")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         Button("中断", role: .destructive) { download.cancel() }
                     }
@@ -69,10 +74,12 @@ struct AreaDownloadView: View {
                                 // 1 行に 2 つのボタンを置くので、行全体ではなくボタンだけが反応するようにする。
                                 Button("更新") { confirming = Confirmation(prefecture: area.prefecture, refresh: true) }
                                     .buttonStyle(.borderless)
+                                    .disabled(!canStart)
+                                // 削除は通信しないので、圏外でも(山で容量を空けたいときなど)できるようにする。
                                 Button("削除", role: .destructive) { deleting = area }
                                     .buttonStyle(.borderless)
+                                    .disabled(download.running != nil)
                             }
-                            .disabled(!canStart)
                         }
                     }
                 }
@@ -115,7 +122,7 @@ struct AreaDownloadView: View {
             }
             Button("キャンセル", role: .cancel) {}
         } message: { c in
-            Text("\(c.prefecture.tiles.count) 区画の山データを OpenStreetMap（Overpass API）から取得します。サーバーの混み具合によっては数分かかります。途中で中断でき、画面を閉じてもダウンロードは続きます。")
+            Text("\(c.prefecture.tiles.count) 区画の山データを OpenStreetMap（Overpass API）から取得します。サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは続きます。アプリを終了すると止まりますが、次に開いたときに続きから再開できます。")
         }
         .alert(
             deleting.map { "\($0.prefecture.name)を削除しますか？" } ?? "",

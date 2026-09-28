@@ -26,10 +26,13 @@ public struct MountainQueryResult {
 public struct DownloadProgress: Equatable, Sendable {
     public let doneTiles: Int
     public let totalTiles: Int
+    /// 問い合わせに失敗して取り直している回数。0 なら取り直していない。
+    public let retry: Int
 
-    public init(doneTiles: Int, totalTiles: Int) {
+    public init(doneTiles: Int, totalTiles: Int, retry: Int = 0) {
         self.doneTiles = doneTiles
         self.totalTiles = totalTiles
+        self.retry = retry
     }
 
     public var fraction: Double { totalTiles == 0 ? 1 : Double(doneTiles) / Double(totalTiles) }
@@ -87,7 +90,7 @@ public final class MountainRepository: Sendable {
                 let targets = Set(toFetch)
                 try await cache.replaceTiles(
                     toFetch,
-                    mountains: peaks.filter { targets.contains(Tile.of($0.latitude, $0.longitude)) },
+                    mountains: (peaks ?? []).filter { targets.contains(Tile.of($0.latitude, $0.longitude)) },
                     fetchedAt: now
                 )
                 missing = []
@@ -106,11 +109,15 @@ public final class MountainRepository: Sendable {
         return MountainQueryResult(mountains: nearby, incomplete: !missing.isEmpty, error: error, networkSkipped: networkSkipped)
     }
 
+    /// 事前ダウンロードで問い合わせが失敗したときに、取り直すまで待つ時間(回数分)。
+    public static let downloadRetryDelays: [TimeInterval] = [5, 15, 30]
+
     /// 事前ダウンロードで 1 回に問い合わせるタイルの縦横の数。1°四方なら混み合っていても応答が返りやすい。
     public static let downloadChunkTiles = 2
 
     /// 目的地など、現在地から離れた地域のタイルを前もって取得する(圏外に備えた事前ダウンロード)。
     /// 数タイルずつ Overpass に問い合わせ、終わるたびに保存して onProgress を呼ぶ。
+    /// Overpass は混み合うと 504 やタイムアウトを返すので、問い合わせが失敗したら retryDelays の間隔で取り直す。
     /// 途中で失敗・中断しても取得済みのタイルは残り、もう一度呼べば残りだけを取得する。
     /// - Parameters:
     ///   - forceRefresh: true なら取得済みのタイルも取り直す(保存済みの地域の更新)。
@@ -122,6 +129,7 @@ public final class MountainRepository: Sendable {
         _ tiles: [Tile],
         forceRefresh: Bool = false,
         maxAge: TimeInterval? = nil,
+        retryDelays: [TimeInterval] = MountainRepository.downloadRetryDelays,
         onProgress: @Sendable (DownloadProgress) async -> Void = { _ in }
     ) async throws -> Int {
         let maxAge = maxAge ?? self.maxAge
@@ -137,18 +145,33 @@ public final class MountainRepository: Sendable {
         await onProgress(DownloadProgress(doneTiles: done, totalTiles: all.count))
         for chunk in Self.downloadChunks(toFetch) {
             try Task.checkCancellation()
-            let peaks = try await remote.fetchPeaks(Tile.union(chunk))
+            var attempt = 0
+            var peaks: [Mountain]?
+            while peaks == nil {
+                do {
+                    peaks = try await remote.fetchPeaks(Tile.union(chunk))
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    guard attempt < retryDelays.count else { throw error }
+                    let wait = retryDelays[attempt]
+                    attempt += 1
+                    await onProgress(DownloadProgress(doneTiles: done, totalTiles: all.count, retry: attempt))
+                    try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                }
+            }
             try Task.checkCancellation()
             let targets = Set(chunk)
             try await cache.replaceTiles(
                 chunk,
-                mountains: peaks.filter { targets.contains(Tile.of($0.latitude, $0.longitude)) },
+                mountains: (peaks ?? []).filter { targets.contains(Tile.of($0.latitude, $0.longitude)) },
                 fetchedAt: clock()
             )
             done += chunk.count
             await onProgress(DownloadProgress(doneTiles: done, totalTiles: all.count))
         }
         guard !all.isEmpty else { return 0 }
+        try Task.checkCancellation()
         let targets = Set(all)
         return try await cache.mountains(in: Tile.union(all))
             .filter { targets.contains(Tile.of($0.latitude, $0.longitude)) }

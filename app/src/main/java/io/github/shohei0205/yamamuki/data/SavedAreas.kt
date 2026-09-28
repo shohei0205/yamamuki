@@ -21,6 +21,7 @@ data class SavedArea(
  */
 class SavedAreas(context: Context) {
     private val prefs = context.getSharedPreferences("saved_areas", Context.MODE_PRIVATE)
+    private val pendingPrefs = context.getSharedPreferences("area_download_pending", Context.MODE_PRIVATE)
 
     private val _areas = MutableStateFlow(load())
     /** 都道府県コード順。 */
@@ -36,8 +37,29 @@ class SavedAreas(context: Context) {
         _areas.value = load()
     }
 
-    /** 保存済みの地域のタイル。キャッシュを消去しても残す。 */
-    fun tiles(): Set<Tile> = _areas.value.flatMap { it.prefecture.tiles }.toSet()
+    /**
+     * 途中で終わったダウンロード(アプリを閉じた・失敗した・中断した)。次に開いたときに続きから再開できるよう覚えておく。
+     * 値は都道府県と、取り直し(更新)だったか。
+     */
+    var pending: Pair<Prefecture, Boolean>?
+        get() {
+            val prefecture = Prefecture.byCode(pendingPrefs.getInt(KEY_PENDING_CODE, 0)) ?: return null
+            return prefecture to pendingPrefs.getBoolean(KEY_PENDING_REFRESH, false)
+        }
+        set(value) {
+            pendingPrefs.edit().apply {
+                if (value == null) {
+                    clear()
+                } else {
+                    putInt(KEY_PENDING_CODE, value.first.code)
+                    putBoolean(KEY_PENDING_REFRESH, value.second)
+                }
+            }.apply()
+        }
+
+    /** 保存済みの地域と、途中で終わった地域のタイル。キャッシュを消去しても残す(続きから再開できるように)。 */
+    fun tiles(): Set<Tile> =
+        (_areas.value.map { it.prefecture } + listOfNotNull(pending?.first)).flatMap { it.tiles }.toSet()
 
     private fun load(): List<SavedArea> = prefs.all.mapNotNull { (key, value) ->
         val prefecture = key.toIntOrNull()?.let(Prefecture::byCode) ?: return@mapNotNull null
@@ -48,4 +70,9 @@ class SavedAreas(context: Context) {
             mountainCount = parts.getOrNull(1)?.toIntOrNull() ?: 0,
         )
     }.sortedBy { it.prefecture.code }
+
+    private companion object {
+        const val KEY_PENDING_CODE = "code"
+        const val KEY_PENDING_REFRESH = "refresh"
+    }
 }

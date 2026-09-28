@@ -55,6 +55,24 @@ struct SavedAreaStore {
         raw[String(prefecture.code)] = nil
         defaults.set(raw, forKey: key)
     }
+
+    private let pendingKey = "pendingAreaDownload"
+
+    /// 途中で終わったダウンロード(アプリを閉じた・失敗した・中断した)。次に開いたときに続きから再開できるよう覚えておく。
+    var pending: (prefecture: Prefecture, refresh: Bool)? {
+        get {
+            guard let raw = defaults.dictionary(forKey: pendingKey),
+                  let prefecture = (raw["code"] as? Int).flatMap(Prefecture.byCode) else { return nil }
+            return (prefecture, raw["refresh"] as? Bool ?? false)
+        }
+        nonmutating set {
+            if let newValue {
+                defaults.set(["code": newValue.prefecture.code, "refresh": newValue.refresh], forKey: pendingKey)
+            } else {
+                defaults.removeObject(forKey: pendingKey)
+            }
+        }
+    }
 }
 
 /// 山データの事前ダウンロード(Android 版の AreaDownloadViewModel に相当)。
@@ -71,40 +89,62 @@ final class AreaDownloadModel: ObservableObject {
     private let cache: FileMountainCache
     private let store = SavedAreaStore()
     private var task: Task<Void, Never>?
+    /// 始めたダウンロードごとに増やす。中断したあとに古いタスクが遅れて状態を書き換えないよう、自分の番のときだけ書く。
+    private var generation = 0
+    /// 直前に知らされた取得済みの区画数。区画を書き込んだかどうかを見分ける。
+    private var lastDoneTiles = -1
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "AreaDownload")
 
     init(repository: MountainRepository, cache: FileMountainCache) {
         self.repository = repository
         self.cache = cache
         savedAreas = store.load()
+        // 前回アプリを閉じたときなどに途中で終わっていたら、続きから再開できるよう知らせる。
+        if let pending = store.pending {
+            notice = DownloadNotice(
+                message: "\(pending.prefecture.name)のダウンロードが途中で終わっています。「続きから再開」で残りを取得します。",
+                resume: pending.prefecture,
+                resumeRefresh: pending.refresh
+            )
+        }
     }
 
-    /// 保存済みの地域のタイル。キャッシュを消去しても残す。
-    var savedTiles: Set<Tile> { Set(savedAreas.flatMap(\.prefecture.tiles)) }
+    /// 保存済みの地域と、途中で終わった地域のタイル。キャッシュを消去しても残す(続きから再開できるように)。
+    var savedTiles: Set<Tile> {
+        Set((savedAreas.map(\.prefecture) + [store.pending?.prefecture].compactMap { $0 }).flatMap(\.tiles))
+    }
 
     /// prefecture をダウンロードする。取得済みで新しいタイルは飛ばすので、中断や失敗のあとは続きから取得する。
     /// - Parameter refresh: 保存済みの地域を取り直す(取得済みのタイルも問い合わせる)。
     func start(_ prefecture: Prefecture, refresh: Bool = false, maxAge: TimeInterval) {
         guard running == nil else { return }
+        generation += 1
+        let id = generation
+        store.pending = (prefecture, refresh)
+        lastDoneTiles = -1
         running = RunningDownload(prefecture: prefecture, progress: DownloadProgress(doneTiles: 0, totalTiles: prefecture.tiles.count))
         notice = nil
         task = Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { onCacheChanged?() }
             do {
                 let count = try await repository.downloadTiles(prefecture.tiles, forceRefresh: refresh, maxAge: maxAge) { progress in
                     await MainActor.run { [weak self] in
-                        guard let self, running?.prefecture == prefecture else { return }
+                        guard let self, generation == id else { return }
                         running?.progress = progress
+                        // 区画を書き込んだときだけ、方位盤に読み直してもらう(最初の知らせと取り直しの知らせでは書いていない)。
+                        if lastDoneTiles >= 0 && progress.doneTiles > lastDoneTiles { onCacheChanged?() }
+                        lastDoneTiles = progress.doneTiles
                     }
                 }
+                guard generation == id, !Task.isCancelled else { return }
+                store.pending = nil
                 store.put(SavedArea(prefecture: prefecture, downloadedAt: Date(), mountainCount: count))
                 savedAreas = store.load()
                 running = nil
                 notice = DownloadNotice(message: "\(prefecture.name)のダウンロードが完了しました（山 \(groupedInteger(count)) 件）。")
             } catch {
                 // 中断したときは cancel() が知らせを出している。
-                if error is CancellationError || Task.isCancelled { return }
+                if error is CancellationError || Task.isCancelled || generation != id { return }
                 logger.warning("事前ダウンロードに失敗: \(String(describing: error), privacy: .public)")
                 let done = running?.progress
                 running = nil
@@ -122,17 +162,23 @@ final class AreaDownloadModel: ObservableObject {
     /// ダウンロードを中断する。取得済みの区画は残り、もう一度ダウンロードすると続きから取得する。
     func cancel() {
         guard let running else { return }
+        generation += 1
         task?.cancel()
         self.running = nil
         notice = DownloadNotice(
             message: "\(running.prefecture.name)のダウンロードを中断しました（\(running.progress.doneTiles) / \(running.progress.totalTiles) 区画まで保存済み）。",
-            resume: running.prefecture
+            resume: running.prefecture,
+            resumeRefresh: store.pending?.refresh ?? false
         )
     }
 
-    func dismissNotice() { notice = nil }
+    /// 知らせを閉じる。途中で終わったダウンロードの知らせなら、再開の案内もやめる。
+    func dismissNotice() {
+        if notice?.resume != nil { store.pending = nil }
+        notice = nil
+    }
 
-    /// 保存済みの地域を消す。ほかの保存済みの地域と重なる区画は残す。
+    /// 保存済みの地域を消す。ほかの保存済みの地域と重なる区画は残す。通信しないので圏外でもできる。
     func delete(_ area: SavedArea) {
         guard running == nil else { return }
         store.remove(area.prefecture)

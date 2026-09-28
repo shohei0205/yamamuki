@@ -52,9 +52,24 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
 
     private var job: Job? = null
 
+    /** 始めたダウンロードごとに増やす。中断したあとに古いジョブが遅れて状態を書き換えないよう、自分の番のときだけ書く。 */
+    private var generation = 0
+
     init {
         viewModelScope.launch { savedAreas.areas.collect { areas -> _state.update { it.copy(savedAreas = areas) } } }
         viewModelScope.launch { connectivityUpdates(application).collect { c -> _state.update { it.copy(connected = c) } } }
+        // 前回アプリを閉じたときなどに途中で終わっていたら、続きから再開できるよう知らせる。
+        savedAreas.pending?.let { (prefecture, refresh) ->
+            _state.update {
+                it.copy(
+                    notice = DownloadNotice(
+                        "${prefecture.name}のダウンロードが途中で終わっています。「続きから再開」で残りを取得します。",
+                        resume = prefecture,
+                        resumeRefresh = refresh,
+                    ),
+                )
+            }
+        }
     }
 
     /**
@@ -63,25 +78,36 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
      */
     fun start(prefecture: Prefecture, refresh: Boolean = false) {
         if (_state.value.running != null) return
+        val id = ++generation
+        savedAreas.pending = prefecture to refresh
         _state.update {
             it.copy(running = RunningDownload(prefecture, DownloadProgress(0, prefecture.tiles.size)), notice = null)
         }
         job = viewModelScope.launch {
+            var lastDone = -1
             try {
                 val count = repository.downloadTiles(
                     prefecture.tiles,
                     forceRefresh = refresh,
                     maxAgeMillis = app.settings.settings.value.cacheMaxAgeMillis,
-                ) { progress -> _state.update { it.copy(running = RunningDownload(prefecture, progress)) } }
+                ) { progress ->
+                    if (id != generation) return@downloadTiles
+                    _state.update { it.copy(running = RunningDownload(prefecture, progress)) }
+                    // 区画を書き込んだときだけ、方位盤に読み直してもらう(最初の知らせと取り直しの知らせでは書いていない)。
+                    if (lastDone >= 0 && progress.doneTiles > lastDone) app.cacheChanges.tryEmit(Unit)
+                    lastDone = progress.doneTiles
+                }
+                if (id != generation) return@launch
                 savedAreas.put(SavedArea(prefecture, System.currentTimeMillis(), count))
+                savedAreas.pending = null
                 _state.update {
                     it.copy(running = null, notice = DownloadNotice("${prefecture.name}のダウンロードが完了しました（山 ${"%,d".format(count)} 件）。"))
                 }
             } catch (e: CancellationException) {
-                _state.update { it.copy(running = null) }
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "事前ダウンロードに失敗\n${e.stackTraceToString()}")
+                if (id != generation) return@launch
                 _state.update {
                     val done = it.running?.progress
                     it.copy(
@@ -95,8 +121,6 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
                         ),
                     )
                 }
-            } finally {
-                app.cacheChanges.tryEmit(Unit)
             }
         }
     }
@@ -104,6 +128,7 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
     /** ダウンロードを中断する。取得済みの区画は残り、もう一度ダウンロードすると続きから取得する。 */
     fun cancel() {
         val running = _state.value.running ?: return
+        generation++
         job?.cancel()
         _state.update {
             it.copy(
@@ -111,14 +136,19 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
                 notice = DownloadNotice(
                     "${running.prefecture.name}のダウンロードを中断しました（${running.progress.doneTiles} / ${running.progress.totalTiles} 区画まで保存済み）。",
                     resume = running.prefecture,
+                    resumeRefresh = savedAreas.pending?.second ?: false,
                 ),
             )
         }
     }
 
-    fun dismissNotice() = _state.update { it.copy(notice = null) }
+    /** 知らせを閉じる。途中で終わったダウンロードの知らせなら、再開の案内もやめる。 */
+    fun dismissNotice() {
+        if (_state.value.notice?.resume != null) savedAreas.pending = null
+        _state.update { it.copy(notice = null) }
+    }
 
-    /** 保存済みの地域を消す。ほかの保存済みの地域と重なる区画は残す。 */
+    /** 保存済みの地域を消す。ほかの保存済みの地域と重なる区画は残す。通信しないので圏外でもできる。 */
     fun delete(area: SavedArea) {
         if (_state.value.running != null) return
         viewModelScope.launch {

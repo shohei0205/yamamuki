@@ -211,9 +211,12 @@ private struct AreaDownloadButton: View {
 
     var body: some View {
         RoundButton(label: "山データのダウンロード") {
-            if let running = download.running {
+            if let running = download.running, running.progress.doneTiles > 0 {
                 ProgressView(value: running.progress.fraction)
                     .progressViewStyle(.circular)
+            } else if download.running != nil {
+                // 最初の区画が終わるまでは進みが 0 なので、回り続ける表示にする。
+                ProgressView()
             } else {
                 Image(systemName: "arrow.down.circle")
             }

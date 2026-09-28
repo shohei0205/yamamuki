@@ -8,13 +8,13 @@ private final class FakeRemote: MountainRemoteSource, @unchecked Sendable {
     let peaks: [Mountain]
     var calls: [BoundingBox] = []
     /// この回数目(1 始まり)の問い合わせで失敗する。
-    var failAt: Int?
+    var failAt: Set<Int> = []
 
     init(_ peaks: [Mountain]) { self.peaks = peaks }
 
     func fetchPeaks(_ box: BoundingBox) async throws -> [Mountain] {
         calls.append(box)
-        if calls.count == failAt { throw Offline() }
+        if failAt.contains(calls.count) { throw Offline() }
         return peaks.filter { box.contains($0.latitude, $0.longitude) }
     }
 }
@@ -71,12 +71,12 @@ final class AreaDownloadTests: XCTestCase {
 
     func testResumesAfterFailureWithoutRefetchingDoneTiles() async throws {
         let remote = FakeRemote([yari])
-        remote.failAt = 3
+        remote.failAt = [3]
         let cache = InMemoryCache()
         let repo = repo(remote, cache)
 
         do {
-            try await repo.downloadTiles(nagano.tiles)
+            try await repo.downloadTiles(nagano.tiles, retryDelays: [])
             XCTFail("3 回目の問い合わせで失敗するはず")
         } catch is Offline {}
         let doneBefore = cache.tiles.count
@@ -87,6 +87,30 @@ final class AreaDownloadTests: XCTestCase {
         XCTAssertEqual(log.items.first?.doneTiles, doneBefore, "取得済みの分は最初から済みとして数える")
         XCTAssertEqual(cache.tiles.count, nagano.tiles.count)
         XCTAssertEqual(remote.calls.count, MountainRepository.downloadChunks(nagano.tiles).count + 1, "失敗した 1 回を除き、同じ範囲を二度問い合わせない")
+    }
+
+    func testRetriesFailedChunkBeforeGivingUp() async throws {
+        // 3 回目の問い合わせ(= 3 つ目の区画)が 2 回続けて失敗しても、取り直して最後まで取得する。
+        let remote = FakeRemote([yari])
+        remote.failAt = [3, 4]
+        let cache = InMemoryCache()
+        let log = ProgressLog()
+
+        try await repo(remote, cache).downloadTiles(nagano.tiles, retryDelays: [0, 0, 0]) { log.items.append($0) }
+
+        XCTAssertEqual(cache.tiles.count, nagano.tiles.count)
+        XCTAssertEqual(remote.calls.count, MountainRepository.downloadChunks(nagano.tiles).count + 2)
+        XCTAssertEqual(log.items.map(\.retry).filter { $0 > 0 }, [1, 2], "取り直していることを知らせる")
+        XCTAssertEqual(log.items.last?.retry, 0)
+
+        // 取り直す回数を使い切ったら失敗として返す。
+        let failing = FakeRemote([yari])
+        failing.failAt = Set(1...10)
+        do {
+            try await repo(failing, InMemoryCache()).downloadTiles(nagano.tiles, retryDelays: [0, 0])
+            XCTFail("取り直しても失敗するはず")
+        } catch is Offline {}
+        XCTAssertEqual(failing.calls.count, 3, "最初の 1 回 + 取り直し 2 回")
     }
 
     func testRefreshRefetchesEvenFreshTiles() async throws {

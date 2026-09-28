@@ -91,7 +91,9 @@ fun AreaDownloadScreen(
                 state.savedAreas.forEach { area ->
                     SavedAreaRow(
                         area = area,
-                        enabled = canStart,
+                        refreshEnabled = canStart,
+                        // 削除は通信しないので、圏外でも(山で容量を空けたいときなど)できるようにする。
+                        deleteEnabled = !busy,
                         onRefresh = { confirming = area.prefecture to true },
                         onDelete = { deleting = area },
                     )
@@ -122,7 +124,8 @@ fun AreaDownloadScreen(
             text = {
                 Text(
                     "${prefecture.tiles.size} 区画の山データを OpenStreetMap（Overpass API）から取得します。" +
-                        "サーバーの混み具合によっては数分かかります。途中で中断でき、画面を閉じてもダウンロードは続きます。",
+                        "サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは続きます。" +
+                        "アプリを終了すると止まりますが、次に開いたときに続きから再開できます。",
                 )
             },
             confirmButton = {
@@ -159,6 +162,12 @@ private fun RunningCard(running: RunningDownload, onCancel: () -> Unit) {
                 "${running.prefecture.name}をダウンロード中（${running.progress.doneTiles} / ${running.progress.totalTiles} 区画）",
                 style = MaterialTheme.typography.titleMedium,
             )
+            if (running.progress.retry > 0) {
+                Text(
+                    "サーバーが混み合っているため、取り直しています（${running.progress.retry} 回目）",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             LinearProgressIndicator(progress = { running.progress.fraction }, modifier = Modifier.fillMaxWidth())
             OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("中断") }
         }
@@ -181,7 +190,13 @@ private fun NoticeCard(notice: DownloadNotice, canResume: Boolean, onResume: () 
 }
 
 @Composable
-private fun SavedAreaRow(area: SavedArea, enabled: Boolean, onRefresh: () -> Unit, onDelete: () -> Unit) {
+private fun SavedAreaRow(
+    area: SavedArea,
+    refreshEnabled: Boolean,
+    deleteEnabled: Boolean,
+    onRefresh: () -> Unit,
+    onDelete: () -> Unit,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(area.prefecture.name, style = MaterialTheme.typography.bodyLarge)
@@ -190,8 +205,8 @@ private fun SavedAreaRow(area: SavedArea, enabled: Boolean, onRefresh: () -> Uni
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        TextButton(onClick = onRefresh, enabled = enabled) { Text("更新") }
-        TextButton(onClick = onDelete, enabled = enabled) { Text("削除") }
+        TextButton(onClick = onRefresh, enabled = refreshEnabled) { Text("更新") }
+        TextButton(onClick = onDelete, enabled = deleteEnabled) { Text("削除") }
     }
 }
 

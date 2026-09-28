@@ -15,10 +15,10 @@ class AreaDownloadTest {
     private class FakeRemote(val peaks: List<Mountain>) : MountainRemoteSource {
         val calls = mutableListOf<BoundingBox>()
         /** この回数目(1 始まり)の問い合わせで失敗する。 */
-        var failAt: Int? = null
+        var failAt: Set<Int> = emptySet()
         override suspend fun fetchPeaks(box: BoundingBox): List<Mountain> {
             calls += box
-            if (calls.size == failAt) throw IOException("offline")
+            if (calls.size in failAt) throw IOException("offline")
             return peaks.filter { box.contains(it.latitude, it.longitude) }
         }
     }
@@ -48,11 +48,11 @@ class AreaDownloadTest {
 
     @Test
     fun resumesAfterFailureWithoutRefetchingDoneTiles() = runTest {
-        val remote = FakeRemote(listOf(yari)).apply { failAt = 3 }
+        val remote = FakeRemote(listOf(yari)).apply { failAt = setOf(3) }
         val cache = InMemoryMountainCache()
         val repo = repo(remote, cache)
 
-        assertFailsWith<IOException> { repo.downloadTiles(nagano.tiles) }
+        assertFailsWith<IOException> { repo.downloadTiles(nagano.tiles, retryDelaysMillis = emptyList()) }
         val doneBefore = cache.tiles.size
         assertTrue(doneBefore > 0, "失敗する前に取得したタイルは残る")
 
@@ -62,6 +62,28 @@ class AreaDownloadTest {
         assertEquals(nagano.tiles.size, cache.tiles.size)
         val chunks = MountainRepository.downloadChunks(nagano.tiles).size
         assertEquals(chunks + 1, remote.calls.size, "失敗した 1 回を除き、同じ範囲を二度問い合わせない")
+    }
+
+    @Test
+    fun retriesFailedChunkBeforeGivingUp() = runTest {
+        // 3 回目の問い合わせ(= 3 つ目の区画)が 2 回続けて失敗しても、取り直して最後まで取得する。
+        val remote = FakeRemote(listOf(yari)).apply { failAt = setOf(3, 4) }
+        val cache = InMemoryMountainCache()
+        val progress = mutableListOf<DownloadProgress>()
+
+        repo(remote, cache).downloadTiles(nagano.tiles) { progress += it }
+
+        assertEquals(nagano.tiles.size, cache.tiles.size)
+        assertEquals(MountainRepository.downloadChunks(nagano.tiles).size + 2, remote.calls.size)
+        assertEquals(listOf(1, 2), progress.map { it.retry }.filter { it > 0 }, "取り直していることを知らせる")
+        assertEquals(0, progress.last().retry)
+
+        // 取り直す回数を使い切ったら失敗として返す。
+        val failing = FakeRemote(listOf(yari)).apply { failAt = (1..10).toSet() }
+        assertFailsWith<IOException> {
+            repo(failing, InMemoryMountainCache()).downloadTiles(nagano.tiles, retryDelaysMillis = listOf(1L, 1L))
+        }
+        assertEquals(3, failing.calls.size, "最初の 1 回 + 取り直し 2 回")
     }
 
     @Test

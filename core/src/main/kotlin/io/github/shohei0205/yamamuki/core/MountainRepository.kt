@@ -1,5 +1,8 @@
 package io.github.shohei0205.yamamuki.core
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+
 /** 山データのローカルキャッシュ。Android では Room で実装する。 */
 interface MountainCache {
     /** 指定タイルのうち取得済みのものと、その取得時刻(epoch ms)。 */
@@ -23,7 +26,12 @@ data class MountainQueryResult(
 )
 
 /** 事前ダウンロードの進み具合(タイル数)。 */
-data class DownloadProgress(val doneTiles: Int, val totalTiles: Int) {
+data class DownloadProgress(
+    val doneTiles: Int,
+    val totalTiles: Int,
+    /** 問い合わせに失敗して取り直している回数。0 なら取り直していない。 */
+    val retry: Int = 0,
+) {
     val fraction: Float get() = if (totalTiles == 0) 1f else doneTiles.toFloat() / totalTiles
 }
 
@@ -83,16 +91,18 @@ class MountainRepository(
     /**
      * 目的地など、現在地から離れた地域のタイルを前もって取得する(圏外に備えた事前ダウンロード)。
      * 数タイルずつ Overpass に問い合わせ、終わるたびに保存して [onProgress] を呼ぶ。
+     * Overpass は混み合うと 504 やタイムアウトを返すので、問い合わせが失敗したら [retryDelaysMillis] の間隔で取り直す。
      * 途中で失敗・中断しても取得済みのタイルは残り、もう一度呼べば残りだけを取得する。
      *
      * @param forceRefresh true なら取得済みのタイルも取り直す(保存済みの地域の更新)。
      * @return 対象タイルにある山の数。
-     * @throws Exception 通信に失敗した。それまでに取得したタイルは保存済み。
+     * @throws Exception 取り直しても通信に失敗した。それまでに取得したタイルは保存済み。
      */
     suspend fun downloadTiles(
         tiles: Collection<Tile>,
         forceRefresh: Boolean = false,
         maxAgeMillis: Long = this.maxAgeMillis,
+        retryDelaysMillis: List<Long> = DOWNLOAD_RETRY_DELAYS_MILLIS,
         onProgress: (DownloadProgress) -> Unit = {},
     ): Int {
         val all = tiles.distinct()
@@ -105,7 +115,20 @@ class MountainRepository(
         var done = all.size - toFetch.size
         onProgress(DownloadProgress(done, all.size))
         for (chunk in downloadChunks(toFetch)) {
-            val peaks = remote.fetchPeaks(Tile.union(chunk))
+            var attempt = 0
+            var peaks: List<Mountain>? = null
+            while (peaks == null) {
+                try {
+                    peaks = remote.fetchPeaks(Tile.union(chunk))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    val wait = retryDelaysMillis.getOrNull(attempt) ?: throw e
+                    attempt++
+                    onProgress(DownloadProgress(done, all.size, retry = attempt))
+                    delay(wait)
+                }
+            }
             val targets = chunk.toSet()
             cache.replaceTiles(chunk, peaks.filter { Tile.of(it.latitude, it.longitude) in targets }, clock())
             done += chunk.size
@@ -118,6 +141,9 @@ class MountainRepository(
 
     companion object {
         const val DEFAULT_MAX_AGE_MILLIS = 30L * 24 * 60 * 60 * 1000
+
+        /** 事前ダウンロードで問い合わせが失敗したときに、取り直すまで待つ時間(回数分)。 */
+        val DOWNLOAD_RETRY_DELAYS_MILLIS = listOf(5_000L, 15_000L, 30_000L)
 
         /** 事前ダウンロードで 1 回に問い合わせるタイルの縦横の数。1°四方なら混み合っていても応答が返りやすい。 */
         const val DOWNLOAD_CHUNK_TILES = 2

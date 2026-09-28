@@ -25,6 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -199,12 +200,17 @@ fun DialScreen(
                 FilledTonalIconButton(onClick = { showDownload = true }, modifier = Modifier.size(52.dp)) {
                     // ダウンロード中は画面を閉じていても進み具合が分かるよう、ボタンに出す。
                     val running = download.running
-                    if (running != null) {
+                    if (running != null && running.progress.doneTiles > 0) {
                         CircularProgressIndicator(
                             progress = { running.progress.fraction },
                             modifier = Modifier.size(28.dp),
                             strokeWidth = 3.dp,
+                            // 進みの少ないうちも輪の形が見えるよう、下地を描く。
+                            trackColor = LocalContentColor.current.copy(alpha = 0.25f),
                         )
+                    } else if (running != null) {
+                        // 最初の区画が終わるまでは進みが 0 なので、回り続ける表示にする。
+                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
                     } else {
                         Icon(
                             painterResource(R.drawable.ic_area_download),

@@ -79,7 +79,7 @@ final class DialModel: ObservableObject {
         locationService.onHeading = { [weak self] in self?.heading = $0 }
         networkMonitor.onChange = { [weak self] in self?.onConnectivity($0) }
         // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
-        areaDownload.onCacheChanged = { [weak self] in self?.fetch() }
+        areaDownload.onCacheChanged = { [weak self] in self?.reloadFromCache() }
         locationService.onAuthorizationChange = { [weak self] status in
             guard let self else { return }
             authorization = status
@@ -192,6 +192,26 @@ final class DialModel: ObservableObject {
             summit = nil
             cacheInfo = await cache.info()
             fetch()
+        }
+    }
+
+    /// 通信せず、保存済みのデータだけで今の周辺を読み直す(事前ダウンロードで区画を書いた・消したとき)。
+    /// 取得中の通信や、出ている知らせには触れない。
+    private func reloadFromCache() {
+        guard let here = location else { return }
+        let radius = DialGeometry.fetchRadiusKm(rangeKm)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let result = try await repository.mountainsAround(
+                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false
+                )
+                peaks = result.mountains.map(\.mountain)
+                updatePeaks(at: location ?? here)
+                incomplete = result.incomplete
+            } catch {
+                logger.error("山データの読み直しに失敗: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 
