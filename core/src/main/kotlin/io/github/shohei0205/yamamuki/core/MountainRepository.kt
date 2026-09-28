@@ -31,8 +31,26 @@ data class DownloadProgress(
     val totalTiles: Int,
     /** 問い合わせに失敗して取り直している回数。0 なら取り直していない。 */
     val retry: Int = 0,
+    /** 取り直す前に待つ時間。この知らせのあと、これだけ待ってから問い合わせる。 */
+    val retryWaitMillis: Long = 0,
 ) {
     val fraction: Float get() = if (totalTiles == 0) 1f else doneTiles.toFloat() / totalTiles
+
+    /**
+     * 区画数が増えない間も進んでいることが分かるよう、今の区画の状況を 1 秒単位で表す。
+     * Overpass は集計が終わるまで何も返さないので、受信量ではなく待っている秒数を出す。
+     * @param elapsedMillis この知らせを受け取ってからの時間。
+     */
+    fun statusText(elapsedMillis: Long): String {
+        val retryNote = if (retry > 0) "・取り直し $retry 回目" else ""
+        return if (retry > 0 && elapsedMillis < retryWaitMillis) {
+            val left = (retryWaitMillis - elapsedMillis + 999) / 1000
+            "通信に失敗したため、$left 秒後に取り直します（$retry 回目）"
+        } else {
+            val waited = (elapsedMillis - if (retry > 0) retryWaitMillis else 0) / 1000
+            "サーバーの応答を待っています（$waited 秒$retryNote）"
+        }
+    }
 }
 
 /**
@@ -125,7 +143,7 @@ class MountainRepository(
                 } catch (e: Exception) {
                     val wait = retryDelaysMillis.getOrNull(attempt) ?: throw e
                     attempt++
-                    onProgress(DownloadProgress(done, all.size, retry = attempt))
+                    onProgress(DownloadProgress(done, all.size, retry = attempt, retryWaitMillis = wait))
                     delay(wait)
                 }
             }

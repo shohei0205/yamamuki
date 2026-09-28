@@ -14,8 +14,12 @@ data class Prefecture(
     /** 本土(県庁所在地を含む範囲)と、山のある主な離島の矩形。 */
     val areas: List<BoundingBox>,
 ) {
-    /** ダウンロードするタイル。 */
-    val tiles: List<Tile> get() = areas.flatMap { Tile.covering(it) }.distinct()
+    /**
+     * ダウンロードするタイル。北端・東端がちょうどタイルの境目(0.5° の倍数)のとき、その外側のタイルまで含めないよう、
+     * 矩形をわずかに内側に縮めてから数える。
+     */
+    val tiles: List<Tile>
+        get() = areas.flatMap { Tile.covering(it.copy(north = it.north - EDGE_EPS_DEG, east = it.east - EDGE_EPS_DEG)) }.distinct()
 
     /** 一覧で見出しにする地方。 */
     val region: String
@@ -30,6 +34,8 @@ data class Prefecture(
         }
 
     companion object {
+        private const val EDGE_EPS_DEG = 1e-9
+
         /** 北海道を分けた 4 地域のコード。 */
         val HOKKAIDO_CODES = 101..104
 

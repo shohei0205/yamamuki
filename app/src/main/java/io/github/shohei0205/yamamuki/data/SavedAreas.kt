@@ -24,7 +24,7 @@ class SavedAreas(context: Context) {
     private val pendingPrefs = context.getSharedPreferences("area_download_pending", Context.MODE_PRIVATE)
 
     private val _areas = MutableStateFlow(load())
-    /** 都道府県コード順。 */
+    /** 都道府県の一覧([Prefecture.ALL])と同じ順。 */
     val areas: StateFlow<List<SavedArea>> = _areas.asStateFlow()
 
     fun put(area: SavedArea) {
@@ -69,7 +69,7 @@ class SavedAreas(context: Context) {
             downloadedAtMillis = parts.getOrNull(0)?.toLongOrNull() ?: return@mapNotNull null,
             mountainCount = parts.getOrNull(1)?.toIntOrNull() ?: 0,
         )
-    }.sortedBy { it.prefecture.code }
+    }.sortedBy { Prefecture.ALL.indexOf(it.prefecture) }
 
     private companion object {
         const val KEY_PENDING_CODE = "code"

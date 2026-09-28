@@ -113,6 +113,14 @@ final class AreaDownloadTests: XCTestCase {
         XCTAssertEqual(failing.calls.count, 3, "最初の 1 回 + 取り直し 2 回")
     }
 
+    func testStatusTextCountsWaitingSeconds() {
+        XCTAssertEqual(DownloadProgress(doneTiles: 3, totalTiles: 10).statusText(elapsed: 35.4), "サーバーの応答を待っています（35 秒）")
+        let retrying = DownloadProgress(doneTiles: 3, totalTiles: 10, retry: 2, retryWait: 15)
+        XCTAssertEqual(retrying.statusText(elapsed: 0), "通信に失敗したため、15 秒後に取り直します（2 回目）")
+        XCTAssertEqual(retrying.statusText(elapsed: 14.5), "通信に失敗したため、1 秒後に取り直します（2 回目）")
+        XCTAssertEqual(retrying.statusText(elapsed: 20), "サーバーの応答を待っています（5 秒・取り直し 2 回目）")
+    }
+
     func testRefreshRefetchesEvenFreshTiles() async throws {
         let remote = FakeRemote([yari])
         let repo = repo(remote, InMemoryCache())
@@ -150,6 +158,8 @@ final class AreaDownloadTests: XCTestCase {
             XCTAssertTrue(hokkaido.contains { p in p.areas.contains { $0.contains(lat, lon) } }, "北海道の \(lat), \(lon)")
         }
         XCTAssertEqual(hokkaido.first?.region, "北海道・東北")
+        // 北端がちょうど 44.0° なので、44.0〜44.5° のタイルは含めない。
+        XCTAssertEqual(Prefecture.byCode(101)?.tiles.count, 40)
     }
 
     func testFileCacheClearKeepsSavedTilesAndRemovesSelected() async throws {

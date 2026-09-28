@@ -28,14 +28,30 @@ public struct DownloadProgress: Equatable, Sendable {
     public let totalTiles: Int
     /// 問い合わせに失敗して取り直している回数。0 なら取り直していない。
     public let retry: Int
+    /// 取り直す前に待つ時間。この知らせのあと、これだけ待ってから問い合わせる。
+    public let retryWait: TimeInterval
 
-    public init(doneTiles: Int, totalTiles: Int, retry: Int = 0) {
+    public init(doneTiles: Int, totalTiles: Int, retry: Int = 0, retryWait: TimeInterval = 0) {
         self.doneTiles = doneTiles
         self.totalTiles = totalTiles
         self.retry = retry
+        self.retryWait = retryWait
     }
 
     public var fraction: Double { totalTiles == 0 ? 1 : Double(doneTiles) / Double(totalTiles) }
+
+    /// 区画数が増えない間も進んでいることが分かるよう、今の区画の状況を 1 秒単位で表す。
+    /// Overpass は集計が終わるまで何も返さないので、受信量ではなく待っている秒数を出す。
+    /// - Parameter elapsed: この知らせを受け取ってからの時間。
+    public func statusText(elapsed: TimeInterval) -> String {
+        let retryNote = retry > 0 ? "・取り直し \(retry) 回目" : ""
+        if retry > 0 && elapsed < retryWait {
+            let left = Int((retryWait - elapsed).rounded(.up))
+            return "通信に失敗したため、\(left) 秒後に取り直します（\(retry) 回目）"
+        }
+        let waited = Int(max(0, elapsed - (retry > 0 ? retryWait : 0)))
+        return "サーバーの応答を待っています（\(waited) 秒\(retryNote)）"
+    }
 }
 
 /// 現在地周辺の山を返す。キャッシュを優先し、未取得または古いタイルだけ Overpass に問い合わせる。
@@ -156,7 +172,7 @@ public final class MountainRepository: Sendable {
                     guard attempt < retryDelays.count else { throw error }
                     let wait = retryDelays[attempt]
                     attempt += 1
-                    await onProgress(DownloadProgress(doneTiles: done, totalTiles: all.count, retry: attempt))
+                    await onProgress(DownloadProgress(doneTiles: done, totalTiles: all.count, retry: attempt, retryWait: wait))
                     try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
                 }
             }

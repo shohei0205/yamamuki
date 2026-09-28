@@ -18,10 +18,14 @@ public struct Prefecture: Hashable, Identifiable, Sendable {
         self.areas = areas
     }
 
-    /// ダウンロードするタイル。
+    /// ダウンロードするタイル。北端・東端がちょうどタイルの境目(0.5° の倍数)のとき、その外側のタイルまで含めないよう、
+    /// 矩形をわずかに内側に縮めてから数える。
     public var tiles: [Tile] {
+        let eps = 1e-9
         var seen = Set<Tile>()
-        return areas.flatMap { Tile.covering($0) }.filter { seen.insert($0).inserted }
+        return areas
+            .flatMap { Tile.covering(BoundingBox(south: $0.south, west: $0.west, north: $0.north - eps, east: $0.east - eps)) }
+            .filter { seen.insert($0).inserted }
     }
 
     /// 一覧で見出しにする地方。

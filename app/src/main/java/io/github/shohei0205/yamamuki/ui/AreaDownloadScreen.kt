@@ -22,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -29,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.core.Prefecture
 import io.github.shohei0205.yamamuki.data.SavedArea
+import android.os.SystemClock
+import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -162,12 +165,17 @@ private fun RunningCard(running: RunningDownload, onCancel: () -> Unit) {
                 "${running.prefecture.name}をダウンロード中（${running.progress.doneTiles} / ${running.progress.totalTiles} 区画）",
                 style = MaterialTheme.typography.titleMedium,
             )
-            if (running.progress.retry > 0) {
-                Text(
-                    "通信に失敗したため、取り直しています（${running.progress.retry} 回目）",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            // 区画数が増えない間も止まっていないことが分かるよう、待っている秒数を 1 秒ごとに出す。
+            val now by produceState(SystemClock.elapsedRealtime(), running) {
+                while (true) {
+                    value = SystemClock.elapsedRealtime()
+                    delay(1_000)
+                }
             }
+            Text(
+                running.progress.statusText(now - running.sinceMillis),
+                style = MaterialTheme.typography.bodySmall,
+            )
             LinearProgressIndicator(progress = { running.progress.fraction }, modifier = Modifier.fillMaxWidth())
             OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("中断") }
         }

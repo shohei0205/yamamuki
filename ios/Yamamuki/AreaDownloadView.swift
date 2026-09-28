@@ -37,8 +37,9 @@ struct AreaDownloadView: View {
                             Text("\(running.prefecture.name)をダウンロード中（\(running.progress.doneTiles) / \(running.progress.totalTiles) 区画）")
                                 .font(.headline)
                             ProgressView(value: running.progress.fraction)
-                            if running.progress.retry > 0 {
-                                Text("通信に失敗したため、取り直しています（\(running.progress.retry) 回目）")
+                            // 区画数が増えない間も止まっていないことが分かるよう、待っている秒数を 1 秒ごとに出す。
+                            TimelineView(.periodic(from: running.since, by: 1)) { context in
+                                Text(running.progress.statusText(elapsed: context.date.timeIntervalSince(running.since)))
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }

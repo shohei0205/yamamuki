@@ -15,7 +15,16 @@ struct SavedArea: Identifiable, Equatable {
 /// ダウンロード中の地域と進み具合。
 struct RunningDownload: Equatable {
     let prefecture: Prefecture
-    var progress: DownloadProgress
+    var progress: DownloadProgress {
+        didSet { since = Date() }
+    }
+    /// progress を受け取った時刻。待っている秒数を数えるのに使う。
+    private(set) var since = Date()
+
+    init(prefecture: Prefecture, progress: DownloadProgress) {
+        self.prefecture = prefecture
+        self.progress = progress
+    }
 }
 
 /// ダウンロードが終わった・中断した・失敗したことの知らせ。resume があれば続きから取得できる。
@@ -31,7 +40,7 @@ struct SavedAreaStore {
     private let key = "savedAreas"
     private let defaults = UserDefaults.standard
 
-    /// 都道府県コード順。
+    /// 都道府県の一覧(Prefecture.all)と同じ順。
     func load() -> [SavedArea] {
         let raw = defaults.dictionary(forKey: key) as? [String: String] ?? [:]
         return raw.compactMap { code, value in
@@ -41,7 +50,7 @@ struct SavedAreaStore {
             let count = parts.count > 1 ? Int(parts[1]) ?? 0 : 0
             return SavedArea(prefecture: prefecture, downloadedAt: Date(timeIntervalSince1970: at), mountainCount: count)
         }
-        .sorted { $0.prefecture.code < $1.prefecture.code }
+        .sorted { (Prefecture.all.firstIndex(of: $0.prefecture) ?? 0) < (Prefecture.all.firstIndex(of: $1.prefecture) ?? 0) }
     }
 
     func put(_ area: SavedArea) {

@@ -1,6 +1,7 @@
 package io.github.shohei0205.yamamuki.ui
 
 import android.app.Application
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,6 +22,8 @@ import kotlinx.coroutines.launch
 data class RunningDownload(
     val prefecture: Prefecture,
     val progress: DownloadProgress,
+    /** [progress] を受け取った時刻([SystemClock.elapsedRealtime])。待っている秒数を数えるのに使う。 */
+    val sinceMillis: Long = SystemClock.elapsedRealtime(),
 )
 
 /** ダウンロードが終わった・中断した・失敗したことの知らせ。[resume] があれば続きから取得できる。 */

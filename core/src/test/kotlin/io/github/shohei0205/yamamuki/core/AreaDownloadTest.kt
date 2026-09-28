@@ -87,6 +87,15 @@ class AreaDownloadTest {
     }
 
     @Test
+    fun statusTextCountsWaitingSeconds() {
+        assertEquals("サーバーの応答を待っています（35 秒）", DownloadProgress(3, 10).statusText(35_400))
+        val retrying = DownloadProgress(3, 10, retry = 2, retryWaitMillis = 15_000)
+        assertEquals("通信に失敗したため、15 秒後に取り直します（2 回目）", retrying.statusText(0))
+        assertEquals("通信に失敗したため、1 秒後に取り直します（2 回目）", retrying.statusText(14_500))
+        assertEquals("サーバーの応答を待っています（5 秒・取り直し 2 回目）", retrying.statusText(20_000))
+    }
+
+    @Test
     fun refreshRefetchesEvenFreshTiles() = runTest {
         val remote = FakeRemote(listOf(yari))
         val repo = repo(remote, InMemoryMountainCache())
@@ -126,5 +135,7 @@ class AreaDownloadTest {
             assertTrue(hokkaido.any { p -> p.areas.any { it.contains(lat, lon) } }, "北海道の $lat, $lon")
         }
         assertEquals("北海道・東北", hokkaido.first().region)
+        // 北端がちょうど 44.0° なので、44.0〜44.5° のタイルは含めない。
+        assertEquals(40, Prefecture.byCode(101)!!.tiles.size)
     }
 }
