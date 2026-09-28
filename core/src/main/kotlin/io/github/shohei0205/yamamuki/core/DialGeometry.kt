@@ -9,6 +9,14 @@ import kotlin.math.sin
  * 距離は画面上で等倍(1km あたりの px が一定)に表す。
  */
 object DialGeometry {
+    const val TAPE_SPAN_DEG = 60.0
+
+    /** Move the bearing tape with the finger: one screen width equals its displayed span. */
+    fun swipedHeading(headingDeg: Double, dxPx: Double, widthPx: Double): Double {
+        if (!dxPx.isFinite() || !widthPx.isFinite() || widthPx <= 0) return headingDeg
+        return Heading.normalize(headingDeg - dxPx / widthPx * TAPE_SPAN_DEG)
+    }
+
     /** ピンチで変えられる表示範囲(現在地から画面上端までの距離)。 */
     const val MIN_RANGE_KM = 2.0
     const val MAX_RANGE_KM = 80.0

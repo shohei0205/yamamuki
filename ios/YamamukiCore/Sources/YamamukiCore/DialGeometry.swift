@@ -3,6 +3,13 @@ import Foundation
 /// 方位盤の平面図の計算。現在地を原点とし、端末を向けている方位を画面の上方向とする。
 /// 距離は画面上で等倍(1km あたりの pt が一定)に表す。
 public enum DialGeometry {
+    public static let tapeSpanDeg = 60.0
+
+    public static func swipedHeading(_ heading: Double, dx: Double, width: Double) -> Double {
+        guard dx.isFinite, width.isFinite, width > 0 else { return heading }
+        return Heading.normalize(heading - dx / width * tapeSpanDeg)
+    }
+
     /// ピンチで変えられる表示範囲(現在地から画面上端までの距離)。
     public static let minRangeKm = 2.0
     public static let maxRangeKm = 80.0
@@ -82,6 +89,7 @@ public enum DialGeometry {
 public struct PlanOffset: Hashable, Sendable {
     public let x: Double
     public let y: Double
+    public init(x: Double, y: Double) { self.x = x; self.y = y }
 }
 
 public struct TapeTick: Hashable, Sendable {

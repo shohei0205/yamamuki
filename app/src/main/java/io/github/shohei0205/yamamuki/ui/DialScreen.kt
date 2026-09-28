@@ -6,7 +6,12 @@ import android.hardware.GeomagneticField
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,10 +40,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -55,6 +62,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.Heading
+import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.coordinateText
@@ -123,7 +131,7 @@ fun DialScreen(
             // 画面上でほぼ動かない変化(表示範囲の上端でも数 px)は流さない。
             .distinctUntilChanged { old, new -> abs(Heading.delta(old, new)) < MIN_HEADING_CHANGE_DEG }
     }.collectAsStateWithLifecycle<Double?>(initialValue = null)
-    val location = state.location
+    val location = state.gpsLocation
     val declination = remember(location) {
         location?.let {
             GeomagneticField(
@@ -131,7 +139,9 @@ fun DialScreen(
             ).declination.toDouble()
         } ?: 0.0
     }
-    val heading = magneticHeading?.let { Heading.normalize(it + declination) }
+    val compassHeading = magneticHeading?.let { Heading.normalize(it + declination) }
+    val heading = state.lockedHeading ?: compassHeading
+    val currentHeading by rememberUpdatedState(heading ?: 0.0)
 
     // 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     var selectedId by remember { mutableStateOf<Long?>(null) }
@@ -151,21 +161,67 @@ fun DialScreen(
             .fillMaxSize()
             .background(DialBeige)
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .pointerInput(Unit) {
-                detectTransformGestures { _, _, zoom, _ -> viewModel.onZoom(zoom) }
+            .pointerInput(showSettings) {
+                if (showSettings) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val headingGesture = down.position.y < 76.dp.toPx()
+                    var multiTouch = false
+                    var dragging = false
+                    var pendingPan = Offset.Zero
+                    do {
+                        val event = awaitPointerEvent()
+                        val count = event.changes.count { it.pressed }
+                        if (count == 1 && !multiTouch) {
+                            val pan = event.calculatePan()
+                            pendingPan += pan
+                            val distance = if (headingGesture) kotlin.math.abs(pendingPan.x) else pendingPan.getDistance()
+                            val started = !dragging && distance > viewConfiguration.touchSlop
+                            if (started) dragging = true
+                            if (dragging) {
+                                val delta = if (started) pendingPan else pan
+                                if (headingGesture) viewModel.onHeadingSwipe(delta.x, size.width.toFloat(), currentHeading)
+                                else viewModel.onPan(delta.x, delta.y, size.height - 128.dp.toPx(), currentHeading)
+                                event.changes.forEach { it.consume() }
+                            }
+                        } else if (count >= 2) {
+                            multiTouch = true
+                            val zoom = event.calculateZoom()
+                            if (headingGesture) {
+                                // A gesture starting on the tape never turns into a map transform.
+                            } else if (count == 2 && event.changes.count { it.pressed && it.previousPressed } == 2) {
+                                val origin = Offset(size.width / 2f, size.height - 52.dp.toPx())
+                                val previous = event.calculateCentroid(useCurrent = false) - origin
+                                val current = event.calculateCentroid(useCurrent = true) - origin
+                                viewModel.onTransform(zoom, event.calculateRotation(),
+                                    PlanOffset(previous.x.toDouble(), previous.y.toDouble()),
+                                    PlanOffset(current.x.toDouble(), current.y.toDouble()), size.height - 128.dp.toPx())
+                            } else if (zoom != 1f) viewModel.onZoom(zoom)
+                            event.changes.forEach { it.consume() }
+                        } else if (multiTouch || dragging) {
+                            // Finish a pinch without turning the remaining finger into a drag/tap.
+                            event.changes.forEach { it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
             },
     ) {
         DialCanvas(
             headingDeg = heading ?: 0.0,
+            compassHeadingDeg = compassHeading ?: heading ?: 0.0,
             mountains = state.mountains,
             rangeKm = state.rangeKm,
             modifier = Modifier.fillMaxSize(),
             onMountainTap = { selectedId = it.mountain.osmId },
             onObserverTap = { showObserver = true },
             summit = state.summit,
-            altitudeM = state.location?.mslAltitudeM,
+            altitudeM = state.observerLocation?.mslAltitudeM,
             maxPeaks = state.settings.maxPeaks,
             textScale = state.settings.textScale,
+            latitude = state.observerLocation?.latitude,
+            longitude = state.observerLocation?.longitude,
+            viewportLatitude = state.location?.latitude,
+            viewportLongitude = state.location?.longitude,
         )
         Text(
             "© OpenStreetMap contributors",
@@ -179,13 +235,26 @@ fun DialScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
         } else {
-            StatusLine(
-                message = statusMessage(state, headingAvailable = heading != null),
-                // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
-                actionLabel = if (state.offline && state.connected && !state.loading && !state.settings.manualFetch) "再取得" else null,
-                onAction = viewModel::retry,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 76.dp),
-            )
+            Column(Modifier.align(Alignment.TopCenter).padding(top = 76.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (state.exploring) {
+                    Row(Modifier.background(DialBeige).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            Text("手動移動・2本指で地図を回転", style = MaterialTheme.typography.labelMedium)
+                            state.location?.let { center ->
+                                Text(String.format(java.util.Locale.US, "%.4f, %.4f", center.latitude, center.longitude),
+                                    style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        TextButton(onClick = viewModel::resetCenter) { Text("現在地に戻る") }
+                    }
+                }
+                StatusLine(
+                    message = statusMessage(state, headingAvailable = compassHeading != null),
+                    // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
+                    actionLabel = if (state.offline && state.connected && !state.loading && !state.settings.manualFetch) "再取得" else null,
+                    onAction = viewModel::retry,
+                )
+            }
         }
 
         // 左下: 設定、事前ダウンロード、手動取得モードなら山データの取得。屋外で押しやすいよう既定(40dp)より大きくする。
@@ -281,7 +350,7 @@ fun DialScreen(
 
     val overlay = showSettings || showDownload
     if (selected != null && !overlay) {
-        MountainDetailDialog(selected, onDismiss = { selectedId = null })
+        MountainDetailDialog(selected, fromCenter = state.exploring, onDismiss = { selectedId = null })
     }
 
     // 現在地を取れる前は出す値がないので開かない。開いている間も歩けば値が更新される。
@@ -325,7 +394,7 @@ private fun FetchErrorDialog(message: String, onRetry: () -> Unit, onDismiss: ()
 
 /** タップした山の詳細。 */
 @Composable
-private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) {
+private fun MountainDetailDialog(nearby: NearbyMountain, fromCenter: Boolean, onDismiss: () -> Unit) {
     val m = nearby.mountain
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -335,7 +404,7 @@ private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DetailRow("標高", m.elevationText())
                 DetailRow("緯度経度", m.coordinateText())
-                DetailRow("現在地からの距離", distanceText(nearby.distanceKm))
+                DetailRow(if (fromCenter) "双眼鏡の位置からの距離" else "現在地からの距離", distanceText(nearby.distanceKm))
             }
         },
     )

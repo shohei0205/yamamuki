@@ -14,6 +14,12 @@ struct GeoPoint: Equatable {
 /// 現在地と表示範囲に応じて山データを取得し、方位盤に出す山の一覧を保つ(Android 版の DialViewModel に相当)。
 final class DialModel: ObservableObject {
     @Published private(set) var location: GeoPoint?
+    @Published private(set) var gpsLocation: GeoPoint?
+    @Published private(set) var observerLocation: GeoPoint?
+    @Published private(set) var exploring = false
+    @Published private(set) var lockedHeading: Double?
+    var displayHeading: Double { lockedHeading ?? heading ?? 0 }
+
     /// 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。
     @Published private(set) var mountains: [NearbyMountain] = []
     /// 現在地がほぼ山頂([summitRadiusKm] 以内)のとき、その山。
@@ -105,9 +111,12 @@ final class DialModel: ObservableObject {
 
     private func onLocation(_ loc: CLLocation) {
         // 高さを持たない位置(verticalAccuracy が負)では、標高の表示が消えないよう直前の標高を引き継ぐ。
-        let msl = loc.verticalAccuracy >= 0 ? loc.altitude : location?.mslAltitudeM
+        let msl = loc.verticalAccuracy >= 0 ? loc.altitude : gpsLocation?.mslAltitudeM
         let point = GeoPoint(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, mslAltitudeM: msl)
+        gpsLocation = point
+        guard !exploring else { return }
         location = point
+        observerLocation = point
         updatePeaks(at: point)
         if let center = fetchedCenter,
            GeoMath.distanceKm(center.latitude, center.longitude, point.latitude, point.longitude) <= Self.refetchDistanceKm {
@@ -130,6 +139,62 @@ final class DialModel: ObservableObject {
     func onZoom(_ zoom: Double) {
         rangeKm = DialGeometry.zoomedRange(rangeKm, zoom: zoom)
         if DialGeometry.fetchRadiusKm(rangeKm) > fetchedRadiusKm { fetch() }
+    }
+
+    func onPan(dx: Double, dy: Double, chartHeight: Double) {
+        guard let here = location else { return }
+        let next = PanGeometry.drag(MapCenter(here.latitude, here.longitude), dx: dx, dy: dy,
+            scale: chartHeight / rangeKm, heading: displayHeading)
+        guard next != MapCenter(here.latitude, here.longitude) else { return }
+        beginExploring()
+        location = GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+        fetchForViewport()
+    }
+
+    private func beginExploring() {
+        observerLocation = observerLocation ?? location
+        lockedHeading = displayHeading
+        exploring = true
+    }
+
+    func onHeadingSwipe(dx: Double, width: Double) {
+        guard location != nil, dx.isFinite, dx != 0, width.isFinite, width > 0 else { return }
+        beginExploring()
+        lockedHeading = DialGeometry.swipedHeading(displayHeading, dx: dx, width: width)
+    }
+
+    func onTransform(zoom: Double, rotation: Double, previous: PlanOffset, midpoint: PlanOffset, chartHeight: Double) {
+        guard exploring, let oldHeading = lockedHeading else { onZoom(zoom); return }
+        guard let observer = observerLocation, let viewport = location,
+              rotation.isFinite, chartHeight.isFinite, chartHeight > 0 else { return }
+        let range = DialGeometry.zoomedRange(rangeKm, zoom: zoom)
+        let nextHeading = Heading.normalize(oldHeading - rotation)
+        let next = PanGeometry.transformViewport(MapCenter(observer.latitude, observer.longitude),
+            viewport: MapCenter(viewport.latitude, viewport.longitude), previous: previous, midpoint: midpoint,
+            oldScale: chartHeight / rangeKm, newScale: chartHeight / range,
+            oldHeading: oldHeading, newHeading: nextHeading)
+        location = GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+        rangeKm = range
+        lockedHeading = nextHeading
+        fetchForViewport()
+    }
+
+    func resetCenter() {
+        guard let here = gpsLocation else { return }
+        location = here
+        observerLocation = here
+        exploring = false
+        lockedHeading = nil
+        updatePeaks(at: here)
+        fetch()
+    }
+
+    private func fetchForViewport() {
+        guard let here = location else { return }
+        if let center = fetchedCenter,
+           GeoMath.distanceKm(center.latitude, center.longitude, here.latitude, here.longitude) <= Self.refetchDistanceKm,
+           DialGeometry.fetchRadiusKm(rangeKm) <= fetchedRadiusKm { return }
+        fetch()
     }
 
     func retry() { fetch(forceRefresh: true) }
@@ -163,7 +228,7 @@ final class DialModel: ObservableObject {
         settings = after
         settingsStore.save(after)
 
-        if after.minElevationM != before.minElevationM, let here = location {
+        if after.minElevationM != before.minElevationM, let here = observerLocation {
             updatePeaks(at: here)
         }
         // 起動時の範囲を変えたら、試しやすいよう今の表示にもすぐ反映する。
@@ -231,6 +296,7 @@ final class DialModel: ObservableObject {
             guard let self else { return }
             loading = true
             do {
+                if exploring && !manual && !forceRefresh { try await Task.sleep(nanoseconds: 250_000_000) }
                 let result = try await repository.mountainsAround(
                     latitude: here.latitude,
                     longitude: here.longitude,
@@ -245,7 +311,7 @@ final class DialModel: ObservableObject {
                     logger.warning("山データの取得に失敗: \(String(describing: error), privacy: .public)")
                 }
                 peaks = result.mountains.map(\.mountain)
-                updatePeaks(at: location ?? here)
+                updatePeaks(at: observerLocation ?? here)
                 let skippedOffline = wantsNetwork && !connected && result.networkSkipped
                 if skippedOffline {
                     skippedWhileDisconnected = manual

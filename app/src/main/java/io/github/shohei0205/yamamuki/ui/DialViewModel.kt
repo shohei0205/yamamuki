@@ -7,6 +7,10 @@ import androidx.lifecycle.viewModelScope
 import io.github.shohei0205.yamamuki.YamamukiApp
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.GeoMath
+import io.github.shohei0205.yamamuki.core.Heading
+import io.github.shohei0205.yamamuki.core.MapCenter
+import io.github.shohei0205.yamamuki.core.PanGeometry
+import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.OverpassException
@@ -18,6 +22,7 @@ import io.github.shohei0205.yamamuki.data.CacheInfo
 import io.github.shohei0205.yamamuki.sensor.connectivityUpdates
 import io.github.shohei0205.yamamuki.settings.Settings
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +43,10 @@ data class GeoPoint(
 
 data class DialUiState(
     val location: GeoPoint? = null,
+    val gpsLocation: GeoPoint? = null,
+    val exploring: Boolean = false,
+    val observerLocation: GeoPoint? = null,
+    val lockedHeading: Double? = null,
     /** 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。 */
     val mountains: List<NearbyMountain> = emptyList(),
     /**
@@ -104,11 +113,15 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         // GPS とネットワーク位置が交互に届くと、高さを持たない位置で標高の表示が消えたり出たりする。
         // 高さが無い位置では直前の標高を引き継ぐ。
         val point = if (newPoint.mslAltitudeM == null) {
-            newPoint.copy(mslAltitudeM = _state.value.location?.mslAltitudeM)
+            newPoint.copy(mslAltitudeM = _state.value.gpsLocation?.mslAltitudeM)
         } else {
             newPoint
         }
-        _state.update { it.copy(location = point).withPeaksAt(point) }
+        _state.update {
+            if (it.exploring) it.copy(gpsLocation = point)
+            else it.copy(gpsLocation = point, location = point, observerLocation = point).withPeaksAt(point)
+        }
+        if (_state.value.exploring) return
         val center = fetchedCenter
         if (center == null ||
             GeoMath.distanceKm(center.latitude, center.longitude, point.latitude, point.longitude) > REFETCH_DISTANCE_KM
@@ -120,6 +133,61 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun onZoom(zoom: Float) {
         _state.update { it.copy(rangeKm = DialGeometry.zoomedRange(it.rangeKm, zoom)) }
         if (DialGeometry.fetchRadiusKm(_state.value.rangeKm) > fetchedRadiusKm) fetch()
+    }
+
+    fun onPan(dxPx: Float, dyPx: Float, chartHeightPx: Float, headingDeg: Double) {
+        val here = state.value.location ?: return
+        val next = PanGeometry.drag(MapCenter(here.latitude, here.longitude), dxPx.toDouble(), dyPx.toDouble(),
+            chartHeightPx / state.value.rangeKm, state.value.lockedHeading ?: headingDeg)
+        if (next.latitude == here.latitude && next.longitude == here.longitude) return
+        val point = GeoPoint(next.latitude, next.longitude)
+        _state.update { it.copy(location = point, exploring = true,
+            observerLocation = it.observerLocation ?: here, lockedHeading = it.lockedHeading ?: headingDeg) }
+        fetchForViewport()
+    }
+
+    fun resetCenter() {
+        val here = state.value.gpsLocation ?: return
+        _state.update { it.copy(location = here, observerLocation = here, exploring = false, lockedHeading = null).withPeaksAt(here) }
+        fetch()
+    }
+
+    fun onHeadingSwipe(dxPx: Float, widthPx: Float, headingDeg: Double) {
+        if (!dxPx.isFinite() || dxPx == 0f || widthPx <= 0) return
+        _state.update {
+            val here = it.location
+            if (here == null) it else it.copy(exploring = true,
+                observerLocation = it.observerLocation ?: here,
+                lockedHeading = DialGeometry.swipedHeading(it.lockedHeading ?: headingDeg,
+                    dxPx.toDouble(), widthPx.toDouble()))
+        }
+    }
+
+    fun onTransform(zoom: Float, rotationDeg: Float, previousMidpoint: PlanOffset,
+        midpoint: PlanOffset, chartHeightPx: Float) {
+        val current = state.value
+        val heading = current.lockedHeading
+        if (!current.exploring || heading == null) { onZoom(zoom); return }
+        val observer = current.observerLocation ?: return
+        val viewport = current.location ?: return
+        if (!rotationDeg.isFinite() || chartHeightPx <= 0) return
+        val range = DialGeometry.zoomedRange(current.rangeKm, zoom)
+        val nextHeading = Heading.normalize(heading - rotationDeg)
+        val next = PanGeometry.transformViewport(MapCenter(observer.latitude, observer.longitude),
+            MapCenter(viewport.latitude, viewport.longitude), previousMidpoint, midpoint,
+            chartHeightPx / current.rangeKm, chartHeightPx / range, heading, nextHeading)
+        val point = GeoPoint(next.latitude, next.longitude)
+        _state.update { it.copy(location = point, rangeKm = range, lockedHeading = nextHeading) }
+        fetchForViewport()
+    }
+
+    private fun fetchForViewport() {
+        val here = _state.value.location ?: return
+        val center = fetchedCenter
+        if (center == null ||
+            GeoMath.distanceKm(center.latitude, center.longitude, here.latitude, here.longitude) > REFETCH_DISTANCE_KM ||
+            DialGeometry.fetchRadiusKm(_state.value.rangeKm) > fetchedRadiusKm
+        ) fetch()
     }
 
     fun retry() = fetch(forceRefresh = true)
@@ -149,7 +217,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(settings = after) }
 
         if (after.minElevationM != before.minElevationM) {
-            _state.value.location?.let { here -> _state.update { it.withPeaksAt(here) } }
+            _state.value.observerLocation?.let { here -> _state.update { it.withPeaksAt(here) } }
         }
         // 起動時の範囲を変えたら、試しやすいよう今の表示にもすぐ反映する。
         if (after.initialRangeKm != before.initialRangeKm) {
@@ -205,6 +273,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         fetchJob?.cancel()
         fetchJob = viewModelScope.launch {
             _state.update { it.copy(loading = true) }
+            // 手動移動中の連続した取得要求をまとめる。
+            if (_state.value.exploring && !manual && !forceRefresh) delay(250)
             val result = repository.mountainsAround(
                 here.latitude,
                 here.longitude,
@@ -225,7 +295,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             val hasCache = peaks.isNotEmpty()
             val error = result.error
             _state.update {
-                it.withPeaksAt(it.location ?: here).copy(
+                it.withPeaksAt(it.observerLocation ?: here).copy(
                     loading = false,
                     offline = error != null || skippedOffline,
                     incomplete = result.incomplete,

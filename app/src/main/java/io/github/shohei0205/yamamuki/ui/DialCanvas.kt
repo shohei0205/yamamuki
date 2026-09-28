@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
@@ -38,6 +40,9 @@ import io.github.shohei0205.yamamuki.core.ElevationClass
 import io.github.shohei0205.yamamuki.core.Heading
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
+import io.github.shohei0205.yamamuki.core.PlanOffset
+import io.github.shohei0205.yamamuki.core.PanGeometry
+import io.github.shohei0205.yamamuki.core.MapCenter
 import io.github.shohei0205.yamamuki.core.declutter
 import io.github.shohei0205.yamamuki.core.elevationClass
 import kotlin.math.hypot
@@ -62,7 +67,7 @@ private val SummitRockLight = Color(0xFF8A99A8)
 private val FlagPole = Color(0xFF333333)
 
 /** 画面上部の方位目盛りに収める角度の幅。 */
-private const val TAPE_SPAN_DEG = 60.0
+private const val TAPE_SPAN_DEG = DialGeometry.TAPE_SPAN_DEG
 
 /**
  * 方位盤の文字。設定の文字サイズ([scale])を山名・距離の目盛り・方位の表示に掛ける。
@@ -98,6 +103,11 @@ fun DialCanvas(
     maxPeaks: Int = 40,
     /** 文字の大きさ(標準 = 1.0 に対する倍率)。 */
     textScale: Float = 1f,
+    latitude: Double? = null,
+    longitude: Double? = null,
+    viewportLatitude: Double? = latitude,
+    viewportLongitude: Double? = longitude,
+    compassHeadingDeg: Double = headingDeg,
 ) {
     val styles = remember(textScale) { DialTextStyles(textScale) }
     val textMeasurer = rememberTextMeasurer(cacheSize = 256)
@@ -118,19 +128,28 @@ fun DialCanvas(
         val tapeHeight = 44.dp.toPx()
         val chartTop = tapeHeight + 32.dp.toPx()
         // 双眼鏡が右下の「© OpenStreetMap contributors」と重ならない高さ。
-        val observer = Offset(size.width / 2, size.height - 52.dp.toPx())
-        val pxPerKm = ((observer.y - chartTop) / rangeKm).toFloat()
+        val origin = Offset(size.width / 2, size.height - 52.dp.toPx())
+        val pxPerKm = ((origin.y - chartTop) / rangeKm).toFloat()
+        val offset = if (latitude != null && longitude != null && viewportLatitude != null && viewportLongitude != null)
+            PanGeometry.observerOffset(MapCenter(latitude, longitude), MapCenter(viewportLatitude, viewportLongitude), headingDeg)
+        else PlanOffset(0.0, 0.0)
+        val observer = origin + Offset((offset.x * pxPerKm).toFloat(), (-offset.y * pxPerKm).toFloat())
         hitTargets.peaks = if (pxPerKm > 0f) {
             drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles)
             drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
         } else {
             emptyList()
         }
+        val observerRotation = Heading.delta(headingDeg, compassHeadingDeg).toFloat()
         if (summit != null) {
-            hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles)
+            hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation)
             hitTargets.observer = null
         } else {
-            hitTargets.observer = drawBinoculars(observer)
+            hitTargets.observerCenter = observer
+            hitTargets.observerRotation = observerRotation
+            rotate(observerRotation, pivot = observer) {
+                hitTargets.observer = drawBinoculars(observer)
+            }
             hitTargets.summit = null
         }
         drawTape(headingDeg, tapeHeight, textMeasurer)
@@ -147,8 +166,12 @@ private fun DrawScope.drawRings(
     styles: DialTextStyles,
 ) {
     val step = DialGeometry.ringStepKm(rangeKm)
-    val farthestPx = hypot(size.width / 2, observer.y)
-    var i = 1
+    val farthestPx = hypot(max(kotlin.math.abs(observer.x), kotlin.math.abs(size.width - observer.x)),
+        max(kotlin.math.abs(chartTop - observer.y), kotlin.math.abs(size.height - observer.y)))
+    val nearestPx = hypot(max(0f, max(-observer.x, observer.x - size.width)),
+        max(0f, max(chartTop - observer.y, observer.y - size.height)))
+    var i = max(1, (nearestPx / (step * pxPerKm)).toInt())
+    clipRect(top = chartTop, bottom = size.height - 52.dp.toPx()) {
     while (step * i * pxPerKm <= farthestPx) {
         val km = step * i
         val radius = (km * pxPerKm).toFloat()
@@ -157,6 +180,7 @@ private fun DrawScope.drawRings(
         val y = observer.y - radius - label.size.height - 2.dp.toPx()
         if (y >= chartTop) drawText(label, topLeft = Offset(observer.x - label.size.width / 2f, y))
         i++
+    }
     }
 }
 
@@ -177,9 +201,19 @@ private class HitTargets {
 
     /** 双眼鏡の範囲。山頂アイコンを描いているときは null。山と重なっても優先する。 */
     var observer: Box? = null
+    var observerCenter = Offset.Zero
+    var observerRotation = 0f
 
     /** [tap] が双眼鏡に当たったか。枠を [slop] だけ広げて判定する。 */
-    fun hitsObserver(tap: Offset, slop: Float): Boolean = observer?.contains(tap, slop) ?: false
+    fun hitsObserver(tap: Offset, slop: Float): Boolean {
+        val angle = Math.toRadians(-observerRotation.toDouble())
+        val delta = tap - observerCenter
+        val localTap = observerCenter + Offset(
+            (delta.x * kotlin.math.cos(angle) - delta.y * kotlin.math.sin(angle)).toFloat(),
+            (delta.x * kotlin.math.sin(angle) + delta.y * kotlin.math.cos(angle)).toFloat(),
+        )
+        return observer?.contains(localTap, slop) ?: false
+    }
 
     /** [tap] を含む山のうち、アイコンが最も近いもの。枠を [slop] だけ広げて判定する。 */
     fun find(tap: Offset, slop: Float): NearbyMountain? {
@@ -209,7 +243,7 @@ private fun DrawScope.drawPeaks(
             val o = DialGeometry.project(m.distanceKm, m.bearingDeg, headingDeg)
             m to Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
         }
-        .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < observer.y }
+        .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < size.height - 52.dp.toPx() }
         .map { (m, p) ->
             val icon = PeakIcon.of(m.mountain.elevationClass())
             val halfWidth = icon.halfWidthDp.dp.toPx()
@@ -331,6 +365,7 @@ private fun DrawScope.drawSummit(
     summit: NearbyMountain,
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
+    observerRotation: Float,
 ): PlacedPeak {
     val u = 1.dp.toPx()
     fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + y * u)
@@ -342,7 +377,7 @@ private fun DrawScope.drawSummit(
     val poleTop = at(2f, -24f)
     val poleBottom = at(2f, -8f)
 
-    drawViewCone(at(0f, -6f))
+    rotate(observerRotation, pivot = center) { drawViewCone(at(0f, -6f)) }
 
     // 白い縁取り → 本体の順に描く。
     val halo = Stroke(width = 4f * u, join = StrokeJoin.Round)
