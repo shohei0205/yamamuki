@@ -121,6 +121,16 @@ class DeclutterTest {
     }
 
     @Test
+    fun stopsPullingItemsAtLimit() {
+        val pulled = mutableListOf<Int>()
+        val items = (0 until 10).asSequence().onEach { pulled += it }
+        val placed = declutter(items, limit = 2) { Box(it * 20f, 0f, it * 20f + 10f, 10f) }
+        assertEquals(listOf(0, 1), placed)
+        // 上限に達したあとの項目は取り出さない(山名の計測を省くため)。
+        assertEquals(listOf(0, 1), pulled)
+    }
+
+    @Test
     fun priorityPrefersHighThenNear() {
         val sorted = listOf(m("低", 500.0, 1.0), m("不明", null, 0.5), m("高遠", 2000.0, 9.0), m("高近", 2000.0, 3.0))
             .sortedWith(displayPriority)

@@ -223,8 +223,8 @@ private fun DrawScope.drawPeaks(
             )
             PlacedPeak(m, p, label, box)
         }
-        .toList()
 
+    // 列は遅延評価なので、上限に達したら残りの山名は測らない。
     val placed = declutter(visible, limit = maxPeaks) { it.box }
 
     for (peak in placed) {

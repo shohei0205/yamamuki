@@ -62,9 +62,14 @@ import io.github.shohei0205.yamamuki.core.elevationText
 import io.github.shohei0205.yamamuki.sensor.locationUpdates
 import io.github.shohei0205.yamamuki.sensor.magneticHeadingUpdates
 import io.github.shohei0205.yamamuki.sensor.mslAltitudeM
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+
+/** これより小さい方位の変化は画面に反映しない。 */
+private const val MIN_HEADING_CHANGE_DEG = 0.1
 
 private val LOCATION_PERMISSIONS = arrayOf(
     Manifest.permission.ACCESS_FINE_LOCATION,
@@ -111,7 +116,11 @@ fun DialScreen(
     // センサーは磁北基準なので、現在地の偏角(日本ではおよそ西へ 7〜10°)を足して真北基準にする。
     val magneticHeading by remember(context) {
         val filter = HeadingFilter()
-        magneticHeadingUpdates(context).map { filter.update(it) }
+        magneticHeadingUpdates(context)
+            .map { filter.update(it) }
+            // センサーは毎秒 50 回ほど届く。端末を止めているときの細かな揺れで画面全体を描き直さないよう、
+            // 画面上でほぼ動かない変化(表示範囲の上端でも数 px)は流さない。
+            .distinctUntilChanged { old, new -> abs(Heading.delta(old, new)) < MIN_HEADING_CHANGE_DEG }
     }.collectAsStateWithLifecycle<Double?>(initialValue = null)
     val location = state.location
     val declination = remember(location) {
@@ -350,16 +359,20 @@ private fun DetailRow(label: String, value: String) {
     }
 }
 
-private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String? = when {
-    state.location == null -> "現在地を取得しています…"
-    !headingAvailable -> "方位センサーの値を待っています…"
-    state.loading -> "山データを取得中…"
-    !state.connected && state.incomplete -> "圏外のため、この付近の山データがありません"
-    !state.connected -> "圏外: 保存済みのデータで表示中"
-    state.offline && state.incomplete -> "通信できず、この付近の山データがありません"
-    state.offline -> "オフライン: 保存済みのデータで表示中"
-    state.settings.manualFetch && state.incomplete -> "この付近の山データがありません。左下の更新ボタンで取得できます"
-    else -> null
+private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String? {
+    // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。欠けているのはたいてい取得半径の外縁なので、周辺に保存済みの山があれば「周辺の一部」と言う。
+    val missing = if (state.mountains.isEmpty() && state.summit == null) "この付近の山データがありません" else "周辺の一部の山データがありません"
+    return when {
+        state.location == null -> "現在地を取得しています…"
+        !headingAvailable -> "方位センサーの値を待っています…"
+        state.loading -> "山データを取得中…"
+        !state.connected && state.incomplete -> "圏外のため、$missing"
+        !state.connected -> "圏外: 保存済みのデータで表示中"
+        state.offline && state.incomplete -> "通信できず、$missing"
+        state.offline -> "オフライン: 保存済みのデータで表示中"
+        state.settings.manualFetch && state.incomplete -> "$missing。左下の更新ボタンで取得できます"
+        else -> null
+    }
 }
 
 @Composable
