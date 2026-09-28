@@ -9,7 +9,6 @@ updates:
     schedule:
       interval: weekly
       timezone: Asia/Tokyo
-    labels: [dependencies, android]
     groups:
       gradle-minor-patch:
         update-types: [minor, patch]
@@ -20,7 +19,6 @@ updates:
     schedule:
       interval: weekly
       timezone: Asia/Tokyo
-    labels: [dependencies, ci]
     groups:
       actions:
         patterns: ["*"]
