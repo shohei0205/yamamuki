@@ -52,6 +52,12 @@ class OverpassClientTest {
         val engine = MockEngine { respondError(HttpStatusCode.GatewayTimeout) }
         val client = OverpassClient(HttpClient(engine), endpoints = listOf("https://a.example/api/interpreter"))
 
-        assertFailsWith<OverpassException> { client.fetchPeaks(box) }
+        val e = assertFailsWith<OverpassException> { client.fetchPeaks(box) }
+        assertEquals(504, e.httpStatus, "取り直しの待ち時間を決められるよう、HTTP ステータスを伝える")
+    }
+
+    @Test
+    fun usesOnlyMainInstanceByDefault() {
+        assertEquals(listOf("https://overpass-api.de/api/interpreter"), OverpassClient.DEFAULT_ENDPOINTS)
     }
 }
