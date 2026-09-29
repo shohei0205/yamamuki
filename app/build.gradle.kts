@@ -14,8 +14,8 @@ android {
         applicationId = "io.github.shohei0205.yamamuki"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     // 配布版の署名鍵。キーストアとパスワードはリポジトリに入れず、PC 内の properties ファイルから読む
