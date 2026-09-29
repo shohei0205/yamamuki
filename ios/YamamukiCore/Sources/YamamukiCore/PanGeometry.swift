@@ -16,13 +16,9 @@ public enum PanGeometry {
         return drag(observer, dx: initialOffset.x * remaining, dy: -initialOffset.y * remaining, scale: 1, heading: heading)
     }
 
-    public static func interpolateCenter(_ from: MapCenter, to: MapCenter, fraction: Double) -> MapCenter {
-        if fraction <= 0 { return from }
-        if fraction >= 1 || from == to { return to }
-        let offset = DialGeometry.project(
-            distanceKm: GeoMath.distanceKm(from.latitude, from.longitude, to.latitude, to.longitude),
-            bearingDeg: GeoMath.bearingDeg(from.latitude, from.longitude, to.latitude, to.longitude), headingDeg: 0)
-        return drag(from, dx: -offset.x * fraction, dy: offset.y * fraction, scale: 1, heading: 0)
+    /// 復帰中の方角。fraction に応じて heading から target へ、北をまたぐときも近い向きに回す。
+    public static func returnHeading(_ heading: Double, target: Double, fraction: Double) -> Double {
+        Heading.normalize(heading + Heading.delta(heading, target) * min(1, max(0, fraction)))
     }
 
     public static func northUpHeading(_ heading: Double, progress: Double) -> Double {

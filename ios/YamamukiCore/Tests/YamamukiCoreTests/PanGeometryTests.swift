@@ -11,8 +11,9 @@ final class PanGeometryTests: XCTestCase {
             for targetHeading in [10.0, 90.0, 180.0, 270.0] {
                 for t in [0.0, 0.25, 0.5, 0.75, 1.0] {
                     let fraction = t * t * (3 - 2 * t)
-                    let observer = PanGeometry.interpolateCenter(tokyo, to: MapCenter(35.7, 139.82), fraction: fraction)
-                    let heading = Heading.normalize(350 + Heading.delta(350, targetHeading) * fraction)
+                    // 復帰中に GPS の現在地が少しずつ動いても、双眼鏡は画面上の直線に沿って戻る。
+                    let observer = MapCenter(tokyo.latitude + 0.004 * t, tokyo.longitude + 0.006 * t)
+                    let heading = PanGeometry.returnHeading(350, target: targetHeading, fraction: fraction)
                     let viewport = PanGeometry.returnViewport(observer, initialOffset: offset, heading: heading, fraction: fraction)
                     let actual = PanGeometry.observerOffset(observer, viewport: viewport, heading: heading)
                     XCTAssertEqual(actual.x, offset.x * (1 - fraction), accuracy: 1e-7)
@@ -23,18 +24,11 @@ final class PanGeometryTests: XCTestCase {
         }
     }
 
-    func testReturnToLocationInterpolatesContinuouslyAndEndsExactlyAtTarget() {
-        for (from, to) in [(tokyo, MapCenter(35.75, 139.9)), (MapCenter(0, 179.9), MapCenter(0, -179.9))] {
-            let distance = GeoMath.distanceKm(from.latitude, from.longitude, to.latitude, to.longitude)
-            XCTAssertEqual(PanGeometry.interpolateCenter(from, to: to, fraction: 0), from)
-            XCTAssertEqual(PanGeometry.interpolateCenter(from, to: to, fraction: 1), to)
-            for fraction in [0.25, 0.5, 0.75] {
-                let point = PanGeometry.interpolateCenter(from, to: to, fraction: fraction)
-                XCTAssertEqual(GeoMath.distanceKm(from.latitude, from.longitude, point.latitude, point.longitude), distance * fraction, accuracy: 1e-6)
-            }
-        }
-        XCTAssertEqual(PanGeometry.interpolateCenter(tokyo, to: tokyo, fraction: 0.5), tokyo)
-        XCTAssertEqual(Heading.normalize(350 + Heading.delta(350, 10) * 0.5), 0, accuracy: 1e-8)
+    func testReturnHeadingCrossesNorthTheShortWay() {
+        XCTAssertEqual(PanGeometry.returnHeading(350, target: 10, fraction: 0.5), 0, accuracy: 1e-8)
+        XCTAssertEqual(PanGeometry.returnHeading(10, target: 310, fraction: 0.5), 340, accuracy: 1e-8)
+        XCTAssertEqual(PanGeometry.returnHeading(350, target: 10, fraction: 0), 350, accuracy: 1e-8)
+        XCTAssertEqual(PanGeometry.returnHeading(350, target: 10, fraction: 1), 10, accuracy: 1e-8)
     }
 
     func testHeadingDragKeepsChosenPivotAcrossNorthAndRepeatedUpdates() {

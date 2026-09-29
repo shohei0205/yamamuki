@@ -228,11 +228,11 @@ fun DialScreen(
             onMountainTap = { selectedId = it.mountain.osmId },
             onObserverTap = { showObserver = true },
             summit = state.summit,
-            altitudeM = state.observerLocation?.mslAltitudeM,
+            altitudeM = location?.mslAltitudeM,
             maxPeaks = state.settings.maxPeaks,
             textScale = state.settings.textScale,
-            latitude = state.observerLocation?.latitude,
-            longitude = state.observerLocation?.longitude,
+            latitude = location?.latitude,
+            longitude = location?.longitude,
             viewportLatitude = state.location?.latitude,
             viewportLongitude = state.location?.longitude,
         )
@@ -368,18 +368,12 @@ fun DialScreen(
 
     val overlay = showSettings || showDownload
     if (selected != null && !overlay) {
-        MountainDetailDialog(selected, fromCenter = state.exploring, onDismiss = { selectedId = null })
+        MountainDetailDialog(selected, onDismiss = { selectedId = null })
     }
 
-    // 現在地を取れる前は出す値がないので開かない。ヘディングアップ中は開いている間も歩けば値が更新される
-    // (手動位置モードでは双眼鏡の位置のまま)。
+    // 現在地を取れる前は出す値がないので開かない。開いている間も歩けば値が更新される。
     if (showObserver && location != null && !overlay) {
-        // 手動位置モードの双眼鏡は移動を始めた地点に残るので、その地点を出す。
-        ObserverDetailDialog(
-            state.observerLocation ?: location,
-            title = if (state.exploring) "双眼鏡の位置" else "現在地",
-            onDismiss = { showObserver = false },
-        )
+        ObserverDetailDialog(location, onDismiss = { showObserver = false })
     }
 }
 
@@ -418,7 +412,7 @@ private fun FetchErrorDialog(message: String, onRetry: () -> Unit, onDismiss: ()
 
 /** タップした山の詳細。 */
 @Composable
-private fun MountainDetailDialog(nearby: NearbyMountain, fromCenter: Boolean, onDismiss: () -> Unit) {
+private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) {
     val m = nearby.mountain
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -428,19 +422,19 @@ private fun MountainDetailDialog(nearby: NearbyMountain, fromCenter: Boolean, on
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DetailRow("標高", m.elevationText())
                 DetailRow("緯度経度", m.coordinateText())
-                DetailRow(if (fromCenter) "双眼鏡の位置からの距離" else "現在地からの距離", distanceText(nearby.distanceKm))
+                DetailRow("現在地からの距離", distanceText(nearby.distanceKm))
             }
         },
     )
 }
 
-/** 双眼鏡(現在地、手動位置モードでは移動を始めた地点)をタップしたときの詳細。距離は常に 0 なので出さない。 */
+/** 双眼鏡(現在地)をタップしたときの詳細。距離は常に 0 なので出さない。 */
 @Composable
-private fun ObserverDetailDialog(location: GeoPoint, title: String, onDismiss: () -> Unit) {
+private fun ObserverDetailDialog(location: GeoPoint, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
-        title = { Text(title) },
+        title = { Text("現在地") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DetailRow("緯度経度", coordinateText(location.latitude, location.longitude))

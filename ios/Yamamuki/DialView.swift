@@ -24,10 +24,10 @@ struct DialView: View {
                     mountains: model.mountains,
                     rangeKm: model.rangeKm,
                     summit: model.summit,
-                    altitudeM: model.observerLocation?.mslAltitudeM,
+                    altitudeM: model.gpsLocation?.mslAltitudeM,
                     maxPeaks: model.settings.maxPeaks,
                     textScale: model.settings.textScale,
-                    observerLocation: model.observerLocation,
+                    observerLocation: model.gpsLocation,
                     viewportLocation: model.location,
                     compassHeading: model.heading ?? model.displayHeading,
                     headingUp: !model.exploring,
@@ -138,9 +138,9 @@ struct DialView: View {
             AreaDownloadView(model: model, download: model.areaDownload).fetchErrorAlert(model)
         }
         .sheet(item: selectedMountain) { nearby in
-            MountainDetailView(nearby: nearby, fromObserver: model.exploring).fetchErrorAlert(model)
+            MountainDetailView(nearby: nearby).fetchErrorAlert(model)
         }
-        // ヘディングアップ中は開いている間も歩けば値が更新される(手動位置モードでは双眼鏡の位置のまま)。
+        // 開いている間も歩けば値が更新される。
         .sheet(isPresented: $showObserver) {
             ObserverDetailView(model: model).fetchErrorAlert(model)
         }
@@ -313,7 +313,6 @@ private struct PermissionRequest: View {
 /// タップした山の詳細。
 private struct MountainDetailView: View {
     let nearby: NearbyMountain
-    let fromObserver: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -326,7 +325,7 @@ private struct MountainDetailView: View {
             }
             DetailRow(label: "標高", value: m.elevationText)
             DetailRow(label: "緯度経度", value: m.coordinateText)
-            DetailRow(label: fromObserver ? "双眼鏡の位置からの距離" : "現在地からの距離", value: distanceText(nearby.distanceKm))
+            DetailRow(label: "現在地からの距離", value: distanceText(nearby.distanceKm))
             Spacer()
         }
         .padding(24)
@@ -334,7 +333,7 @@ private struct MountainDetailView: View {
     }
 }
 
-/// 双眼鏡(現在地、手動位置モードでは移動を始めた地点)をタップしたときの詳細。距離は常に 0 なので出さない。
+/// 双眼鏡(現在地)をタップしたときの詳細。距離は常に 0 なので出さない。
 private struct ObserverDetailView: View {
     @ObservedObject var model: DialModel
     @Environment(\.dismiss) private var dismiss
@@ -342,12 +341,11 @@ private struct ObserverDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(model.exploring ? "双眼鏡の位置" : "現在地").font(.title2.bold())
+                Text("現在地").font(.title2.bold())
                 Spacer()
                 Button("閉じる") { dismiss() }
             }
-            // 手動位置モードの双眼鏡は移動を始めた地点に残るので、その地点を出す。
-            if let here = model.observerLocation ?? model.gpsLocation {
+            if let here = model.gpsLocation {
                 DetailRow(label: "緯度経度", value: coordinateText(latitude: here.latitude, longitude: here.longitude))
                 DetailRow(label: "標高", value: elevationText(here.mslAltitudeM))
             }

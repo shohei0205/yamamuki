@@ -12,8 +12,9 @@ class PanGeometryTest {
             for (targetHeading in listOf(10.0, 90.0, 180.0, 270.0)) {
                 for (t in listOf(0.0, 0.25, 0.5, 0.75, 1.0)) {
                     val fraction = t * t * (3 - 2 * t)
-                    val observer = PanGeometry.interpolateCenter(tokyo, MapCenter(35.7, 139.82), fraction)
-                    val heading = Heading.normalize(350.0 + Heading.delta(350.0, targetHeading) * fraction)
+                    // 復帰中に GPS の現在地が少しずつ動いても、双眼鏡は画面上の直線に沿って戻る。
+                    val observer = MapCenter(tokyo.latitude + 0.004 * t, tokyo.longitude + 0.006 * t)
+                    val heading = PanGeometry.returnHeading(350.0, targetHeading, fraction)
                     val viewport = PanGeometry.returnViewport(observer, offset, heading, fraction)
                     val actual = PanGeometry.observerOffset(observer, viewport, heading)
                     assertEquals(offset.x * (1 - fraction), actual.x, 1e-7)
@@ -24,18 +25,11 @@ class PanGeometryTest {
         }
     }
 
-    @Test fun returnToLocationInterpolatesContinuouslyAndEndsExactlyAtTarget() {
-        for ((from, to) in listOf(tokyo to MapCenter(35.75, 139.9), MapCenter(0.0, 179.9) to MapCenter(0.0, -179.9))) {
-            val distance = GeoMath.distanceKm(from.latitude, from.longitude, to.latitude, to.longitude)
-            assertEquals(from, PanGeometry.interpolateCenter(from, to, 0.0))
-            assertEquals(to, PanGeometry.interpolateCenter(from, to, 1.0))
-            for (fraction in listOf(0.25, 0.5, 0.75)) {
-                val point = PanGeometry.interpolateCenter(from, to, fraction)
-                assertEquals(distance * fraction, GeoMath.distanceKm(from.latitude, from.longitude, point.latitude, point.longitude), 1e-6)
-            }
-        }
-        assertEquals(tokyo, PanGeometry.interpolateCenter(tokyo, tokyo, 0.5))
-        assertEquals(0.0, Heading.normalize(350.0 + Heading.delta(350.0, 10.0) * 0.5), 1e-8)
+    @Test fun returnHeadingCrossesNorthTheShortWay() {
+        assertEquals(0.0, PanGeometry.returnHeading(350.0, 10.0, 0.5), 1e-8)
+        assertEquals(340.0, PanGeometry.returnHeading(10.0, 310.0, 0.5), 1e-8)
+        assertEquals(350.0, PanGeometry.returnHeading(350.0, 10.0, 0.0), 1e-8)
+        assertEquals(10.0, PanGeometry.returnHeading(350.0, 10.0, 1.0), 1e-8)
     }
 
     @Test fun headingDragKeepsChosenPivotAcrossNorthAndRepeatedUpdates() {

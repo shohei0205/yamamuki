@@ -42,10 +42,11 @@ data class GeoPoint(
 )
 
 data class DialUiState(
+    /** 表示範囲の基準の地点。ヘディングアップ中は現在地、手動位置モードでは利用者が動かした地点。 */
     val location: GeoPoint? = null,
+    /** 現在地。双眼鏡の位置と、山までの距離の基準。手動位置モードでも GPS に付いていく。 */
     val gpsLocation: GeoPoint? = null,
     val exploring: Boolean = false,
-    val observerLocation: GeoPoint? = null,
     val lockedHeading: Double? = null,
     /** 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。 */
     val mountains: List<NearbyMountain> = emptyList(),
@@ -120,8 +121,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             newPoint
         }
         _state.update {
-            if (it.exploring) it.copy(gpsLocation = point)
-            else it.copy(gpsLocation = point, location = point, observerLocation = point).withPeaksAt(point)
+            // 手動位置モードでは表示範囲を動かさず、双眼鏡と山までの距離だけを現在地に合わせる。
+            it.copy(gpsLocation = point, location = if (it.exploring) it.location else point).withPeaksAt(point)
         }
         if (_state.value.exploring) return
         val center = fetchedCenter
@@ -145,8 +146,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             chartHeightPx / state.value.rangeKm, state.value.lockedHeading ?: headingDeg)
         if (next.latitude == here.latitude && next.longitude == here.longitude) return
         val point = GeoPoint(next.latitude, next.longitude)
-        _state.update { it.copy(location = point, exploring = true,
-            observerLocation = it.observerLocation ?: here, lockedHeading = it.lockedHeading ?: headingDeg) }
+        _state.update { it.copy(location = point, exploring = true, lockedHeading = it.lockedHeading ?: headingDeg) }
         fetchForViewport()
     }
 
@@ -154,9 +154,9 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         northUpJob?.cancel()
         val initial = state.value
         val startLocation = initial.location ?: return
-        val startObserver = initial.observerLocation ?: startLocation
-        if (initial.gpsLocation == null) return
+        val startObserver = initial.gpsLocation ?: return
         val startHeading = initial.lockedHeading ?: compassHeading()
+        // 双眼鏡は現在地に付いているので、表示範囲と方角だけを戻す。途中で止めても双眼鏡は現在地に残る。
         val initialOffset = PanGeometry.observerOffset(MapCenter(startObserver.latitude, startObserver.longitude),
             MapCenter(startLocation.latitude, startLocation.longitude), startHeading)
         northUpJob = viewModelScope.launch {
@@ -165,18 +165,12 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                 val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
                 val fraction = t * t * (3 - 2 * t)
                 val target = state.value.gpsLocation ?: return@launch
-                fun interpolate(from: GeoPoint): GeoPoint {
-                    val point = PanGeometry.interpolateCenter(MapCenter(from.latitude, from.longitude),
-                        MapCenter(target.latitude, target.longitude), fraction)
-                    return target.copy(latitude = point.latitude, longitude = point.longitude)
-                }
-                val observer = interpolate(startObserver)
-                val heading = Heading.normalize(startHeading + Heading.delta(startHeading, compassHeading()) * fraction)
-                val viewport = PanGeometry.returnViewport(MapCenter(observer.latitude, observer.longitude), initialOffset, heading, fraction)
+                val heading = PanGeometry.returnHeading(startHeading, compassHeading(), fraction)
+                val viewport = PanGeometry.returnViewport(MapCenter(target.latitude, target.longitude), initialOffset, heading, fraction)
                 _state.update { it.copy(
-                    location = target.copy(latitude = viewport.latitude, longitude = viewport.longitude), observerLocation = observer,
+                    location = target.copy(latitude = viewport.latitude, longitude = viewport.longitude),
                     exploring = t < 1.0, lockedHeading = if (t < 1.0) heading else null,
-                ).withPeaksAt(observer) }
+                ) }
                 if (t >= 1.0) break
                 delay(16)
             } while (true)
@@ -190,7 +184,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         northUpJob?.cancel()
         val initial = state.value
         val here = initial.location ?: return
-        val observer = initial.observerLocation ?: here
+        val observer = initial.gpsLocation ?: here
         val startHeading = initial.lockedHeading ?: headingDeg
         val aroundCenter = !PanGeometry.isObserverVisible(
             MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
@@ -208,7 +202,6 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                     location = if (next.latitude == here.latitude && next.longitude == here.longitude) here
                         else GeoPoint(next.latitude, next.longitude),
                     exploring = true,
-                    observerLocation = observer,
                     lockedHeading = PanGeometry.northUpHeading(startHeading, progress),
                 ) }
                 if (progress >= 1.0) break
@@ -224,7 +217,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         if (!dxPx.isFinite() || widthPx <= 0 || canvasHeight <= DialGeometry.CHART_INSET_DP) return
         val current = state.value
         val here = current.location ?: return
-        val observer = current.observerLocation ?: here
+        val observer = current.gpsLocation ?: here
         val oldHeading = current.lockedHeading ?: headingDeg
         val observerPoint = MapCenter(observer.latitude, observer.longitude)
         val viewport = MapCenter(here.latitude, here.longitude)
@@ -233,7 +226,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val nextHeading = DialGeometry.swipedHeading(oldHeading, dxPx.toDouble(), widthPx.toDouble())
         val next = PanGeometry.rotateViewport(observerPoint, viewport, oldHeading, nextHeading,
             current.rangeKm, canvasHeight, headingSwipeAroundCenter)
-        _state.update { it.copy(exploring = true, observerLocation = observer,
+        _state.update { it.copy(exploring = true,
             location = if (next == viewport) here else GeoPoint(next.latitude, next.longitude), lockedHeading = nextHeading) }
         fetchForViewport()
     }
@@ -244,7 +237,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val current = state.value
         val heading = current.lockedHeading
         if (!current.exploring || heading == null) { onZoom(zoom); return }
-        val observer = current.observerLocation ?: return
+        val observer = current.gpsLocation ?: return
         val viewport = current.location ?: return
         if (!rotationDeg.isFinite() || chartHeightPx <= 0) return
         val range = DialGeometry.zoomedRange(current.rangeKm, zoom)
@@ -293,7 +286,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(settings = after) }
 
         if (after.minElevationM != before.minElevationM) {
-            _state.value.observerLocation?.let { here -> _state.update { it.withPeaksAt(here) } }
+            _state.value.gpsLocation?.let { here -> _state.update { it.withPeaksAt(here) } }
         }
         // 起動時の範囲を変えたら、試しやすいよう今の表示にもすぐ反映する。
         if (after.initialRangeKm != before.initialRangeKm) {
@@ -331,7 +324,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val result = repository.mountainsAround(here.latitude, here.longitude, radius, allowNetwork = false)
             peaks = result.mountains.map { it.mountain }
-            _state.update { it.withPeaksAt(it.location ?: here).copy(incomplete = result.incomplete) }
+            _state.update { it.withPeaksAt(it.gpsLocation ?: here).copy(incomplete = result.incomplete) }
         }
     }
 
@@ -371,7 +364,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             val hasCache = peaks.isNotEmpty()
             val error = result.error
             _state.update {
-                it.withPeaksAt(it.observerLocation ?: here).copy(
+                it.withPeaksAt(it.gpsLocation ?: here).copy(
                     loading = false,
                     offline = error != null || skippedOffline,
                     incomplete = result.incomplete,
