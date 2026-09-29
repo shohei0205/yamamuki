@@ -220,6 +220,7 @@ fun DialScreen(
         DialCanvas(
             headingDeg = heading ?: 0.0,
             compassHeadingDeg = compassHeading ?: heading ?: 0.0,
+            headingUp = !state.exploring,
             mountains = state.mountains,
             rangeKm = state.rangeKm,
             modifier = Modifier.fillMaxSize(),

@@ -30,6 +30,7 @@ struct DialView: View {
                     observerLocation: model.observerLocation,
                     viewportLocation: model.location,
                     compassHeading: model.heading ?? model.displayHeading,
+                    headingUp: !model.exploring,
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
                     onHeadingSwipe: { model.onHeadingSwipe(dx: $0, width: $1, canvasHeight: Double(geometry.size.height), started: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },

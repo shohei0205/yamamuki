@@ -109,6 +109,7 @@ fun DialCanvas(
     viewportLatitude: Double? = latitude,
     viewportLongitude: Double? = longitude,
     compassHeadingDeg: Double = headingDeg,
+    headingUp: Boolean = true,
 ) {
     val styles = remember(textScale) { DialTextStyles(textScale) }
     val textMeasurer = rememberTextMeasurer(cacheSize = 256)
@@ -136,7 +137,7 @@ fun DialCanvas(
         else PlanOffset(0.0, 0.0)
         val observer = origin + Offset((offset.x * pxPerKm).toFloat(), (-offset.y * pxPerKm).toFloat())
         hitTargets.peaks = if (pxPerKm > 0f) {
-            drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, hitTargets.ringAngles)
+            hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, hitTargets.ringLabelAngle, headingUp)
             drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
         } else {
             emptyList()
@@ -165,16 +166,17 @@ private fun DrawScope.drawRings(
     chartTop: Float,
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
-    previousAngles: MutableMap<Double, Double>,
-) {
+    previousAngle: Double?,
+    headingUp: Boolean,
+): Double {
     val step = DialGeometry.ringStepKm(rangeKm)
     val farthestPx = hypot(max(kotlin.math.abs(observer.x), kotlin.math.abs(size.width - observer.x)),
         max(kotlin.math.abs(chartTop - observer.y), kotlin.math.abs(size.height - observer.y)))
     val nearestPx = hypot(max(0f, max(-observer.x, observer.x - size.width)),
         max(0f, max(chartTop - observer.y, observer.y - size.height)))
     var i = max(1, (nearestPx / (step * pxPerKm)).toInt())
-    val labels = mutableListOf<Triple<TextLayoutResult, Offset, Box>>()
-    val angles = mutableMapOf<Double, Double>()
+    val rings = mutableListOf<Pair<Float, TextLayoutResult>>()
+    var angle = -Math.PI / 2
     val pad = 3.dp.toPx()
     clipRect(top = chartTop, bottom = size.height - 52.dp.toPx()) {
         while (step * i * pxPerKm <= farthestPx) {
@@ -182,27 +184,35 @@ private fun DrawScope.drawRings(
             val radius = (km * pxPerKm).toFloat()
             drawCircle(RingGray, radius = radius, center = observer, style = Stroke(width = 3.dp.toPx()))
             val label = textMeasurer.measure(DialGeometry.ringLabel(km), styles.ringLabel.copy(color = Color(0xFF666666)))
+            rings += radius to label
+            i++
+        }
+        fun placements(direction: Double): List<Triple<TextLayoutResult, Offset, Box>> {
+            val labels = mutableListOf<Triple<TextLayoutResult, Offset, Box>>()
+            for ((radius, label) in rings) {
             val anchor = RingLabelGeometry.place(observer.x.toDouble(), observer.y.toDouble(), radius.toDouble(),
                 0.0, chartTop.toDouble(), size.width.toDouble(), (size.height - 52.dp.toPx()).toDouble(),
                 (label.size.width + pad * 2).toDouble(), (label.size.height + pad * 2).toDouble(),
-                2.dp.toPx().toDouble(), previousAngles[km])
+                direction)
             if (anchor != null) {
-                angles[km] = anchor.angle
                 val textOrigin = Offset(anchor.x.toFloat() - label.size.width / 2f, anchor.y.toFloat() - label.size.height / 2f)
                 val box = Box(textOrigin.x - pad, textOrigin.y - pad,
                     textOrigin.x + label.size.width + pad, textOrigin.y + label.size.height + pad)
                 if (labels.none { it.third.intersects(box) }) labels += Triple(label, textOrigin, box)
             }
-            i++
+            }
+            return labels
         }
-        for ((label, origin, box) in labels) {
+        if (!headingUp) angle = RingLabelGeometry.direction(observer.x.toDouble(), observer.y.toDouble(),
+            0.0, chartTop.toDouble(), size.width.toDouble(), (size.height - 52.dp.toPx()).toDouble(),
+            previousAngle, visibleCount = { placements(it).size })
+        for ((label, origin, box) in placements(angle)) {
             drawRoundRect(Color.White.copy(alpha = 0.85f), topLeft = Offset(box.left, box.top),
                 size = Size(box.right - box.left, box.bottom - box.top), cornerRadius = CornerRadius(pad, pad))
             drawText(label, topLeft = origin)
         }
     }
-    previousAngles.clear()
-    previousAngles.putAll(angles)
+    return angle
 }
 
 private class PlacedPeak(
@@ -215,7 +225,7 @@ private class PlacedPeak(
 
 /** 直近に描いた山。描画のたびに差し替え、タップ位置から山を引く。 */
 private class HitTargets {
-    val ringAngles = mutableMapOf<Double, Double>()
+    var ringLabelAngle: Double? = null
     var peaks: List<PlacedPeak> = emptyList()
 
     /** 現在地の山頂アイコンと山名。山と重なっても優先する。 */
