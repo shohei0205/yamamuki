@@ -71,7 +71,7 @@ struct DialView: View {
                 .onEnded { _ in lastMagnification = 1 }
         )
         .onAppear { model.start() }
-        .onChange(of: scenePhase) { phase in
+        .onChange(of: scenePhase) { _, phase in
             if phase == .active { model.start() } else { model.stop() }
         }
         // 屋外で山を見比べている間に画面が消えないようにする(設定で選んだときだけ)。
@@ -331,13 +331,8 @@ private struct DetailRow: View {
 }
 
 private extension View {
-    /// 詳細のシートを半分の高さで出す。iOS 15 には高さの指定がないので、全画面のシートになる。
-    @ViewBuilder
+    /// 詳細のシートを半分の高さで出す。
     func mediumDetent() -> some View {
-        if #available(iOS 16, *) {
-            presentationDetents([.medium])
-        } else {
-            self
-        }
+        presentationDetents([.medium])
     }
 }
