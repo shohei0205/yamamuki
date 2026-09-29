@@ -67,9 +67,9 @@ public struct OverpassClient: MountainRemoteSource {
             request.httpBody = Data("data=\(formEncode(query))".utf8)
             do {
                 let (data, response) = try await session.data(for: request)
-                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                guard (200..<300).contains(status) else {
-                    errors.append(OverpassError("HTTP \(status) from \(endpoint.absoluteString)", httpStatus: status))
+                let status = (response as? HTTPURLResponse)?.statusCode
+                guard let status, (200..<300).contains(status) else {
+                    errors.append(OverpassError("HTTP \(status.map { "\($0)" } ?? "-") from \(endpoint.absoluteString)", httpStatus: status))
                     continue
                 }
                 return try OverpassParser.parse(String(decoding: data, as: UTF8.self))

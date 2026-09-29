@@ -115,7 +115,6 @@ final class AreaDownloadTests: XCTestCase {
         XCTAssertEqual(failing.calls.count, 3, "最初の 1 回 + 取り直し 2 回")
     }
 
-
     func testWaitsLongerAfterTooManyRequests() async throws {
         // 429 のときは retryDelays より長く、少なくとも rateLimitWait 待ってから取り直す。504 などはそのままの間隔。
         let limited = FakeRemote([yari])
