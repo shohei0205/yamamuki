@@ -140,7 +140,7 @@ struct DialView: View {
         .sheet(item: selectedMountain) { nearby in
             MountainDetailView(nearby: nearby, fromObserver: model.exploring).fetchErrorAlert(model)
         }
-        // 開いている間も歩けば値が更新される。
+        // ヘディングアップ中は開いている間も歩けば値が更新される(手動位置モードでは双眼鏡の位置のまま)。
         .sheet(isPresented: $showObserver) {
             ObserverDetailView(model: model).fetchErrorAlert(model)
         }
@@ -334,7 +334,7 @@ private struct MountainDetailView: View {
     }
 }
 
-/// 双眼鏡(現在地)をタップしたときの詳細。距離は常に 0 なので出さない。
+/// 双眼鏡(現在地、手動位置モードでは移動を始めた地点)をタップしたときの詳細。距離は常に 0 なので出さない。
 private struct ObserverDetailView: View {
     @ObservedObject var model: DialModel
     @Environment(\.dismiss) private var dismiss

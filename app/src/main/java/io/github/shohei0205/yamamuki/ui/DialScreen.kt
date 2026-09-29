@@ -371,7 +371,8 @@ fun DialScreen(
         MountainDetailDialog(selected, fromCenter = state.exploring, onDismiss = { selectedId = null })
     }
 
-    // 現在地を取れる前は出す値がないので開かない。開いている間も歩けば値が更新される。
+    // 現在地を取れる前は出す値がないので開かない。ヘディングアップ中は開いている間も歩けば値が更新される
+    // (手動位置モードでは双眼鏡の位置のまま)。
     if (showObserver && location != null && !overlay) {
         // 手動位置モードの双眼鏡は移動を始めた地点に残るので、その地点を出す。
         ObserverDetailDialog(
