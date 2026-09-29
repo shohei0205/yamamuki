@@ -186,7 +186,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。 */
     fun faceNorth(headingDeg: Double, canvasWidth: Double, canvasHeight: Double) {
-        if (!canvasHeight.isFinite() || canvasHeight <= 128) return
+        if (!canvasHeight.isFinite() || canvasHeight <= DialGeometry.CHART_INSET_DP) return
         northUpJob?.cancel()
         val initial = state.value
         val here = initial.location ?: return
@@ -221,7 +221,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun onHeadingSwipe(dxPx: Float, widthPx: Float, headingDeg: Double,
         canvasWidth: Double, canvasHeight: Double, started: Boolean) {
         northUpJob?.cancel()
-        if (!dxPx.isFinite() || widthPx <= 0 || canvasHeight <= 128) return
+        if (!dxPx.isFinite() || widthPx <= 0 || canvasHeight <= DialGeometry.CHART_INSET_DP) return
         val current = state.value
         val here = current.location ?: return
         val observer = current.observerLocation ?: here

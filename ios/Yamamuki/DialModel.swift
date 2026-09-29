@@ -104,7 +104,8 @@ final class DialModel: ObservableObject {
     }
 
     func stop() {
-        northUpTask?.cancel()
+        // 北向き・現在地への復帰のアニメーションは止めない。コントロールセンターを引き出すなど
+        // 非アクティブになっただけで途中の位置と方角に取り残されないよう、戻ったら最後まで進める。
         locationService.stop()
     }
 
@@ -164,7 +165,7 @@ final class DialModel: ObservableObject {
 
     /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。
     func faceNorth(canvasWidth: Double, canvasHeight: Double) {
-        guard let viewport = location, canvasHeight.isFinite, canvasHeight > 128 else { return }
+        guard let viewport = location, canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset else { return }
         northUpTask?.cancel()
         let observer = observerLocation ?? viewport
         let startHeading = displayHeading
@@ -192,7 +193,7 @@ final class DialModel: ObservableObject {
 
     func onHeadingSwipe(dx: Double, width: Double, canvasHeight: Double, started: Bool) {
         northUpTask?.cancel()
-        guard let here = location, dx.isFinite, width.isFinite, width > 0, canvasHeight > 128 else { return }
+        guard let here = location, dx.isFinite, width.isFinite, width > 0, canvasHeight > DialGeometry.chartInset else { return }
         let observer = observerLocation ?? here
         let observerPoint = MapCenter(observer.latitude, observer.longitude)
         let viewport = MapCenter(here.latitude, here.longitude)

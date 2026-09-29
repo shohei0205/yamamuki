@@ -3,6 +3,8 @@ import XCTest
 
 final class PanGeometryTests: XCTestCase {
     private let tokyo = MapCenter(35.696, 139.814)
+    /// 高さ 800pt の画面で 1km = 10pt になる表示範囲。
+    private let range800 = (800 - DialGeometry.chartInset) / 10
 
     func testReturnPathIsStraightOnScreenWhileHeadingAndGpsChange() {
         for offset in [PlanOffset(x: 12, y: -8), PlanOffset(x: -30, y: 20), PlanOffset(x: 0, y: 0)] {
@@ -39,14 +41,14 @@ final class PanGeometryTests: XCTestCase {
         for aroundCenter in [false, true] {
             var viewport = PanGeometry.drag(tokyo, dx: -100, dy: -100, scale: 10, heading: 359)
             var heading = 359.0
-            let pivot = aroundCenter ? PlanOffset(x: 0, y: -348) : screen(tokyo, viewport: viewport, heading: heading, scale: 10)
+            let pivot = aroundCenter ? PlanOffset(x: 0, y: DialGeometry.originBottom - 800 / 2) : screen(tokyo, viewport: viewport, heading: heading, scale: 10)
             let landmark = aroundCenter ? PanGeometry.transformViewport(tokyo, viewport: viewport,
                 previous: pivot, midpoint: PlanOffset(x: 0, y: 0), oldScale: 10, newScale: 10,
                 oldHeading: heading, newHeading: heading) : tokyo
             for dx in [-12.0, -60.0, 180.0, -360.0] {
                 let nextHeading = DialGeometry.swipedHeading(heading, dx: dx, width: 360)
                 viewport = PanGeometry.rotateViewport(tokyo, viewport: viewport, heading: heading, nextHeading: nextHeading,
-                    rangeKm: 67.2, canvasHeight: 800, aroundCenter: aroundCenter)
+                    rangeKm: range800, canvasHeight: 800, aroundCenter: aroundCenter)
                 heading = nextHeading
                 let actual = screen(landmark, viewport: viewport, heading: heading, scale: 10)
                 XCTAssertEqual(actual.x, pivot.x, accuracy: 1e-6)
@@ -59,11 +61,11 @@ final class PanGeometryTests: XCTestCase {
         for heading in [45.0, 90.0, 270.0, 359.0] {
             let viewport = PanGeometry.drag(tokyo, dx: -100, dy: -100, scale: 10, heading: heading)
             XCTAssertTrue(PanGeometry.isObserverVisible(tokyo, viewport: viewport, heading: heading,
-                rangeKm: 67.2, canvasWidth: 360, canvasHeight: 800))
+                rangeKm: range800, canvasWidth: 360, canvasHeight: 800))
             let before = screen(tokyo, viewport: viewport, heading: heading, scale: 10)
             for progress in [0.0, 0.25, 0.5, 0.75, 1.0] {
                 let next = PanGeometry.northUpViewport(tokyo, viewport: viewport, heading: heading,
-                    rangeKm: 67.2, canvasHeight: 800, progress: progress, aroundCenter: false)
+                    rangeKm: range800, canvasHeight: 800, progress: progress, aroundCenter: false)
                 let after = screen(tokyo, viewport: next, heading: PanGeometry.northUpHeading(heading, progress: progress), scale: 10)
                 XCTAssertEqual(before.x, after.x, accuracy: 1e-6)
                 XCTAssertEqual(before.y, after.y, accuracy: 1e-6)
@@ -71,7 +73,7 @@ final class PanGeometryTests: XCTestCase {
             for (dx, dy) in [(300.0, -100.0), (-300.0, -100.0), (0.0, -750.0), (0.0, 100.0)] {
                 let outside = PanGeometry.drag(tokyo, dx: dx, dy: dy, scale: 10, heading: heading)
                 XCTAssertFalse(PanGeometry.isObserverVisible(tokyo, viewport: outside, heading: heading,
-                    rangeKm: 67.2, canvasWidth: 360, canvasHeight: 800))
+                    rangeKm: range800, canvasWidth: 360, canvasHeight: 800))
             }
         }
     }
@@ -82,8 +84,8 @@ final class PanGeometryTests: XCTestCase {
             for height in [480.0, 900.0] {
                 for range in [10.0, 80.0] {
                     for heading in [0.0, 45.0, 90.0, 180.0, 359.0] {
-                        let scale = (height - 128) / range
-                        let pivotY = 52 - height / 2
+                        let scale = (height - DialGeometry.chartInset) / range
+                        let pivotY = DialGeometry.originBottom - height / 2
                         let center = DialGeometry.project(
                             distanceKm: GeoMath.distanceKm(tokyo.latitude, tokyo.longitude, viewport.latitude, viewport.longitude),
                             bearingDeg: GeoMath.bearingDeg(tokyo.latitude, tokyo.longitude, viewport.latitude, viewport.longitude),

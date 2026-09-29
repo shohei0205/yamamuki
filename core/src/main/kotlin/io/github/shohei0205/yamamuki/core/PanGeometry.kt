@@ -28,12 +28,12 @@ object PanGeometry {
     /** 描画される双眼鏡の中心が画面内にあるか。寸法はdp。 */
     fun isObserverVisible(observer: MapCenter, viewport: MapCenter, heading: Double,
         rangeKm: Double, canvasWidth: Double, canvasHeight: Double): Boolean {
-        if (canvasWidth <= 0 || canvasHeight <= 128 || rangeKm <= 0) return false
-        val scale = (canvasHeight - 128.0) / rangeKm
+        if (canvasWidth <= 0 || canvasHeight <= DialGeometry.CHART_INSET_DP || rangeKm <= 0) return false
+        val scale = (canvasHeight - DialGeometry.CHART_INSET_DP) / rangeKm
         val offset = observerOffset(observer, viewport, heading)
         val x = canvasWidth / 2 + offset.x * scale
-        val y = canvasHeight - 52 - offset.y * scale
-        return x in 0.0..canvasWidth && y in 76.0..canvasHeight
+        val y = canvasHeight - DialGeometry.ORIGIN_BOTTOM_DP - offset.y * scale
+        return x in 0.0..canvasWidth && y in DialGeometry.CHART_TOP_DP..canvasHeight
     }
 
     /** 選んだ回転中心をアニメーション中も固定する。高さはdp。 */
@@ -46,11 +46,10 @@ object PanGeometry {
     /** 双眼鏡または画面中央を固定して方角を変える。 */
     fun rotateViewport(observer: MapCenter, viewport: MapCenter, heading: Double, nextHeading: Double,
         rangeKm: Double, canvasHeight: Double, aroundCenter: Boolean): MapCenter {
-        if (!canvasHeight.isFinite() || canvasHeight <= 128 || !rangeKm.isFinite() || rangeKm <= 0 || heading == nextHeading || (!aroundCenter && observer == viewport)) return viewport
-        // 描画原点は画面下端から52dp、地図上端は76dp。
-        val scale = (canvasHeight - 128.0) / rangeKm
+        if (!canvasHeight.isFinite() || canvasHeight <= DialGeometry.CHART_INSET_DP || !rangeKm.isFinite() || rangeKm <= 0 || heading == nextHeading || (!aroundCenter && observer == viewport)) return viewport
+        val scale = (canvasHeight - DialGeometry.CHART_INSET_DP) / rangeKm
         val offset = observerOffset(observer, viewport, heading)
-        val pivot = if (aroundCenter) PlanOffset(0.0, 52.0 - canvasHeight / 2)
+        val pivot = if (aroundCenter) PlanOffset(0.0, DialGeometry.ORIGIN_BOTTOM_DP - canvasHeight / 2)
             else PlanOffset(offset.x * scale, -offset.y * scale)
         return transformViewport(observer, viewport, pivot, pivot, scale, scale, heading, nextHeading)
     }

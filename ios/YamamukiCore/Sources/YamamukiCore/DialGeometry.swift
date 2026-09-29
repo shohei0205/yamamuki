@@ -5,6 +5,15 @@ import Foundation
 public enum DialGeometry {
     public static let tapeSpanDeg = 60.0
 
+    /// 方位盤の縦の配置(pt)。描画・ジェスチャー・表示位置の計算で同じ値を使う。
+    public static let tapeHeight = 44.0
+    /// 地図の上端。方角表示の下に数値の表示を挟む。
+    public static let chartTop = tapeHeight + 32
+    /// 描画原点(双眼鏡)の画面下端からの高さ。右下の「© OpenStreetMap contributors」と重ならない。
+    public static let originBottom = 52.0
+    /// 画面の高さから地図上端〜描画原点の高さ(表示範囲の距離に当たる)を引いた残り。
+    public static let chartInset = chartTop + originBottom
+
     public static func swipedHeading(_ heading: Double, dx: Double, width: Double) -> Double {
         guard dx.isFinite, width.isFinite, width > 0 else { return heading }
         return Heading.normalize(heading - dx / width * tapeSpanDeg)

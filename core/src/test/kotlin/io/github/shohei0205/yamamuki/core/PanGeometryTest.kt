@@ -4,6 +4,8 @@ import kotlin.test.*
 
 class PanGeometryTest {
     private val tokyo = MapCenter(35.696, 139.814)
+    /** 高さ 800dp の画面で 1km = 10dp になる表示範囲。 */
+    private val range800 = (800.0 - DialGeometry.CHART_INSET_DP) / 10.0
 
     @Test fun returnPathIsStraightOnScreenWhileHeadingAndGpsChange() {
         for (offset in listOf(PlanOffset(12.0, -8.0), PlanOffset(-30.0, 20.0), PlanOffset(0.0, 0.0))) {
@@ -40,12 +42,12 @@ class PanGeometryTest {
         for (aroundCenter in listOf(false, true)) {
             var viewport = PanGeometry.drag(tokyo, -100.0, -100.0, 10.0, 359.0)
             var heading = 359.0
-            val pivot = if (aroundCenter) PlanOffset(0.0, -348.0) else screenPoint(tokyo, viewport, heading, 10.0)
+            val pivot = if (aroundCenter) PlanOffset(0.0, DialGeometry.ORIGIN_BOTTOM_DP - 800.0 / 2) else screenPoint(tokyo, viewport, heading, 10.0)
             val landmark = if (aroundCenter) PanGeometry.transformViewport(tokyo, viewport,
                 pivot, PlanOffset(0.0, 0.0), 10.0, 10.0, heading, heading) else tokyo
             for (dx in listOf(-12.0, -60.0, 180.0, -360.0)) {
                 val nextHeading = DialGeometry.swipedHeading(heading, dx, 360.0)
-                viewport = PanGeometry.rotateViewport(tokyo, viewport, heading, nextHeading, 67.2, 800.0, aroundCenter)
+                viewport = PanGeometry.rotateViewport(tokyo, viewport, heading, nextHeading, range800, 800.0, aroundCenter)
                 heading = nextHeading
                 val actual = screenPoint(landmark, viewport, heading, 10.0)
                 assertEquals(pivot.x, actual.x, 1e-6)
@@ -57,17 +59,17 @@ class PanGeometryTest {
     @Test fun visibleBinocularsStayFixedEvenAfterPanning() {
         for (heading in listOf(45.0, 90.0, 270.0, 359.0)) {
             val viewport = PanGeometry.drag(tokyo, -100.0, -100.0, 10.0, heading)
-            assertTrue(PanGeometry.isObserverVisible(tokyo, viewport, heading, 67.2, 360.0, 800.0))
+            assertTrue(PanGeometry.isObserverVisible(tokyo, viewport, heading, range800, 360.0, 800.0))
             val before = screenPoint(tokyo, viewport, heading, 10.0)
             for (progress in listOf(0.0, 0.25, 0.5, 0.75, 1.0)) {
-                val next = PanGeometry.northUpViewport(tokyo, viewport, heading, 67.2, 800.0, progress, aroundCenter = false)
+                val next = PanGeometry.northUpViewport(tokyo, viewport, heading, range800, 800.0, progress, aroundCenter = false)
                 val after = screenPoint(tokyo, next, PanGeometry.northUpHeading(heading, progress), 10.0)
                 assertEquals(before.x, after.x, 1e-6)
                 assertEquals(before.y, after.y, 1e-6)
             }
             for ((dx, dy) in listOf(300.0 to -100.0, -300.0 to -100.0, 0.0 to -750.0, 0.0 to 100.0)) {
                 val outside = PanGeometry.drag(tokyo, dx, dy, 10.0, heading)
-                assertFalse(PanGeometry.isObserverVisible(tokyo, outside, heading, 67.2, 360.0, 800.0))
+                assertFalse(PanGeometry.isObserverVisible(tokyo, outside, heading, range800, 360.0, 800.0))
             }
         }
     }
@@ -76,8 +78,8 @@ class PanGeometryTest {
         val panned = PanGeometry.drag(tokyo, 100.0, -50.0, 10.0, 30.0)
         for (viewport in listOf(tokyo, panned)) for (height in listOf(480.0, 900.0)) {
             for (range in listOf(10.0, 80.0)) for (heading in listOf(0.0, 45.0, 90.0, 180.0, 359.0)) {
-                val scale = (height - 128.0) / range
-                val pivotY = 52.0 - height / 2
+                val scale = (height - DialGeometry.CHART_INSET_DP) / range
+                val pivotY = DialGeometry.ORIGIN_BOTTOM_DP - height / 2
                 val center = DialGeometry.project(
                     GeoMath.distanceKm(tokyo.latitude, tokyo.longitude, viewport.latitude, viewport.longitude),
                     GeoMath.bearingDeg(tokyo.latitude, tokyo.longitude, viewport.latitude, viewport.longitude), 0.0)

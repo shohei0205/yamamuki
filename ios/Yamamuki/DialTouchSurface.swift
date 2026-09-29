@@ -31,7 +31,7 @@ struct DialTouchSurface: UIViewRepresentable {
         override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
             if active.isEmpty, let first = touches.first {
                 start = first.location(in: self)
-                headingGesture = start.y < 76
+                headingGesture = Double(start.y) < DialGeometry.chartTop
                 dragging = false
                 multiTouch = false
             }
@@ -52,7 +52,7 @@ struct DialTouchSurface: UIViewRepresentable {
                 let started = !dragging
                 dragging = true
                 if headingGesture { callbacks?.onHeadingSwipe(Double(p.x - old.x), Double(bounds.width), started) }
-                else { callbacks?.onPan(Double(p.x - old.x), Double(p.y - old.y), Double(bounds.height - 128)) }
+                else { callbacks?.onPan(Double(p.x - old.x), Double(p.y - old.y), Double(bounds.height) - DialGeometry.chartInset) }
             } else if points.count == 2 && !headingGesture {
                 let a = previous[0], b = previous[1], c = points[0], d = points[1]
                 let oldDistance = hypot(b.x - a.x, b.y - a.y)
@@ -61,9 +61,9 @@ struct DialTouchSurface: UIViewRepresentable {
                 let angle = Double(atan2(d.y - c.y, d.x - c.x) - atan2(b.y - a.y, b.x - a.x)) * 180 / .pi
                 func midpoint(_ p: CGPoint, _ q: CGPoint) -> PlanOffset {
                     PlanOffset(x: Double((p.x + q.x - bounds.width) / 2),
-                        y: Double((p.y + q.y) / 2 - (bounds.height - 52)))
+                        y: Double((p.y + q.y) / 2 - bounds.height) + DialGeometry.originBottom)
                 }
-                callbacks?.onTransform(zoom, Heading.delta(0, angle), midpoint(a, b), midpoint(c, d), Double(bounds.height - 128))
+                callbacks?.onTransform(zoom, Heading.delta(0, angle), midpoint(a, b), midpoint(c, d), Double(bounds.height) - DialGeometry.chartInset)
             }
         }
 

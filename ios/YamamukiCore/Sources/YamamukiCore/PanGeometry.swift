@@ -33,12 +33,12 @@ public enum PanGeometry {
     /// 描画される双眼鏡の中心が画面内にあるか。寸法はpt。
     public static func isObserverVisible(_ observer: MapCenter, viewport: MapCenter, heading: Double,
         rangeKm: Double, canvasWidth: Double, canvasHeight: Double) -> Bool {
-        guard canvasWidth > 0, canvasHeight > 128, rangeKm > 0 else { return false }
-        let scale = (canvasHeight - 128) / rangeKm
+        guard canvasWidth > 0, canvasHeight > DialGeometry.chartInset, rangeKm > 0 else { return false }
+        let scale = (canvasHeight - DialGeometry.chartInset) / rangeKm
         let offset = observerOffset(observer, viewport: viewport, heading: heading)
         let x = canvasWidth / 2 + offset.x * scale
-        let y = canvasHeight - 52 - offset.y * scale
-        return x >= 0 && x <= canvasWidth && y >= 76 && y <= canvasHeight
+        let y = canvasHeight - DialGeometry.originBottom - offset.y * scale
+        return x >= 0 && x <= canvasWidth && y >= DialGeometry.chartTop && y <= canvasHeight
     }
 
     /// 選んだ回転中心をアニメーション中も固定する。高さはpt。
@@ -52,12 +52,11 @@ public enum PanGeometry {
     /// 双眼鏡または画面中央を固定して方角を変える。
     public static func rotateViewport(_ observer: MapCenter, viewport: MapCenter, heading: Double, nextHeading: Double,
         rangeKm: Double, canvasHeight: Double, aroundCenter: Bool) -> MapCenter {
-        guard canvasHeight.isFinite, canvasHeight > 128, rangeKm.isFinite, rangeKm > 0,
+        guard canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset, rangeKm.isFinite, rangeKm > 0,
               heading != nextHeading, aroundCenter || observer != viewport else { return viewport }
-        // 描画原点は画面下端から52pt、地図上端は76pt。
-        let scale = (canvasHeight - 128) / rangeKm
+        let scale = (canvasHeight - DialGeometry.chartInset) / rangeKm
         let offset = observerOffset(observer, viewport: viewport, heading: heading)
-        let pivot = aroundCenter ? PlanOffset(x: 0, y: 52 - canvasHeight / 2)
+        let pivot = aroundCenter ? PlanOffset(x: 0, y: DialGeometry.originBottom - canvasHeight / 2)
             : PlanOffset(x: offset.x * scale, y: -offset.y * scale)
         return transformViewport(observer, viewport: viewport, previous: pivot, midpoint: pivot,
             oldScale: scale, newScale: scale, oldHeading: heading, newHeading: nextHeading)

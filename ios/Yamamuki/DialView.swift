@@ -53,7 +53,7 @@ struct DialView: View {
                         )
                         Spacer()
                     }
-                    .padding(.top, 76)
+                    .padding(.top, CGFloat(DialGeometry.chartTop))
                     .padding(.trailing, 72)
                 }
 
@@ -64,7 +64,7 @@ struct DialView: View {
                             CompassIndicator(heading: model.lockedHeading ?? model.heading)
                         }
                         .buttonStyle(.plain)
-                        .disabled(model.location == nil || geometry.size.height <= 128)
+                        .disabled(model.location == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
                         .accessibilityLabel("北を上にする")
                     }
                     Spacer()
@@ -94,7 +94,7 @@ struct DialView: View {
                                     .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
                             }
                             .buttonStyle(.plain)
-                            .disabled(!model.hasLocationPermission || model.gpsLocation == nil || geometry.size.height <= 128)
+                            .disabled(!model.hasLocationPermission || model.gpsLocation == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
                             .accessibilityLabel(model.exploring ? "現在地に戻り、進行方向を上にする" : "北を上にして手動位置モードにする")
                             .accessibilityValue(model.exploring ? "手動位置モード" : "ヘディングアップモード")
                             .padding(.trailing, 8)
@@ -342,11 +342,12 @@ private struct ObserverDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("現在地").font(.title2.bold())
+                Text(model.exploring ? "双眼鏡の位置" : "現在地").font(.title2.bold())
                 Spacer()
                 Button("閉じる") { dismiss() }
             }
-            if let here = model.gpsLocation {
+            // 手動位置モードの双眼鏡は移動を始めた地点に残るので、その地点を出す。
+            if let here = model.observerLocation ?? model.gpsLocation {
                 DetailRow(label: "緯度経度", value: coordinateText(latitude: here.latitude, longitude: here.longitude))
                 DetailRow(label: "標高", value: elevationText(here.mslAltitudeM))
             }

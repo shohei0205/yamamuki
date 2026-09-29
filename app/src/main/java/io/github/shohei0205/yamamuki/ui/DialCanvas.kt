@@ -127,10 +127,9 @@ fun DialCanvas(
         }
     }
     Canvas(modifier.clipToBounds().then(tapModifier)) {
-        val tapeHeight = 44.dp.toPx()
-        val chartTop = tapeHeight + 32.dp.toPx()
-        // 双眼鏡が右下の「© OpenStreetMap contributors」と重ならない高さ。
-        val origin = Offset(size.width / 2, size.height - 52.dp.toPx())
+        val tapeHeight = DialGeometry.TAPE_HEIGHT_DP.dp.toPx()
+        val chartTop = DialGeometry.CHART_TOP_DP.dp.toPx()
+        val origin = Offset(size.width / 2, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
         val pxPerKm = ((origin.y - chartTop) / rangeKm).toFloat()
         val offset = if (latitude != null && longitude != null && viewportLatitude != null && viewportLongitude != null)
             PanGeometry.observerOffset(MapCenter(latitude, longitude), MapCenter(viewportLatitude, viewportLongitude), headingDeg)
@@ -178,7 +177,7 @@ private fun DrawScope.drawRings(
     val rings = mutableListOf<Pair<Float, TextLayoutResult>>()
     var angle = -Math.PI / 2
     val pad = 3.dp.toPx()
-    clipRect(top = chartTop, bottom = size.height - 52.dp.toPx()) {
+    clipRect(top = chartTop, bottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()) {
         while (step * i * pxPerKm <= farthestPx) {
             val km = step * i
             val radius = (km * pxPerKm).toFloat()
@@ -191,7 +190,7 @@ private fun DrawScope.drawRings(
             val labels = mutableListOf<Triple<TextLayoutResult, Offset, Box>>()
             for ((radius, label) in rings) {
             val anchor = RingLabelGeometry.place(observer.x.toDouble(), observer.y.toDouble(), radius.toDouble(),
-                0.0, chartTop.toDouble(), size.width.toDouble(), (size.height - 52.dp.toPx()).toDouble(),
+                0.0, chartTop.toDouble(), size.width.toDouble(), (size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()).toDouble(),
                 (label.size.width + pad * 2).toDouble(), (label.size.height + pad * 2).toDouble(),
                 direction)
             if (anchor != null) {
@@ -204,7 +203,7 @@ private fun DrawScope.drawRings(
             return labels
         }
         if (!headingUp) angle = RingLabelGeometry.direction(observer.x.toDouble(), observer.y.toDouble(),
-            0.0, chartTop.toDouble(), size.width.toDouble(), (size.height - 52.dp.toPx()).toDouble(),
+            0.0, chartTop.toDouble(), size.width.toDouble(), (size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()).toDouble(),
             previousAngle, visibleCount = { placements(it).size })
         for ((label, origin, box) in placements(angle)) {
             drawRoundRect(Color.White.copy(alpha = 0.85f), topLeft = Offset(box.left, box.top),
@@ -275,7 +274,7 @@ private fun DrawScope.drawPeaks(
             val o = DialGeometry.project(m.distanceKm, m.bearingDeg, headingDeg)
             m to Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
         }
-        .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < size.height - 52.dp.toPx() }
+        .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx() }
         .map { (m, p) ->
             val icon = PeakIcon.of(m.mountain.elevationClass())
             val halfWidth = icon.halfWidthDp.dp.toPx()

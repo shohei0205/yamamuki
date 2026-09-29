@@ -63,6 +63,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.Heading
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
@@ -175,7 +176,7 @@ fun DialScreen(
                 if (showSettings) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    val headingGesture = down.position.y < 76.dp.toPx()
+                    val headingGesture = down.position.y < DialGeometry.CHART_TOP_DP.dp.toPx()
                     var multiTouch = false
                     var dragging = false
                     var pendingPan = Offset.Zero
@@ -192,7 +193,7 @@ fun DialScreen(
                                 val delta = if (started) pendingPan else pan
                                 if (headingGesture) viewModel.onHeadingSwipe(delta.x, size.width.toFloat(), currentHeading,
                                     size.width / density.density.toDouble(), size.height / density.density.toDouble(), started)
-                                else viewModel.onPan(delta.x, delta.y, size.height - 128.dp.toPx(), currentHeading)
+                                else viewModel.onPan(delta.x, delta.y, size.height - DialGeometry.CHART_INSET_DP.dp.toPx(), currentHeading)
                                 event.changes.forEach { it.consume() }
                             }
                         } else if (count >= 2) {
@@ -201,12 +202,12 @@ fun DialScreen(
                             if (headingGesture) {
                                 // A gesture starting on the tape never turns into a map transform.
                             } else if (count == 2 && event.changes.count { it.pressed && it.previousPressed } == 2) {
-                                val origin = Offset(size.width / 2f, size.height - 52.dp.toPx())
+                                val origin = Offset(size.width / 2f, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
                                 val previous = event.calculateCentroid(useCurrent = false) - origin
                                 val current = event.calculateCentroid(useCurrent = true) - origin
                                 viewModel.onTransform(zoom, event.calculateRotation(),
                                     PlanOffset(previous.x.toDouble(), previous.y.toDouble()),
-                                    PlanOffset(current.x.toDouble(), current.y.toDouble()), size.height - 128.dp.toPx())
+                                    PlanOffset(current.x.toDouble(), current.y.toDouble()), size.height - DialGeometry.CHART_INSET_DP.dp.toPx())
                             } else if (zoom != 1f) viewModel.onZoom(zoom)
                             event.changes.forEach { it.consume() }
                         } else if (multiTouch || dragging) {
@@ -247,7 +248,7 @@ fun DialScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
         } else {
-            Column(Modifier.align(Alignment.TopCenter).padding(top = 76.dp, end = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.align(Alignment.TopCenter).padding(top = DialGeometry.CHART_TOP_DP.dp, end = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 StatusLine(
                     message = statusMessage(state, headingAvailable = compassHeading != null),
                     // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
@@ -260,13 +261,13 @@ fun DialScreen(
         CompassIndicator(
             heading = heading,
             onClick = { viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight) },
-            enabled = state.location != null && canvasHeight > 128,
+            enabled = state.location != null && canvasHeight > DialGeometry.CHART_INSET_DP,
             modifier = Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp),
         )
 
         MapModeButton(
             manual = state.exploring,
-            enabled = hasPermission && state.gpsLocation != null && canvasHeight > 128,
+            enabled = hasPermission && state.gpsLocation != null && canvasHeight > DialGeometry.CHART_INSET_DP,
             onClick = {
                 if (state.exploring) viewModel.resetCenter { currentCompassHeading }
                 else viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight)
@@ -372,7 +373,12 @@ fun DialScreen(
 
     // 現在地を取れる前は出す値がないので開かない。開いている間も歩けば値が更新される。
     if (showObserver && location != null && !overlay) {
-        ObserverDetailDialog(location, onDismiss = { showObserver = false })
+        // 手動位置モードの双眼鏡は移動を始めた地点に残るので、その地点を出す。
+        ObserverDetailDialog(
+            state.observerLocation ?: location,
+            title = if (state.exploring) "双眼鏡の位置" else "現在地",
+            onDismiss = { showObserver = false },
+        )
     }
 }
 
@@ -427,13 +433,13 @@ private fun MountainDetailDialog(nearby: NearbyMountain, fromCenter: Boolean, on
     )
 }
 
-/** 双眼鏡(現在地)をタップしたときの詳細。距離は常に 0 なので出さない。 */
+/** 双眼鏡(現在地、手動位置モードでは移動を始めた地点)をタップしたときの詳細。距離は常に 0 なので出さない。 */
 @Composable
-private fun ObserverDetailDialog(location: GeoPoint, onDismiss: () -> Unit) {
+private fun ObserverDetailDialog(location: GeoPoint, title: String, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
-        title = { Text("現在地") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DetailRow("緯度経度", coordinateText(location.latitude, location.longitude))

@@ -29,6 +29,9 @@ extension Color {
 /// 画面上部の方位目盛りに収める角度の幅。
 private let tapeSpanDeg = DialGeometry.tapeSpanDeg
 
+/// 描画原点(双眼鏡)の画面下端からの高さ。
+private let originBottom = CGFloat(DialGeometry.originBottom)
+
 /// 山アイコンの縁取りの太さ。3 種類とも同じ太さにそろえる。
 private let outlineWidth: CGFloat = 1.5
 
@@ -79,10 +82,9 @@ struct DialCanvasView: View {
 
     private func draw(_ ctx: GraphicsContext, size: CGSize) {
         let styles = TextStyles(scale: textScale)
-        let tapeHeight: CGFloat = 44
-        let chartTop = tapeHeight + 32
-        // 双眼鏡が右下の「© OpenStreetMap contributors」と重ならない高さ。
-        let origin = CGPoint(x: size.width / 2, y: size.height - 52)
+        let tapeHeight = CGFloat(DialGeometry.tapeHeight)
+        let chartTop = CGFloat(DialGeometry.chartTop)
+        let origin = CGPoint(x: size.width / 2, y: size.height - originBottom)
         let pxPerKm = (origin.y - chartTop) / CGFloat(rangeKm)
         var observer = origin
         if let here = observerLocation, let viewport = viewportLocation {
@@ -125,7 +127,7 @@ struct DialCanvasView: View {
         let nearest = hypot(max(0, max(-observer.x, observer.x - size.width)),
             max(0, max(chartTop - observer.y, observer.y - size.height)))
         var ctx = ctx
-        ctx.clip(to: Path(CGRect(x: 0, y: chartTop, width: size.width, height: max(0, size.height - 52 - chartTop))))
+        ctx.clip(to: Path(CGRect(x: 0, y: chartTop, width: size.width, height: max(0, size.height - originBottom - chartTop))))
         var i = max(1, Int(nearest / (step * pxPerKm)))
         var rings: [(CGFloat, MeasuredText)] = []
         while step * CGFloat(i) * pxPerKm <= farthest {
@@ -141,7 +143,7 @@ struct DialCanvasView: View {
             var labels: [(MeasuredText, CGRect)] = []
             for (radius, label) in rings {
             if let anchor = RingLabelGeometry.place(cx: Double(observer.x), cy: Double(observer.y), radius: Double(radius),
-                left: 0, top: Double(chartTop), right: Double(size.width), bottom: Double(size.height - 52),
+                left: 0, top: Double(chartTop), right: Double(size.width), bottom: Double(size.height - originBottom),
                 width: Double(label.size.width + 6), height: Double(label.size.height + 6), angle: angle) {
                 let box = CGRect(x: CGFloat(anchor.x) - label.size.width / 2 - 3,
                     y: CGFloat(anchor.y) - label.size.height / 2 - 3, width: label.size.width + 6, height: label.size.height + 6)
@@ -151,7 +153,7 @@ struct DialCanvasView: View {
             return labels
         }
         let angle = headingUp ? -Double.pi / 2 : RingLabelGeometry.direction(cx: Double(observer.x), cy: Double(observer.y),
-            left: 0, top: Double(chartTop), right: Double(size.width), bottom: Double(size.height - 52),
+            left: 0, top: Double(chartTop), right: Double(size.width), bottom: Double(size.height - originBottom),
             previousAngle: hitTargets.ringLabelAngle, visibleCount: { placements($0).count })
         hitTargets.ringLabelAngle = angle
         for (label, box) in placements(angle) {
@@ -169,7 +171,7 @@ struct DialCanvasView: View {
             if placed.count >= maxPeaks { break }
             let o = DialGeometry.project(distanceKm: m.distanceKm, bearingDeg: m.bearingDeg, headingDeg: headingDeg)
             let p = CGPoint(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
-            guard p.x >= 0, p.x <= size.width, p.y - PeakIcon.maxHeight >= chartTop, p.y < size.height - 52 else { continue }
+            guard p.x >= 0, p.x <= size.width, p.y - PeakIcon.maxHeight >= chartTop, p.y < size.height - originBottom else { continue }
             let icon = PeakIcon.of(m.mountain.elevationClass)
             let label = measuredText(ctx, m.mountain.name, size: styles.label, color: .black)
             let labelHalf = label.size.width / 2
