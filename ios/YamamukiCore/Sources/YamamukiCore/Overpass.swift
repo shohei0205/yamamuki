@@ -12,10 +12,13 @@ public struct OverpassError: Error, CustomStringConvertible {
     public let message: String
     /// 失敗したエンドポイントごとの原因。
     public let causes: [Error]
+    /// サーバーが返した HTTP ステータス。つながらなかったなど、応答がないときは nil。
+    public let httpStatus: Int?
 
-    public init(_ message: String, causes: [Error] = []) {
+    public init(_ message: String, causes: [Error] = [], httpStatus: Int? = nil) {
         self.message = message
         self.causes = causes
+        self.httpStatus = httpStatus
     }
 
     public var description: String {
@@ -26,9 +29,11 @@ public struct OverpassError: Error, CustomStringConvertible {
 /// OSM Overpass API から natural=peak / natural=volcano の名前付きノードを取得する。
 /// 最初のエンドポイントが失敗したら次のミラーを試す。
 public struct OverpassClient: MountainRemoteSource {
+    /// 以前は 2 番目に overpass.kumi.systems(現 overpass.private.coffee)を置いていたが、問い合わせに応答せず
+    /// 75 秒待ってタイムアウトするだけだったので外した(#34)。本家の 504・429 は同時に使える枠が空いていない
+    /// という意味なので、別のサーバーに回すより、少し待って同じサーバーに問い合わせ直すほうが通りやすい。
     public static let defaultEndpoints = [
         URL(string: "https://overpass-api.de/api/interpreter")!,
-        URL(string: "https://overpass.kumi.systems/api/interpreter")!,
     ]
 
     private let session: URLSession
@@ -62,9 +67,9 @@ public struct OverpassClient: MountainRemoteSource {
             request.httpBody = Data("data=\(formEncode(query))".utf8)
             do {
                 let (data, response) = try await session.data(for: request)
-                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                guard (200..<300).contains(status) else {
-                    errors.append(OverpassError("HTTP \(status) from \(endpoint.absoluteString)"))
+                let status = (response as? HTTPURLResponse)?.statusCode
+                guard let status, (200..<300).contains(status) else {
+                    errors.append(OverpassError("HTTP \(status.map { "\($0)" } ?? "-") from \(endpoint.absoluteString)", httpStatus: status))
                     continue
                 }
                 return try OverpassParser.parse(String(decoding: data, as: UTF8.self))
@@ -76,7 +81,7 @@ public struct OverpassClient: MountainRemoteSource {
                 errors.append(OverpassError("\(type(of: error)) from \(endpoint.absoluteString)", causes: [error]))
             }
         }
-        throw OverpassError("All Overpass endpoints failed", causes: errors)
+        throw OverpassError("All Overpass endpoints failed", causes: errors, httpStatus: (errors.last as? OverpassError)?.httpStatus)
     }
 
     private func formEncode(_ s: String) -> String {
