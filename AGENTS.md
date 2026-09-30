@@ -126,7 +126,9 @@ cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -sch
 
 ## ブランチと PR
 
-- `main` に直接 push しない。作業ブランチを切って PR を出す。
+- `main` に直接 push しない。修正は作業ブランチで行う。
+- PR はユーザーが明示的に作成を指示した場合だけ作成する。ドラフト PR も同様。
+- 「修正して」「ブランチを作成して」という依頼に、PR 作成の許可は含まれない。
 - 1 つの PR には 1 つの目的だけを入れる。ついでのリファクタリングや整形は別の PR にする。
 - PR の説明は `.github/pull_request_template.md` の見出し（何を変えたか・対象・確認方法・スクリーンショット）に沿って書く。
 - マージはユーザーが行う（スカッシュマージ）。エージェントは PR をマージしない。
