@@ -150,6 +150,8 @@ cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -sch
 - 個人のルールには、共通ルールと矛盾することを書かない。
 - Codex の `AGENTS.override.md` は、このファイルに足されるのではなく置き換えて読まれ、共通ルールが読まれなくなるので使わない。
 - `CLAUDE.local.md` と `AGENTS.override.md` は `.gitignore` に入れてある。
+- `CLAUDE.local.md` はコミットしないので、git worktree で作った作業フォルダには入らず、そこで動く Claude には読まれない。worktree でも効かせたいときは、ホームにある自分のファイルを `CLAUDE.local.md` から `@~/...` で読み込むか、`~/.claude/CLAUDE.md` に書く。
+- `~/.claude/CLAUDE.md` と `~/.codex/AGENTS.md` は、ほかのリポジトリで作業するときにも読まれる。このリポジトリだけのこと（使う実機など）は書かず、どのリポジトリでも通じる好みだけを書く。
 
 ## ドキュメント
 
