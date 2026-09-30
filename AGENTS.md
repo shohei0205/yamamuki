@@ -129,6 +129,7 @@ cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -sch
 - `main` に直接 push しない。作業ブランチを切って PR を出す。
 - 1 つの PR には 1 つの目的だけを入れる。ついでのリファクタリングや整形は別の PR にする。
 - PR の説明は `.github/pull_request_template.md` の見出し（何を変えたか・対象・確認方法・スクリーンショット）に沿って書く。
+- PR の件名と本文は、スキル `pr-description`（`.agents/skills/pr-description/SKILL.md`）の手順でコミットから作る。コミットが複数ある PR は、本文の最後に「マージ時のコミット」の候補を入れる。
 - マージはユーザーが行う（スカッシュマージ）。エージェントは PR をマージしない。
 - Claude と Codex が並行して作業するときは、それぞれ別のブランチを使い、相手のブランチには push しない。同じファイルを大きく変える作業は同時に進めない。
 
@@ -149,6 +150,7 @@ Codex が Markdown を読むときの文字化けを防ぐため、次のよう�
 
 - Markdown（`.md`）は、新規作成・編集のどちらのときも UTF-8 BOM 付きで保存し、保存後に先頭の BOM を確認する。
 - 既存の Markdown に BOM を付けるときは、改行コードを変えない。
+- 例外として、スキルの `SKILL.md` には BOM を付けない。先頭の `---` からスキルの設定を読むため、BOM があると読めなくなるおそれがある。
 
 ## ファイルの改行コード
 
