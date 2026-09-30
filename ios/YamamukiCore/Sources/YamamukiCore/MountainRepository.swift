@@ -128,12 +128,16 @@ public final class MountainRepository: Sendable {
     /// 事前ダウンロードで問い合わせが失敗したときに、取り直すまで待つ時間(回数分)。
     public static let downloadRetryDelays: [TimeInterval] = [5, 15, 30]
 
+    /// 429 が返ったときに、取り直すまで待つ最短の時間。Overpass の利用方針(OSM Wiki)の「30 秒待つ」に合わせる。
+    public static let rateLimitWait: TimeInterval = 30
+
     /// 事前ダウンロードで 1 回に問い合わせるタイルの縦横の数。1°四方なら混み合っていても応答が返りやすい。
     public static let downloadChunkTiles = 2
 
     /// 目的地など、現在地から離れた地域のタイルを前もって取得する(圏外に備えた事前ダウンロード)。
     /// 数タイルずつ Overpass に問い合わせ、終わるたびに保存して onProgress を呼ぶ。
     /// Overpass は混み合うと 504 やタイムアウトを返すので、問い合わせが失敗したら retryDelays の間隔で取り直す。
+    /// 429(問い合わせが多すぎる)のときは、Overpass の利用方針に合わせて少なくとも rateLimitWait 待つ。
     /// 途中で失敗・中断しても取得済みのタイルは残り、もう一度呼べば残りだけを取得する。
     /// - Parameters:
     ///   - forceRefresh: true なら取得済みのタイルも取り直す(保存済みの地域の更新)。
@@ -146,6 +150,7 @@ public final class MountainRepository: Sendable {
         forceRefresh: Bool = false,
         maxAge: TimeInterval? = nil,
         retryDelays: [TimeInterval] = MountainRepository.downloadRetryDelays,
+        rateLimitWait: TimeInterval = MountainRepository.rateLimitWait,
         onProgress: @Sendable (DownloadProgress) async -> Void = { _ in }
     ) async throws -> Int {
         let maxAge = maxAge ?? self.maxAge
@@ -170,7 +175,9 @@ public final class MountainRepository: Sendable {
                     throw CancellationError()
                 } catch {
                     guard attempt < retryDelays.count else { throw error }
-                    let wait = retryDelays[attempt]
+                    let wait = (error as? OverpassError)?.httpStatus == 429
+                        ? max(retryDelays[attempt], rateLimitWait)
+                        : retryDelays[attempt]
                     attempt += 1
                     await onProgress(DownloadProgress(doneTiles: done, totalTiles: all.count, retry: attempt, retryWait: wait))
                     try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))

@@ -6,7 +6,12 @@ import android.hardware.GeomagneticField
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,12 +40,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
@@ -54,7 +63,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.Heading
+import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.coordinateText
@@ -84,6 +95,9 @@ fun DialScreen(
     downloadViewModel: AreaDownloadViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
+    var canvasHeight by remember { mutableStateOf(0.0) }
+    var canvasWidth by remember { mutableStateOf(0.0) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.state.collectAsStateWithLifecycle()
     val download by downloadViewModel.state.collectAsStateWithLifecycle()
@@ -123,7 +137,7 @@ fun DialScreen(
             // 画面上でほぼ動かない変化(表示範囲の上端でも数 px)は流さない。
             .distinctUntilChanged { old, new -> abs(Heading.delta(old, new)) < MIN_HEADING_CHANGE_DEG }
     }.collectAsStateWithLifecycle<Double?>(initialValue = null)
-    val location = state.location
+    val location = state.gpsLocation
     val declination = remember(location) {
         location?.let {
             GeomagneticField(
@@ -131,7 +145,10 @@ fun DialScreen(
             ).declination.toDouble()
         } ?: 0.0
     }
-    val heading = magneticHeading?.let { Heading.normalize(it + declination) }
+    val compassHeading = magneticHeading?.let { Heading.normalize(it + declination) }
+    val heading = state.lockedHeading ?: compassHeading
+    val currentHeading by rememberUpdatedState(heading ?: 0.0)
+    val currentCompassHeading by rememberUpdatedState(compassHeading ?: heading ?: 0.0)
 
     // 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     var selectedId by remember { mutableStateOf<Long?>(null) }
@@ -151,21 +168,73 @@ fun DialScreen(
             .fillMaxSize()
             .background(DialBeige)
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .pointerInput(Unit) {
-                detectTransformGestures { _, _, zoom, _ -> viewModel.onZoom(zoom) }
+            .onSizeChanged {
+                canvasHeight = it.height / density.density.toDouble()
+                canvasWidth = it.width / density.density.toDouble()
+            }
+            .pointerInput(showSettings) {
+                if (showSettings) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val headingGesture = down.position.y < DialGeometry.CHART_TOP_DP.dp.toPx()
+                    var multiTouch = false
+                    var dragging = false
+                    var pendingPan = Offset.Zero
+                    do {
+                        val event = awaitPointerEvent()
+                        val count = event.changes.count { it.pressed }
+                        if (count == 1 && !multiTouch) {
+                            val pan = event.calculatePan()
+                            pendingPan += pan
+                            val distance = if (headingGesture) kotlin.math.abs(pendingPan.x) else pendingPan.getDistance()
+                            val started = !dragging && distance > viewConfiguration.touchSlop
+                            if (started) dragging = true
+                            if (dragging) {
+                                val delta = if (started) pendingPan else pan
+                                if (headingGesture) viewModel.onHeadingSwipe(delta.x, size.width.toFloat(), currentHeading,
+                                    size.width / density.density.toDouble(), size.height / density.density.toDouble(), started)
+                                else viewModel.onPan(delta.x, delta.y, size.height - DialGeometry.CHART_INSET_DP.dp.toPx(), currentHeading)
+                                event.changes.forEach { it.consume() }
+                            }
+                        } else if (count >= 2) {
+                            multiTouch = true
+                            val zoom = event.calculateZoom()
+                            if (headingGesture) {
+                                // A gesture starting on the tape never turns into a map transform.
+                            } else if (count == 2 && event.changes.count { it.pressed && it.previousPressed } == 2) {
+                                val origin = Offset(size.width / 2f, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
+                                val previous = event.calculateCentroid(useCurrent = false) - origin
+                                val current = event.calculateCentroid(useCurrent = true) - origin
+                                viewModel.onTransform(zoom, event.calculateRotation(),
+                                    PlanOffset(previous.x.toDouble(), previous.y.toDouble()),
+                                    PlanOffset(current.x.toDouble(), current.y.toDouble()), size.height - DialGeometry.CHART_INSET_DP.dp.toPx())
+                            } else if (zoom != 1f) viewModel.onZoom(zoom)
+                            event.changes.forEach { it.consume() }
+                        } else if (multiTouch || dragging) {
+                            // Finish a pinch without turning the remaining finger into a drag/tap.
+                            event.changes.forEach { it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
             },
     ) {
         DialCanvas(
             headingDeg = heading ?: 0.0,
+            compassHeadingDeg = compassHeading ?: heading ?: 0.0,
+            headingUp = !state.exploring,
             mountains = state.mountains,
             rangeKm = state.rangeKm,
             modifier = Modifier.fillMaxSize(),
             onMountainTap = { selectedId = it.mountain.osmId },
             onObserverTap = { showObserver = true },
             summit = state.summit,
-            altitudeM = state.location?.mslAltitudeM,
+            altitudeM = location?.mslAltitudeM,
             maxPeaks = state.settings.maxPeaks,
             textScale = state.settings.textScale,
+            latitude = location?.latitude,
+            longitude = location?.longitude,
+            viewportLatitude = state.location?.latitude,
+            viewportLongitude = state.location?.longitude,
         )
         Text(
             "© OpenStreetMap contributors",
@@ -179,14 +248,32 @@ fun DialScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
         } else {
-            StatusLine(
-                message = statusMessage(state, headingAvailable = heading != null),
-                // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
-                actionLabel = if (state.offline && state.connected && !state.loading && !state.settings.manualFetch) "再取得" else null,
-                onAction = viewModel::retry,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 76.dp),
-            )
+            Column(Modifier.align(Alignment.TopCenter).padding(top = DialGeometry.CHART_TOP_DP.dp, end = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                StatusLine(
+                    message = statusMessage(state, headingAvailable = compassHeading != null),
+                    // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
+                    actionLabel = if (state.offline && state.connected && !state.loading && !state.settings.manualFetch) "再取得" else null,
+                    onAction = viewModel::retry,
+                )
+            }
         }
+
+        CompassIndicator(
+            heading = heading,
+            onClick = { viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight) },
+            enabled = state.location != null && canvasHeight > DialGeometry.CHART_INSET_DP,
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp),
+        )
+
+        MapModeButton(
+            manual = state.exploring,
+            enabled = hasPermission && state.gpsLocation != null && canvasHeight > DialGeometry.CHART_INSET_DP,
+            onClick = {
+                if (state.exploring) viewModel.resetCenter { currentCompassHeading }
+                else viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight)
+            },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
+        )
 
         // 左下: 設定、事前ダウンロード、手動取得モードなら山データの取得。屋外で押しやすいよう既定(40dp)より大きくする。
         Row(

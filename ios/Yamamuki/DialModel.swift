@@ -13,7 +13,14 @@ struct GeoPoint: Equatable {
 
 /// 現在地と表示範囲に応じて山データを取得し、方位盤に出す山の一覧を保つ(Android 版の DialViewModel に相当)。
 final class DialModel: ObservableObject {
+    /// 表示範囲の基準の地点。ヘディングアップ中は現在地、手動位置モードでは利用者が動かした地点。
     @Published private(set) var location: GeoPoint?
+    /// 現在地。双眼鏡の位置と、山までの距離の基準。手動位置モードでも GPS に付いていく。
+    @Published private(set) var gpsLocation: GeoPoint?
+    @Published private(set) var exploring = false
+    @Published private(set) var lockedHeading: Double?
+    var displayHeading: Double { lockedHeading ?? heading ?? 0 }
+
     /// 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。
     @Published private(set) var mountains: [NearbyMountain] = []
     /// 現在地がほぼ山頂([summitRadiusKm] 以内)のとき、その山。
@@ -54,6 +61,8 @@ final class DialModel: ObservableObject {
     private var fetchedCenter: GeoPoint?
     private var fetchedRadiusKm = 0.0
     private var fetchTask: Task<Void, Never>?
+    private var northUpTask: Task<Void, Never>?
+    private var headingSwipeAroundCenter = false
     /// 圏外のため取得を控えた。値は手動の取得だったか。つながったらその続きを取得する。
     private var skippedWhileDisconnected: Bool?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "DialModel")
@@ -96,6 +105,8 @@ final class DialModel: ObservableObject {
     }
 
     func stop() {
+        // 北向き・現在地への復帰のアニメーションは止めない。コントロールセンターを引き出すなど
+        // 非アクティブになっただけで途中の位置と方角に取り残されないよう、戻ったら最後まで進める。
         locationService.stop()
     }
 
@@ -105,10 +116,13 @@ final class DialModel: ObservableObject {
 
     private func onLocation(_ loc: CLLocation) {
         // 高さを持たない位置(verticalAccuracy が負)では、標高の表示が消えないよう直前の標高を引き継ぐ。
-        let msl = loc.verticalAccuracy >= 0 ? loc.altitude : location?.mslAltitudeM
+        let msl = loc.verticalAccuracy >= 0 ? loc.altitude : gpsLocation?.mslAltitudeM
         let point = GeoPoint(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, mslAltitudeM: msl)
-        location = point
+        gpsLocation = point
+        // 手動位置モードでは表示範囲を動かさず、双眼鏡と山までの距離だけを現在地に合わせる。
         updatePeaks(at: point)
+        guard !exploring else { return }
+        location = point
         if let center = fetchedCenter,
            GeoMath.distanceKm(center.latitude, center.longitude, point.latitude, point.longitude) <= Self.refetchDistanceKm {
             return
@@ -128,8 +142,124 @@ final class DialModel: ObservableObject {
 
     /// ピンチの倍率(前回からの変化分)。
     func onZoom(_ zoom: Double) {
+        northUpTask?.cancel()
         rangeKm = DialGeometry.zoomedRange(rangeKm, zoom: zoom)
         if DialGeometry.fetchRadiusKm(rangeKm) > fetchedRadiusKm { fetch() }
+    }
+
+    func onPan(dx: Double, dy: Double, chartHeight: Double) {
+        northUpTask?.cancel()
+        guard let here = location else { return }
+        let next = PanGeometry.drag(MapCenter(here.latitude, here.longitude), dx: dx, dy: dy,
+            scale: chartHeight / rangeKm, heading: displayHeading)
+        guard next != MapCenter(here.latitude, here.longitude) else { return }
+        beginExploring()
+        location = GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+        fetchForViewport()
+    }
+
+    private func beginExploring() {
+        lockedHeading = displayHeading
+        exploring = true
+    }
+
+    /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。
+    func faceNorth(canvasWidth: Double, canvasHeight: Double) {
+        guard let viewport = location, canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset else { return }
+        northUpTask?.cancel()
+        let observer = gpsLocation ?? viewport
+        let startHeading = displayHeading
+        let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
+            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
+            rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
+        let range = rangeKm
+        beginExploring()
+        northUpTask = Task { @MainActor [weak self] in
+            let started = ProcessInfo.processInfo.systemUptime
+            while !Task.isCancelled {
+                let progress = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
+                let next = PanGeometry.northUpViewport(MapCenter(observer.latitude, observer.longitude),
+                    viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
+                    rangeKm: range, canvasHeight: canvasHeight, progress: progress, aroundCenter: aroundCenter)
+                self?.location = next == MapCenter(viewport.latitude, viewport.longitude) ? viewport
+                    : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+                self?.lockedHeading = PanGeometry.northUpHeading(startHeading, progress: progress)
+                if progress >= 1 { break }
+                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
+            }
+            if !Task.isCancelled { self?.fetchForViewport() }
+        }
+    }
+
+    func onHeadingSwipe(dx: Double, width: Double, canvasHeight: Double, started: Bool) {
+        northUpTask?.cancel()
+        guard let here = location, dx.isFinite, width.isFinite, width > 0, canvasHeight > DialGeometry.chartInset else { return }
+        let observer = gpsLocation ?? here
+        let observerPoint = MapCenter(observer.latitude, observer.longitude)
+        let viewport = MapCenter(here.latitude, here.longitude)
+        let oldHeading = displayHeading
+        if started {
+            headingSwipeAroundCenter = !PanGeometry.isObserverVisible(observerPoint, viewport: viewport,
+                heading: oldHeading, rangeKm: rangeKm, canvasWidth: width, canvasHeight: canvasHeight)
+        }
+        let nextHeading = DialGeometry.swipedHeading(oldHeading, dx: dx, width: width)
+        let next = PanGeometry.rotateViewport(observerPoint, viewport: viewport, heading: oldHeading, nextHeading: nextHeading,
+            rangeKm: rangeKm, canvasHeight: canvasHeight, aroundCenter: headingSwipeAroundCenter)
+        beginExploring()
+        location = next == viewport ? here : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+        lockedHeading = nextHeading
+        fetchForViewport()
+    }
+
+    func onTransform(zoom: Double, rotation: Double, previous: PlanOffset, midpoint: PlanOffset, chartHeight: Double) {
+        northUpTask?.cancel()
+        guard exploring, let oldHeading = lockedHeading else { onZoom(zoom); return }
+        guard let observer = gpsLocation, let viewport = location,
+              rotation.isFinite, chartHeight.isFinite, chartHeight > 0 else { return }
+        let range = DialGeometry.zoomedRange(rangeKm, zoom: zoom)
+        let nextHeading = Heading.normalize(oldHeading - rotation)
+        let next = PanGeometry.transformViewport(MapCenter(observer.latitude, observer.longitude),
+            viewport: MapCenter(viewport.latitude, viewport.longitude), previous: previous, midpoint: midpoint,
+            oldScale: chartHeight / rangeKm, newScale: chartHeight / range,
+            oldHeading: oldHeading, newHeading: nextHeading)
+        location = GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+        rangeKm = range
+        lockedHeading = nextHeading
+        fetchForViewport()
+    }
+
+    func resetCenter() {
+        northUpTask?.cancel()
+        guard let startLocation = location, let startObserver = gpsLocation else { return }
+        let startHeading = displayHeading
+        // 双眼鏡は現在地に付いているので、表示範囲と方角だけを戻す。途中で止めても双眼鏡は現在地に残る。
+        let initialOffset = PanGeometry.observerOffset(MapCenter(startObserver.latitude, startObserver.longitude),
+            viewport: MapCenter(startLocation.latitude, startLocation.longitude), heading: startHeading)
+        northUpTask = Task { @MainActor [weak self] in
+            let started = ProcessInfo.processInfo.systemUptime
+            while !Task.isCancelled {
+                guard let self, let target = gpsLocation else { return }
+                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
+                let fraction = t * t * (3 - 2 * t)
+                let nextHeading = PanGeometry.returnHeading(startHeading, target: heading ?? startHeading, fraction: fraction)
+                let viewport = PanGeometry.returnViewport(MapCenter(target.latitude, target.longitude),
+                    initialOffset: initialOffset, heading: nextHeading, fraction: fraction)
+                location = GeoPoint(latitude: viewport.latitude, longitude: viewport.longitude, mslAltitudeM: target.mslAltitudeM)
+                lockedHeading = t < 1 ? nextHeading : nil
+                exploring = t < 1
+                if t >= 1 { break }
+                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
+            }
+            if !Task.isCancelled { self?.fetch() }
+        }
+    }
+
+    private func fetchForViewport() {
+        guard let here = location else { return }
+        if let center = fetchedCenter,
+           GeoMath.distanceKm(center.latitude, center.longitude, here.latitude, here.longitude) <= Self.refetchDistanceKm,
+           DialGeometry.fetchRadiusKm(rangeKm) <= fetchedRadiusKm { return }
+        fetch()
     }
 
     func retry() { fetch(forceRefresh: true) }
@@ -163,7 +293,7 @@ final class DialModel: ObservableObject {
         settings = after
         settingsStore.save(after)
 
-        if after.minElevationM != before.minElevationM, let here = location {
+        if after.minElevationM != before.minElevationM, let here = gpsLocation {
             updatePeaks(at: here)
         }
         // 起動時の範囲を変えたら、試しやすいよう今の表示にもすぐ反映する。
@@ -207,7 +337,7 @@ final class DialModel: ObservableObject {
                     latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false
                 )
                 peaks = result.mountains.map(\.mountain)
-                updatePeaks(at: location ?? here)
+                updatePeaks(at: gpsLocation ?? here)
                 incomplete = result.incomplete
             } catch {
                 logger.error("山データの読み直しに失敗: \(String(describing: error), privacy: .public)")
@@ -231,6 +361,7 @@ final class DialModel: ObservableObject {
             guard let self else { return }
             loading = true
             do {
+                if exploring && !manual && !forceRefresh { try await Task.sleep(nanoseconds: 250_000_000) }
                 let result = try await repository.mountainsAround(
                     latitude: here.latitude,
                     longitude: here.longitude,
@@ -245,7 +376,7 @@ final class DialModel: ObservableObject {
                     logger.warning("山データの取得に失敗: \(String(describing: error), privacy: .public)")
                 }
                 peaks = result.mountains.map(\.mountain)
-                updatePeaks(at: location ?? here)
+                updatePeaks(at: gpsLocation ?? here)
                 let skippedOffline = wantsNetwork && !connected && result.networkSkipped
                 if skippedOffline {
                     skippedWhileDisconnected = manual

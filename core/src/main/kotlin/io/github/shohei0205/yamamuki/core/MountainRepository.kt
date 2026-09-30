@@ -110,6 +110,7 @@ class MountainRepository(
      * 目的地など、現在地から離れた地域のタイルを前もって取得する(圏外に備えた事前ダウンロード)。
      * 数タイルずつ Overpass に問い合わせ、終わるたびに保存して [onProgress] を呼ぶ。
      * Overpass は混み合うと 504 やタイムアウトを返すので、問い合わせが失敗したら [retryDelaysMillis] の間隔で取り直す。
+     * 429(問い合わせが多すぎる)のときは、Overpass の利用方針に合わせて少なくとも [rateLimitWaitMillis] 待つ。
      * 途中で失敗・中断しても取得済みのタイルは残り、もう一度呼べば残りだけを取得する。
      *
      * @param forceRefresh true なら取得済みのタイルも取り直す(保存済みの地域の更新)。
@@ -121,6 +122,7 @@ class MountainRepository(
         forceRefresh: Boolean = false,
         maxAgeMillis: Long = this.maxAgeMillis,
         retryDelaysMillis: List<Long> = DOWNLOAD_RETRY_DELAYS_MILLIS,
+        rateLimitWaitMillis: Long = RATE_LIMIT_WAIT_MILLIS,
         onProgress: (DownloadProgress) -> Unit = {},
     ): Int {
         val all = tiles.distinct()
@@ -141,7 +143,8 @@ class MountainRepository(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    val wait = retryDelaysMillis.getOrNull(attempt) ?: throw e
+                    val delayMillis = retryDelaysMillis.getOrNull(attempt) ?: throw e
+                    val wait = if ((e as? OverpassException)?.httpStatus == 429) maxOf(delayMillis, rateLimitWaitMillis) else delayMillis
                     attempt++
                     onProgress(DownloadProgress(done, all.size, retry = attempt, retryWaitMillis = wait))
                     delay(wait)
@@ -162,6 +165,9 @@ class MountainRepository(
 
         /** 事前ダウンロードで問い合わせが失敗したときに、取り直すまで待つ時間(回数分)。 */
         val DOWNLOAD_RETRY_DELAYS_MILLIS = listOf(5_000L, 15_000L, 30_000L)
+
+        /** 429 が返ったときに、取り直すまで待つ最短の時間。Overpass の利用方針(OSM Wiki)の「30 秒待つ」に合わせる。 */
+        const val RATE_LIMIT_WAIT_MILLIS = 30_000L
 
         /** 事前ダウンロードで 1 回に問い合わせるタイルの縦横の数。1°四方なら混み合っていても応答が返りやすい。 */
         const val DOWNLOAD_CHUNK_TILES = 2
