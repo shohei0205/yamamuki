@@ -2,6 +2,43 @@ import XCTest
 @testable import YamamukiCore
 
 final class RingLabelGeometryTests: XCTestCase {
+    func testRotationKeepsOffscreenObserverLabelsOnTheMap() throws {
+        let initialAngle = -Double.pi / 2 + 0.1
+        for heading in [0.0, 30.0, 90.0, 180.0, 270.0, 359.0] {
+            let turn = -heading * .pi / 180
+            func rotate(_ x: Double, _ y: Double) -> (Double, Double) {
+                (180 + (x - 180) * cos(turn) - (y - 412) * sin(turn),
+                 412 + (x - 180) * sin(turn) + (y - 412) * cos(turn))
+            }
+            let (cx, cy) = rotate(180, 900)
+            func place(_ radius: Double, _ angle: Double) -> RingLabelAnchor? {
+                RingLabelGeometry.place(cx: cx, cy: cy, radius: radius, left: 0, top: 76,
+                    right: 360, bottom: 748, width: 60, height: 22, angle: angle)
+            }
+            let rotated = try XCTUnwrap(RingLabelGeometry.rotatedAngle(initialAngle, previousHeading: 0, heading: heading))
+            let chosen = RingLabelGeometry.direction(cx: cx, cy: cy, left: 0, top: 76, right: 360, bottom: 748,
+                previousAngle: rotated, visibleCount: { angle in [500.0, 600.0].filter { place($0, angle) != nil }.count })
+            XCTAssertEqual(chosen, rotated)
+            for radius in [500.0, 600.0] {
+                let expected = rotate(180 + radius * cos(initialAngle), 900 + radius * sin(initialAngle))
+                let actual = try XCTUnwrap(place(radius, chosen))
+                XCTAssertEqual(actual.x, expected.0, accuracy: 1e-7)
+                XCTAssertEqual(actual.y, expected.1, accuracy: 1e-7)
+            }
+        }
+    }
+
+    func testRotationCrossesNorthInBothDirectionsAndHandlesFirstFrame() throws {
+        let angle = -Double.pi / 2
+        XCTAssertEqual(try XCTUnwrap(RingLabelGeometry.rotatedAngle(angle, previousHeading: 359, heading: 1)),
+            angle - 2 * .pi / 180, accuracy: 1e-7)
+        XCTAssertEqual(try XCTUnwrap(RingLabelGeometry.rotatedAngle(angle, previousHeading: 1, heading: 359)),
+            angle + 2 * .pi / 180, accuracy: 1e-7)
+        XCTAssertEqual(RingLabelGeometry.rotatedAngle(angle, previousHeading: 45, heading: 45), angle)
+        XCTAssertEqual(RingLabelGeometry.rotatedAngle(angle, previousHeading: nil, heading: 45), angle)
+        XCTAssertNil(RingLabelGeometry.rotatedAngle(nil, previousHeading: nil, heading: 45))
+    }
+
     func testDirectionChangesWithOneLabelButStaysWithTwo() {
         func count(_ angle: Double) -> Int {
             [100.0, 200.0, 300.0].filter { radius in

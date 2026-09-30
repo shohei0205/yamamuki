@@ -190,8 +190,10 @@ struct DialCanvasView: View, Animatable {
         }
         let angle = headingUp ? -Double.pi / 2 : RingLabelGeometry.direction(cx: Double(observer.x), cy: Double(observer.y),
             left: 0, top: Double(chartTop), right: Double(size.width), bottom: Double(size.height - originBottom),
-            previousAngle: hitTargets.ringLabelAngle, visibleCount: { placements($0).count })
+            previousAngle: RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle,
+                previousHeading: hitTargets.ringLabelHeading, heading: headingDeg), visibleCount: { placements($0).count })
         hitTargets.ringLabelAngle = angle
+        hitTargets.ringLabelHeading = headingDeg
         for (label, box) in placements(angle) {
             ctx.fill(Path(roundedRect: box, cornerRadius: 3), with: .color(.white.opacity(0.85)))
             ctx.draw(label.text, at: CGPoint(x: box.minX + 3, y: box.minY + 3), anchor: .topLeading)
@@ -485,6 +487,7 @@ private struct PlacedPeak {
 /// 直近に描いた山。描画のたびに差し替え、タップ位置から山を引く。
 private final class HitTargets {
     var ringLabelAngle: Double?
+    var ringLabelHeading: Double?
     var peaks: [PlacedPeak] = []
     /// 現在地の山頂アイコンと山名。山と重なっても優先する。
     var summit: PlacedPeak?
