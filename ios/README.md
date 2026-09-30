@@ -1,4 +1,4 @@
-# yamamuki (iOS 版)
+﻿# yamamuki (iOS 版)
 
 Android 版とほぼ同じ機能の iOS アプリ（Swift + SwiftUI、iOS 15 以上）。
 
