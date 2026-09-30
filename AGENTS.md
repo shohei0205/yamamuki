@@ -128,6 +128,8 @@ cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -sch
 
 - `main` に直接 push しない。作業ブランチを切って PR を出す。
 - 1 つの PR には 1 つの目的だけを入れる。ついでのリファクタリングや整形は別の PR にする。
+- PR の作成、件名・本文の更新時は、必ず `.agents/skills/pr-description/SKILL.md` を読み、その手順に従う。
+- スキルが見つからない、または読めない場合は、自己判断で代替せずユーザーに伝える。
 - PR の説明は `.github/pull_request_template.md` の見出し（何を変えたか・対象・確認方法・スクリーンショット）に沿って書く。
 - マージはユーザーが行う（スカッシュマージ）。エージェントは PR をマージしない。
 - Claude と Codex が並行して作業するときは、それぞれ別のブランチを使い、相手のブランチには push しない。同じファイルを大きく変える作業は同時に進めない。
