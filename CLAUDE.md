@@ -5,4 +5,4 @@ Claude Code 用の設定。共通の開発ルールは AGENTS.md にまとめて
 @AGENTS.md
 
 全員の Claude に当てはまるルールはこの下に書く。Codex と共通にしてよいものは AGENTS.md に書く。
-自分だけのルールはここに書かず、コミットしない `CLAUDE.local.md` に書く（AGENTS.md の「個人のルール」を参照）。
+自分だけのルールはここに書かず、コミットしない `CLAUDE.local.md` か `~/.claude/CLAUDE.md` に書く（AGENTS.md の「個人のルール」を参照）。
