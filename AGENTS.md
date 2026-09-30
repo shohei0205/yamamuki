@@ -157,6 +157,7 @@ Codex が Markdown を読むときの文字化けを防ぐため、次のよう�
 - 編集前に対象ファイルの改行コードを確かめ、既存の CRLF または LF を保つ。
 - `.gitattributes` や `.editorconfig` に指定があれば従う。指定のない新規ファイルは、同じディレクトリにある同じ種類のファイルに合わせる。
 - このリポジトリでは、`.gitattributes` と `.editorconfig` で、改行を LF（`.bat` だけ CRLF）に、Markdown を BOM 付きにしている。
+- 改行コードと BOM がルールどおりかは、CI の「Text format」で確かめている。手元では `.github/scripts/check-text-format.sh` で確かめられる。
 
 ## やってはいけないこと
 
