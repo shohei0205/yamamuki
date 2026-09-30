@@ -21,7 +21,8 @@ bom=$'\xef\xbb\xbf'
 while IFS= read -r path; do
   # バイナリ(i/-text)は対象外
   [[ "$(git ls-files --eol -- "$path")" == i/-text* ]] && continue
-  head3=$(git show ":$path" | head -c 3)
+  # 大きなファイルは head が先に閉じて git が SIGPIPE で終わるので、その失敗は無視する。
+  head3=$(git cat-file blob ":$path" | head -c 3 || true)
   case "$path" in
     SKILL.md|*/SKILL.md)
       [[ "$head3" == "$bom" ]] && { echo "::error file=$path::SKILL.md には BOM を付けないでください。"; failed=1; } ;;
