@@ -27,7 +27,10 @@ extension Color {
 }
 
 /// 画面上部の方位目盛りに収める角度の幅。
-private let tapeSpanDeg = 60.0
+private let tapeSpanDeg = DialGeometry.tapeSpanDeg
+
+/// 描画原点(双眼鏡)の画面下端からの高さ。
+private let originBottom = CGFloat(DialGeometry.originBottom)
 
 /// 山アイコンの縁取りの太さ。3 種類とも同じ太さにそろえる。
 private let outlineWidth: CGFloat = 1.5
@@ -50,6 +53,13 @@ struct DialCanvasView: View {
     let maxPeaks: Int
     /// 文字の大きさ(標準 = 1.0 に対する倍率)。
     let textScale: Double
+    let observerLocation: GeoPoint?
+    let viewportLocation: GeoPoint?
+    let compassHeading: Double
+    let headingUp: Bool
+    let onPan: (Double, Double, Double) -> Void
+    let onHeadingSwipe: (Double, Double, Bool) -> Void
+    let onTransform: (Double, Double, PlanOffset, PlanOffset, Double) -> Void
     let onMountainTap: (NearbyMountain) -> Void
     let onObserverTap: () -> Void
 
@@ -59,23 +69,30 @@ struct DialCanvasView: View {
         Canvas { context, size in
             draw(context, size: size)
         }
-        .contentShape(Rectangle())
-        .onTapLocation { location in
-            if hitTargets.hitsObserver(location, slop: 8) {
-                onObserverTap()
-            } else if let m = hitTargets.find(location, slop: 8) {
-                onMountainTap(m)
+        .overlay {
+            DialTouchSurface(onPan: onPan, onHeadingSwipe: onHeadingSwipe, onTransform: onTransform) { point in
+                if hitTargets.hitsObserver(point, slop: 8) {
+                    onObserverTap()
+                } else if let m = hitTargets.find(point, slop: 8) {
+                    onMountainTap(m)
+                }
             }
         }
     }
 
     private func draw(_ ctx: GraphicsContext, size: CGSize) {
         let styles = TextStyles(scale: textScale)
-        let tapeHeight: CGFloat = 44
-        let chartTop = tapeHeight + 32
-        // 双眼鏡が右下の「© OpenStreetMap contributors」と重ならない高さ。
-        let observer = CGPoint(x: size.width / 2, y: size.height - 52)
-        let pxPerKm = (observer.y - chartTop) / CGFloat(rangeKm)
+        let tapeHeight = CGFloat(DialGeometry.tapeHeight)
+        let chartTop = CGFloat(DialGeometry.chartTop)
+        let origin = CGPoint(x: size.width / 2, y: size.height - originBottom)
+        let pxPerKm = (origin.y - chartTop) / CGFloat(rangeKm)
+        var observer = origin
+        if let here = observerLocation, let viewport = viewportLocation {
+            let offset = PanGeometry.observerOffset(MapCenter(here.latitude, here.longitude),
+                viewport: MapCenter(viewport.latitude, viewport.longitude), heading: headingDeg)
+            observer.x += CGFloat(offset.x) * pxPerKm
+            observer.y -= CGFloat(offset.y) * pxPerKm
+        }
         if pxPerKm > 0 {
             drawRings(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles)
             hitTargets.peaks = drawPeaks(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles)
@@ -86,28 +103,62 @@ struct DialCanvasView: View {
             hitTargets.summit = drawSummit(ctx, center: observer, summit: summit, styles: styles)
             hitTargets.observer = nil
         } else {
-            hitTargets.observer = drawBinoculars(ctx, center: observer)
+            hitTargets.observerCenter = observer
+            hitTargets.observerRotation = Heading.delta(headingDeg, compassHeading)
+            hitTargets.observer = drawBinoculars(rotatedObserver(ctx, center: observer), center: observer)
             hitTargets.summit = nil
         }
         drawTape(ctx, size: size, tapeHeight: tapeHeight)
         drawReadout(ctx, size: size, tapeHeight: tapeHeight, styles: styles)
     }
 
+    private func rotatedObserver(_ ctx: GraphicsContext, center: CGPoint) -> GraphicsContext {
+        var rotated = ctx
+        rotated.translateBy(x: center.x, y: center.y)
+        rotated.rotate(by: .degrees(Heading.delta(headingDeg, compassHeading)))
+        rotated.translateBy(x: -center.x, y: -center.y)
+        return rotated
+    }
+
     private func drawRings(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, pxPerKm: CGFloat, chartTop: CGFloat, styles: TextStyles) {
         let step = CGFloat(DialGeometry.ringStepKm(rangeKm))
-        let farthest = hypot(size.width / 2, observer.y)
-        var i = 1
+        let farthest = hypot(max(abs(observer.x), abs(size.width - observer.x)),
+            max(abs(chartTop - observer.y), abs(size.height - observer.y)))
+        let nearest = hypot(max(0, max(-observer.x, observer.x - size.width)),
+            max(0, max(chartTop - observer.y, observer.y - size.height)))
+        var ctx = ctx
+        ctx.clip(to: Path(CGRect(x: 0, y: chartTop, width: size.width, height: max(0, size.height - originBottom - chartTop))))
+        var i = max(1, Int(nearest / (step * pxPerKm)))
+        var rings: [(CGFloat, MeasuredText)] = []
         while step * CGFloat(i) * pxPerKm <= farthest {
             let km = step * CGFloat(i)
             let radius = km * pxPerKm
             let circle = Path(ellipseIn: CGRect(x: observer.x - radius, y: observer.y - radius, width: radius * 2, height: radius * 2))
             ctx.stroke(circle, with: .color(ringGray), lineWidth: 3)
-            let label = measuredText(ctx, DialGeometry.ringLabel(Double(km)), size: styles.ringLabel, color: ringGray)
-            let y = observer.y - radius - label.size.height - 2
-            if y >= chartTop {
-                ctx.draw(label.text, at: CGPoint(x: observer.x - label.size.width / 2, y: y), anchor: .topLeading)
-            }
+            let label = measuredText(ctx, DialGeometry.ringLabel(Double(km)), size: styles.ringLabel, color: Color(white: 0.4))
+            rings.append((radius, label))
             i += 1
+        }
+        func placements(_ angle: Double) -> [(MeasuredText, CGRect)] {
+            var labels: [(MeasuredText, CGRect)] = []
+            for (radius, label) in rings {
+            if let anchor = RingLabelGeometry.place(cx: Double(observer.x), cy: Double(observer.y), radius: Double(radius),
+                left: 0, top: Double(chartTop), right: Double(size.width), bottom: Double(size.height - originBottom),
+                width: Double(label.size.width + 6), height: Double(label.size.height + 6), angle: angle) {
+                let box = CGRect(x: CGFloat(anchor.x) - label.size.width / 2 - 3,
+                    y: CGFloat(anchor.y) - label.size.height / 2 - 3, width: label.size.width + 6, height: label.size.height + 6)
+                if !labels.contains(where: { $0.1.intersects(box) }) { labels.append((label, box)) }
+            }
+            }
+            return labels
+        }
+        let angle = headingUp ? -Double.pi / 2 : RingLabelGeometry.direction(cx: Double(observer.x), cy: Double(observer.y),
+            left: 0, top: Double(chartTop), right: Double(size.width), bottom: Double(size.height - originBottom),
+            previousAngle: hitTargets.ringLabelAngle, visibleCount: { placements($0).count })
+        hitTargets.ringLabelAngle = angle
+        for (label, box) in placements(angle) {
+            ctx.fill(Path(roundedRect: box, cornerRadius: 3), with: .color(.white.opacity(0.85)))
+            ctx.draw(label.text, at: CGPoint(x: box.minX + 3, y: box.minY + 3), anchor: .topLeading)
         }
     }
 
@@ -120,7 +171,7 @@ struct DialCanvasView: View {
             if placed.count >= maxPeaks { break }
             let o = DialGeometry.project(distanceKm: m.distanceKm, bearingDeg: m.bearingDeg, headingDeg: headingDeg)
             let p = CGPoint(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
-            guard p.x >= 0, p.x <= size.width, p.y - PeakIcon.maxHeight >= chartTop, p.y < observer.y else { continue }
+            guard p.x >= 0, p.x <= size.width, p.y - PeakIcon.maxHeight >= chartTop, p.y < size.height - originBottom else { continue }
             let icon = PeakIcon.of(m.mountain.elevationClass)
             let label = measuredText(ctx, m.mountain.name, size: styles.label, color: .black)
             let labelHalf = label.size.width / 2
@@ -179,7 +230,7 @@ struct DialCanvasView: View {
         let flag = polygon([at(2, -24), at(13, -20.5), at(2, -17)])
         let pole = line(at(2, -24), at(2, -8))
 
-        drawViewCone(ctx, apex: at(0, -6))
+        drawViewCone(rotatedObserver(ctx, center: center), apex: at(0, -6))
 
         // 白い縁取り → 本体の順に描く。
         let halo = StrokeStyle(lineWidth: 4, lineJoin: .round)
@@ -337,15 +388,25 @@ private struct PlacedPeak {
 
 /// 直近に描いた山。描画のたびに差し替え、タップ位置から山を引く。
 private final class HitTargets {
+    var ringLabelAngle: Double?
     var peaks: [PlacedPeak] = []
     /// 現在地の山頂アイコンと山名。山と重なっても優先する。
     var summit: PlacedPeak?
     /// 双眼鏡の範囲。山頂アイコンを描いているときは nil。山と重なっても優先する。
     var observer: CGRect?
+    var observerCenter = CGPoint.zero
+    var observerRotation = 0.0
 
     /// [tap] が双眼鏡に当たったか。枠を [slop] だけ広げて判定する。
     func hitsObserver(_ tap: CGPoint, slop: CGFloat) -> Bool {
-        observer?.insetBy(dx: -slop, dy: -slop).contains(tap) ?? false
+        let angle = CGFloat(-observerRotation * .pi / 180)
+        let dx = tap.x - observerCenter.x
+        let dy = tap.y - observerCenter.y
+        let localTap = CGPoint(
+            x: observerCenter.x + dx * cos(angle) - dy * sin(angle),
+            y: observerCenter.y + dx * sin(angle) + dy * cos(angle)
+        )
+        return observer?.insetBy(dx: -slop, dy: -slop).contains(localTap) ?? false
     }
 
     /// [tap] を含む山のうち、アイコンが最も近いもの。枠を [slop] だけ広げて判定する。

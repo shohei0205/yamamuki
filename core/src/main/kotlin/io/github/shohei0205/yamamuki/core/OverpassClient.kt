@@ -15,7 +15,12 @@ fun interface MountainRemoteSource {
     suspend fun fetchPeaks(box: BoundingBox): List<Mountain>
 }
 
-class OverpassException(message: String, cause: Throwable? = null) : Exception(message, cause)
+/** @property httpStatus サーバーが返した HTTP ステータス。つながらなかったなど、応答がないときは null。 */
+class OverpassException(
+    message: String,
+    cause: Throwable? = null,
+    val httpStatus: Int? = null,
+) : Exception(message, cause)
 
 /**
  * OSM Overpass API から natural=peak / natural=volcano の名前付きノードを取得する。
@@ -40,7 +45,7 @@ class OverpassClient(
                     header(HttpHeaders.UserAgent, userAgent)
                 }
                 if (!response.status.isSuccess()) {
-                    errors += OverpassException("HTTP ${response.status.value} from $endpoint")
+                    errors += OverpassException("HTTP ${response.status.value} from $endpoint", httpStatus = response.status.value)
                     continue
                 }
                 return OverpassParser.parse(response.bodyAsText())
@@ -50,15 +55,20 @@ class OverpassClient(
                 errors += OverpassException("${e::class.simpleName} from $endpoint", e)
             }
         }
-        throw OverpassException("All Overpass endpoints failed", errors.lastOrNull()).apply {
+        val last = errors.lastOrNull()
+        throw OverpassException("All Overpass endpoints failed", last, (last as? OverpassException)?.httpStatus).apply {
             errors.dropLast(1).forEach(::addSuppressed)
         }
     }
 
     companion object {
+        /**
+         * 以前は 2 番目に overpass.kumi.systems(現 overpass.private.coffee)を置いていたが、問い合わせに応答せず
+         * 75 秒待ってタイムアウトするだけだったので外した(#34)。本家の 504・429 は同時に使える枠が空いていない
+         * という意味なので、別のサーバーに回すより、少し待って同じサーバーに問い合わせ直すほうが通りやすい。
+         */
         val DEFAULT_ENDPOINTS = listOf(
             "https://overpass-api.de/api/interpreter",
-            "https://overpass.kumi.systems/api/interpreter",
         )
     }
 }

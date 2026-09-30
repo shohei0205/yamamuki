@@ -9,12 +9,14 @@ private final class FakeRemote: MountainRemoteSource, @unchecked Sendable {
     var calls: [BoundingBox] = []
     /// この回数目(1 始まり)の問い合わせで失敗する。
     var failAt: Set<Int> = []
+    /// 失敗させるときに投げるエラー。
+    var failure: Error = Offline()
 
     init(_ peaks: [Mountain]) { self.peaks = peaks }
 
     func fetchPeaks(_ box: BoundingBox) async throws -> [Mountain] {
         calls.append(box)
-        if failAt.contains(calls.count) { throw Offline() }
+        if failAt.contains(calls.count) { throw failure }
         return peaks.filter { box.contains($0.latitude, $0.longitude) }
     }
 }
@@ -111,6 +113,27 @@ final class AreaDownloadTests: XCTestCase {
             XCTFail("取り直しても失敗するはず")
         } catch is Offline {}
         XCTAssertEqual(failing.calls.count, 3, "最初の 1 回 + 取り直し 2 回")
+    }
+
+    func testWaitsLongerAfterTooManyRequests() async throws {
+        // 429 のときは retryDelays より長く、少なくとも rateLimitWait 待ってから取り直す。504 などはそのままの間隔。
+        let limited = FakeRemote([yari])
+        limited.failAt = [1]
+        limited.failure = OverpassError("HTTP 429", httpStatus: 429)
+        let log = ProgressLog()
+        try await repo(limited, InMemoryCache()).downloadTiles(nagano.tiles, retryDelays: [0], rateLimitWait: 0.01) { log.items.append($0) }
+        XCTAssertEqual(log.items.filter { $0.retry > 0 }.map(\.retryWait), [0.01])
+
+        let busy = FakeRemote([yari])
+        busy.failAt = [1]
+        busy.failure = OverpassError("HTTP 504", httpStatus: 504)
+        let busyLog = ProgressLog()
+        try await repo(busy, InMemoryCache()).downloadTiles(nagano.tiles, retryDelays: [0], rateLimitWait: 0.01) { busyLog.items.append($0) }
+        XCTAssertEqual(busyLog.items.filter { $0.retry > 0 }.map(\.retryWait), [0])
+    }
+
+    func testUsesOnlyMainInstanceByDefault() {
+        XCTAssertEqual(OverpassClient.defaultEndpoints.map(\.absoluteString), ["https://overpass-api.de/api/interpreter"])
     }
 
     func testStatusTextCountsWaitingSeconds() {

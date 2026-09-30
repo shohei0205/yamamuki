@@ -16,9 +16,11 @@ class AreaDownloadTest {
         val calls = mutableListOf<BoundingBox>()
         /** この回数目(1 始まり)の問い合わせで失敗する。 */
         var failAt: Set<Int> = emptySet()
+        /** 失敗させるときに投げる例外。 */
+        var failure: () -> Exception = { IOException("offline") }
         override suspend fun fetchPeaks(box: BoundingBox): List<Mountain> {
             calls += box
-            if (calls.size in failAt) throw IOException("offline")
+            if (calls.size in failAt) throw failure()
             return peaks.filter { box.contains(it.latitude, it.longitude) }
         }
     }
@@ -84,6 +86,26 @@ class AreaDownloadTest {
             repo(failing, InMemoryMountainCache()).downloadTiles(nagano.tiles, retryDelaysMillis = listOf(1L, 1L))
         }
         assertEquals(3, failing.calls.size, "最初の 1 回 + 取り直し 2 回")
+    }
+
+    @Test
+    fun waitsLongerAfterTooManyRequests() = runTest {
+        // 429 のときは 5 秒ではなく、少なくとも 30 秒待ってから取り直す。504 などはそのままの間隔。
+        val progress = mutableListOf<DownloadProgress>()
+        val limited = FakeRemote(listOf(yari)).apply {
+            failAt = setOf(1)
+            failure = { OverpassException("HTTP 429", httpStatus = 429) }
+        }
+        repo(limited, InMemoryMountainCache()).downloadTiles(nagano.tiles) { progress += it }
+        assertEquals(listOf(30_000L), progress.filter { it.retry > 0 }.map { it.retryWaitMillis })
+
+        progress.clear()
+        val busy = FakeRemote(listOf(yari)).apply {
+            failAt = setOf(1)
+            failure = { OverpassException("HTTP 504", httpStatus = 504) }
+        }
+        repo(busy, InMemoryMountainCache()).downloadTiles(nagano.tiles) { progress += it }
+        assertEquals(listOf(5_000L), progress.filter { it.retry > 0 }.map { it.retryWaitMillis })
     }
 
     @Test
