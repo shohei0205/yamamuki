@@ -138,6 +138,19 @@ cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -sch
   - 例: `[Claude Opus 5.5] CI の失敗を直しました`、`[Codex GPT-5] レビューの指摘に対応しました`
 - モデル名は、そのとき実際に動いているモデルを書く。分からないときはツール名（`[Claude Code]`、`[Codex]`）だけでもよい。
 
+## 個人のルール
+
+このファイルと `CLAUDE.md` は全員とクラウドの AI が読む共通ルール。人によって違う好みや手元の環境によること（PR を AI に作らせるか、使う実機など）はここに書かず、コミットしない次のファイルに書く。
+
+| ツール | 個人のルールを書くファイル |
+|---|---|
+| Claude Code | リポジトリ直下の `CLAUDE.local.md`（自動で読まれる）、または `~/.claude/CLAUDE.md` |
+| Codex | `~/.codex/AGENTS.md`（このファイルに足して読まれる） |
+
+- 個人のルールには、共通ルールと矛盾することを書かない。
+- Codex の `AGENTS.override.md` は、このファイルに足されるのではなく置き換えて読まれ、共通ルールが読まれなくなるので使わない。
+- `CLAUDE.local.md` と `AGENTS.override.md` は `.gitignore` に入れてある。
+
 ## ドキュメント
 
 - 画面・設定項目・キャッシュの仕組み・ビルド手順を変えたら、同じ PR で README.md も更新する。

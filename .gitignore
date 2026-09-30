@@ -18,3 +18,7 @@ ios/YamamukiCore/.build/
 ios/YamamukiCore/.swiftpm/
 xcuserdata/
 DerivedData/
+
+# AI ツールの個人のルール(AGENTS.md の「個人のルール」を参照)
+CLAUDE.local.md
+AGENTS.override.md
