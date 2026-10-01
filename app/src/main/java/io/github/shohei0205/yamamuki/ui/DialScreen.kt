@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -267,7 +266,7 @@ fun DialScreen(
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
         )
 
-        // 左下: 設定、事前ダウンロード、山データの取得。屋外で押しやすいよう既定(40dp)より大きくする。
+        // 左下: 設定と事前ダウンロード。屋外で押しやすいよう既定(40dp)より大きくする。
         Row(
             Modifier.align(Alignment.BottomStart).padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -296,19 +295,6 @@ fun DialScreen(
                             contentDescription = "山データの事前ダウンロード",
                             Modifier.size(28.dp),
                         )
-                    }
-                }
-            }
-            if (Features.FETCH_BUTTON && hasPermission) {
-                FilledTonalIconButton(
-                    onClick = viewModel::fetchManually,
-                    enabled = state.location != null && !state.loading,
-                    modifier = Modifier.size(52.dp),
-                ) {
-                    if (state.loading) {
-                        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
-                    } else {
-                        Icon(Icons.Filled.Refresh, contentDescription = "山データを取得", Modifier.size(28.dp))
                     }
                 }
             }
@@ -430,7 +416,7 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
         !state.connected -> "圏外: 保存済みのデータで表示中"
         state.offline && state.incomplete -> "通信できず、$missing"
         state.offline -> "オフライン: 保存済みのデータで表示中"
-        state.incomplete && Features.FETCH_BUTTON -> "$missing。左下の更新ボタンで取得できます"
+        state.incomplete && Features.AREA_DOWNLOAD -> "$missing。事前ダウンロードで取得できます"
         state.incomplete -> missing
         else -> null
     }

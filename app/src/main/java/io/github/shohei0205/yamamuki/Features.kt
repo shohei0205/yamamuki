@@ -6,7 +6,4 @@ package io.github.shohei0205.yamamuki
 object Features {
     /** 目的地の山データを都道府県単位で前もってダウンロードする(方位盤の左下のボタンと、その画面)。 */
     const val AREA_DOWNLOAD = true
-
-    /** 方位盤の左下の更新ボタンで、今の表示範囲の山データを Overpass から取得する。 */
-    const val FETCH_BUTTON = true
 }

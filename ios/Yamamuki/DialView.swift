@@ -129,7 +129,7 @@ struct DialView: View {
         }
     }
 
-    /// 左下: 設定、事前ダウンロード、山データの取得。屋外で押しやすいよう大きめにする。
+    /// 左下: 設定と事前ダウンロード。屋外で押しやすいよう大きめにする。
     private var bottomButtons: some View {
         HStack(spacing: 8) {
             RoundButton(label: "設定") {
@@ -139,18 +139,6 @@ struct DialView: View {
             }
             if Features.areaDownload {
                 AreaDownloadButton(download: model.areaDownload) { showDownload = true }
-            }
-            if Features.fetchButton && model.hasLocationPermission {
-                RoundButton(label: "山データを取得") {
-                    if model.loading {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                } action: {
-                    model.fetchManually()
-                }
-                .disabled(model.location == nil || model.loading)
             }
         }
     }
@@ -177,7 +165,7 @@ struct DialView: View {
         if !model.isConnected { return "圏外: 保存済みのデータで表示中" }
         if model.offline && model.incomplete { return "通信できず、\(missing)" }
         if model.offline { return "オフライン: 保存済みのデータで表示中" }
-        if model.incomplete { return Features.fetchButton ? "\(missing)。左下の更新ボタンで取得できます" : missing }
+        if model.incomplete { return Features.areaDownload ? "\(missing)。事前ダウンロードで取得できます" : missing }
         return nil
     }
 }

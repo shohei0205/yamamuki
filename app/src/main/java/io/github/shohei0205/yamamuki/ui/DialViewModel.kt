@@ -266,9 +266,6 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         fetch(manual = true)
     }
 
-    /** 左下の更新ボタン(山データを取得)。今の表示範囲のうち、未取得または古い地域を取得する。 */
-    fun fetchManually() = fetch(manual = true)
-
     fun updateSettings(transform: (Settings) -> Settings) {
         val before = _state.value.settings
         appSettings.update(transform)
@@ -324,7 +321,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val here = _state.value.location ?: return
         val radius = DialGeometry.fetchRadiusKm(_state.value.rangeKm)
         val settings = _state.value.settings
-        // 山データの取得先を移す準備中のため、自動では通信しない(左下の更新ボタンを押したときだけ取得する)。
+        // 山データの取得先を移す準備中のため、方位盤からは自動では通信しない(山データは事前ダウンロードで取得する)。
         val wantsNetwork = manual
         // 圏外と分かっていれば通信を試さない(失敗を待たず、エラーの知らせも出さない)。
         val connected = _state.value.connected

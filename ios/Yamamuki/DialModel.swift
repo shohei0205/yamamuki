@@ -269,9 +269,6 @@ final class DialModel: ObservableObject {
         fetch(manual: true)
     }
 
-    /// 左下の更新ボタン(山データを取得)。今の表示範囲のうち、未取得または古い地域を取得する。
-    func fetchManually() { fetch(manual: true) }
-
     func updateSettings(_ transform: (inout Settings) -> Void) {
         let before = settings
         var after = settings
@@ -335,7 +332,7 @@ final class DialModel: ObservableObject {
         guard let here = location else { return }
         let radius = DialGeometry.fetchRadiusKm(rangeKm)
         let settings = self.settings
-        // 山データの取得先を移す準備中のため、自動では通信しない(左下の更新ボタンを押したときだけ取得する)。
+        // 山データの取得先を移す準備中のため、方位盤からは自動では通信しない(山データは事前ダウンロードで取得する)。
         let wantsNetwork = manual
         // 圏外と分かっていれば通信を試さない(失敗を待たず、エラーの知らせも出さない)。
         let connected = isConnected
