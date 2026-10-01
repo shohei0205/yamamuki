@@ -24,10 +24,11 @@ jobs:
         run: |
           brew install xcodegen
           xcodegen generate
-      - name: アプリのビルド(シミュレーター向け、署名なし)
+      # UI テストは動かさず、テストのコードもビルドが通るかだけを見る。
+      - name: アプリと UI テストのビルド(シミュレーター向け、署名なし)
         working-directory: ios
         run: |
-          xcodebuild build \
+          xcodebuild build-for-testing \
             -project Yamamuki.xcodeproj \
             -scheme Yamamuki \
             -destination 'generic/platform=iOS Simulator' \
