@@ -3,7 +3,7 @@ name: Yamamuki
 options:
   bundleIdPrefix: io.github.shohei0205
   deploymentTarget:
-    iOS: "15.0"
+    iOS: "26.0"
 packages:
   YamamukiCore:
     path: YamamukiCore

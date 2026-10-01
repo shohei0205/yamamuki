@@ -38,9 +38,9 @@
 
 | 必要なもの | バージョン |
 |---|---|
-| Mac + Xcode | Xcode 16 以上（16.4 で動作確認） |
+| Mac + Xcode | Xcode 26 以上 |
 | XcodeGen | `brew install xcodegen` で入れる |
-| 実行する端末 | iOS 15 以上の iPhone（縦向き固定） |
+| 実行する端末 | iOS 26 以上の iPhone（縦向き固定） |
 
 - iOS アプリのビルドと iPhone への転送には Mac が必要。Mac が無くても、ビルドが通るかは GitHub Actions（`.github/workflows/ios.yml`）で確認できる。
 - シミュレーターでも起動できるが、方位センサーが無いので方位盤は回らない。現在地はシミュレーターのメニュー（Features > Location）で指定する。

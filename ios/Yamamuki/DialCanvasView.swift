@@ -485,18 +485,8 @@ private func line(_ from: CGPoint, _ to: CGPoint) -> Path {
 }
 
 private extension View {
-    /// タップした位置を渡す。iOS 15 には位置の分かるタップがないので、ほとんど動かさずに離したドラッグをタップとみなす。
-    @ViewBuilder
+    /// タップした位置を渡す。
     func onTapLocation(_ action: @escaping (CGPoint) -> Void) -> some View {
-        if #available(iOS 16, *) {
-            gesture(SpatialTapGesture().onEnded { action($0.location) })
-        } else {
-            gesture(DragGesture(minimumDistance: 0).onEnded { value in
-                // ピンチやスクロールのつもりで指を動かしたときは山を開かない。
-                if hypot(value.translation.width, value.translation.height) < 10 {
-                    action(value.location)
-                }
-            })
-        }
+        gesture(SpatialTapGesture().onEnded { action($0.location) })
     }
 }
