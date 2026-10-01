@@ -59,7 +59,6 @@
 - 単純な変更は短くてよい。複雑な変更では、主要な動作・例外処理・互換性・テストを書く。項目数を埋めるための説明は足さない。
 - 長い箇条書きの続きは 2 文字分字下げする。
 - メッセージは、そのコミットの差分だけを説明する。
-- 過去のメッセージを直す場合は、そのコミット時点の検証結果を使い、ファイル内容・既存の作成者情報・作業中の変更を保持する。
 
 ### 検証
 
@@ -69,10 +68,7 @@
 
 ### 作成者
 
-- AI が共同で作成した場合は、末尾に空行を入れて `Co-authored-by:` を書く。
-  - Codex の場合は `Co-authored-by: Codex` とし、メールアドレスは確認できる場合だけ書く。
-  - Claude Code の場合は、Claude Code が指定する行をそのまま使う。
-- 他のツールのコミットは、文章の粒度と構成の参考にするだけにする。他ツールの署名やセッション情報をコピーせず、名前・メールアドレス・モデル名・URL を創作しない。
+- AI が共同で作成した場合は、末尾に空行を入れて `Co-authored-by:` を書く（ツールごとの書き方は「AI のクセへの対策」を参照）。
 
 ### 記載例
 
@@ -108,6 +104,9 @@ Co-authored-by: Codex
 コミットの前に、変えた部分に応じて次を通す。CI（`.github/workflows/`）でも同じものを動かしている。
 
 ```bash
+# すべて: 改行コードと BOM の確認
+.github/scripts/check-text-format.sh
+
 # Android: core の単体テストとアプリのビルド
 ./gradlew -p core test
 ./gradlew :app:assembleDebug
@@ -115,11 +114,12 @@ Co-authored-by: Codex
 # iOS: core の単体テスト（Mac または Swift の入った環境）
 (cd ios/YamamukiCore && swift test)
 
-# iOS: アプリのビルド（Mac のみ）
-cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -scheme Yamamuki \
-  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+# iOS: アプリのビルド（Mac のみ。XcodeGen は brew install xcodegen で入れる）
+(cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -scheme Yamamuki \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO)
 ```
 
+- CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
 - ロジックを変えたら単体テストを足す。テストを消したり飛ばしたりして通すことはしない。
 - 画面を変えたら、変更前と変更後のスクリーンショットを PR に貼る（撮れないときはそう書く）。
@@ -131,8 +131,9 @@ cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -sch
 - 「修正して」「ブランチを作成して」という依頼に、PR 作成の許可は含まれない。
 - 1 つの PR には 1 つの目的だけを入れる。ついでのリファクタリングや整形は別の PR にする。
 - PR の説明は `.github/pull_request_template.md` の見出し（何を変えたか・対象・確認方法・スクリーンショット）に沿って書く。
+- PR の件名と本文は、スキル `pr-description`（`.agents/skills/pr-description/SKILL.md`）の手順でコミットから作る。コミットが複数ある PR は、本文の最後に「マージ時のコミット」の候補を入れる。
 - マージはユーザーが行う（スカッシュマージ）。エージェントは PR をマージしない。
-- Claude と Codex が並行して作業するときは、それぞれ別のブランチを使い、相手のブランチには push しない。同じファイルを大きく変える作業は同時に進めない。
+- 複数の人や AI が並行して作業するときは、それぞれ別のブランチを使い、相手のブランチには push しない。同じファイルを大きく変える作業は同時に進めない。
 
 ## AI が投稿するコメント
 
@@ -140,25 +141,44 @@ cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -sch
   - 例: `[Claude Opus 5.5] CI の失敗を直しました`、`[Codex GPT-5] レビューの指摘に対応しました`
 - モデル名は、そのとき実際に動いているモデルを書く。分からないときはツール名（`[Claude Code]`、`[Codex]`）だけでもよい。
 
+## AI のクセへの対策
+
+AI ツールが起こしやすい失敗を防ぐための指示。人の作業には当てはまらないものもある。
+
+- エディタの設定（`.editorconfig`）を読まずにファイルを書くツールがあるので、編集前に対象ファイルの改行コードと BOM を確かめて保つ。Markdown は保存後に先頭の BOM が残っているかを確かめる（`SKILL.md` は BOM が付いていないかを確かめる）。
+- 既存の Markdown に BOM を付けるときは、改行コードを変えない。
+- `Co-authored-by:` の書き方:
+  - Codex は `Co-authored-by: Codex` とし、メールアドレスは確認できる場合だけ書く。
+  - Claude Code は、Claude Code が指定する行をそのまま使う。
+- 他のツールのコミットは、文章の粒度と構成の参考にするだけにする。他ツールの署名やセッション情報をコピーせず、名前・メールアドレス・モデル名・URL を創作しない。
+- 過去のコミットメッセージを直す場合は、そのコミット時点の検証結果を使い、ファイル内容・既存の作成者情報・作業中の変更を保持する。
+
+## 個人のルール
+
+このファイルと `CLAUDE.md` は全員とクラウドの AI が読む共通ルール。人によって違う好みや、手元の環境によること（PR を AI に作らせるか、使う実機など）はここに書かず、コミットしない各自のファイルに書く。
+
+| ツール | 個人のルールを書くファイル |
+|---|---|
+| Claude Code | リポジトリ直下の `CLAUDE.local.md`、または `~/.claude/CLAUDE.md` |
+| Codex | `~/.codex/AGENTS.md` |
+
+- 個人のルールには、共通ルールと矛盾することを書かない。
+- Codex の `AGENTS.override.md` は、このファイルに足されるのではなく置き換えて読まれ、共通ルールが読まれなくなるので使わない。
+- `CLAUDE.local.md` と `AGENTS.override.md` は `.gitignore` に入れてある。
+
 ## ドキュメント
 
 - 画面・設定項目・キャッシュの仕組み・ビルド手順を変えたら、同じ PR で README.md も更新する。
+- CI で確かめる内容を変えたら、同じ PR でこのファイルの「変更の確かめ方」も更新する。
 - このファイルのルールを変えたら、同じ PR で理由を説明する。
 
-## Markdown の文字コード
+## 文字コードと改行コード
 
-Codex が Markdown を読むときの文字化けを防ぐため、次のようにする。
-
-- Markdown（`.md`）は、新規作成・編集のどちらのときも UTF-8 BOM 付きで保存し、保存後に先頭の BOM を確認する。
-- 既存の Markdown に BOM を付けるときは、改行コードを変えない。
-
-## ファイルの改行コード
-
-編集後に CRLF と LF が混ざるのを防ぐため、次のようにする。Markdown に限らず、ソースコードや設定ファイルなど、すべてのテキストファイルに当てはめる。
-
-- 編集前に対象ファイルの改行コードを確かめ、既存の CRLF または LF を保つ。
-- `.gitattributes` や `.editorconfig` に指定があれば従う。指定のない新規ファイルは、同じディレクトリにある同じ種類のファイルに合わせる。
-- このリポジトリでは、`.gitattributes` と `.editorconfig` で、改行を LF（`.bat` だけ CRLF）に、Markdown を BOM 付きにしている。
+- テキストファイルは UTF-8、改行は LF にする（`.bat` だけ CRLF）。
+- Markdown（`.md`）は BOM 付きにする（BOM が無いと文字化けする AI ツールがあるため）。Markdown 以外には BOM を付けない。
+- 例外として、スキルの `SKILL.md` には BOM を付けない。先頭の `---` からスキルの設定を読むため、BOM があると読めなくなるおそれがある。
+- この決まりは `.gitattributes` と `.editorconfig` に書いてある。指定のない新規ファイルは、同じディレクトリにある同じ種類のファイルに合わせる。
+- ルールどおりかは CI の「Text format」で確かめている。手元では `.github/scripts/check-text-format.sh` で確かめられる。
 
 ## やってはいけないこと
 
