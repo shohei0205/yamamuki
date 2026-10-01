@@ -30,9 +30,6 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
-    scheme:
-      gatherCoverageData: false
-      testTargets: [YamamukiUITests]
   # 画面を実際に操作する UI テスト(XCUITest)。実機でもシミュレータでも動く。
   YamamukiUITests:
     type: bundle.ui-testing
@@ -47,3 +44,33 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: YES
+# テストのあとの処理を足すため、スキームはここでまとめて定義する。
+schemes:
+  Yamamuki:
+    build:
+      targets:
+        Yamamuki: all
+        YamamukiUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets: [YamamukiUITests]
+      # UI テストが終わると Xcode が山むきを終了させ、実機ではテスト用アプリの黒い画面が残る。
+      # すぐ続けて触れるよう、テストした端末で山むきを起動し直す。起動できなくてもテストの結果は変えない。
+      postActions:
+        - name: 山むきを起動し直す
+          settingsTarget: Yamamuki
+          script: |
+            if [ "$PLATFORM_NAME" = iphoneos ]; then
+              xcrun devicectl device process launch --device "$TARGET_DEVICE_IDENTIFIER" "$PRODUCT_BUNDLE_IDENTIFIER"
+            else
+              xcrun simctl launch "$TARGET_DEVICE_IDENTIFIER" "$PRODUCT_BUNDLE_IDENTIFIER"
+            fi > /dev/null 2>&1 || true
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
