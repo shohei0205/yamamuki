@@ -140,7 +140,7 @@ struct DialView: View {
             if Features.areaDownload {
                 AreaDownloadButton(download: model.areaDownload) { showDownload = true }
             }
-            if model.hasLocationPermission {
+            if Features.fetchButton && model.hasLocationPermission {
                 RoundButton(label: "山データを取得") {
                     if model.loading {
                         ProgressView()
@@ -177,7 +177,7 @@ struct DialView: View {
         if !model.isConnected { return "圏外: 保存済みのデータで表示中" }
         if model.offline && model.incomplete { return "通信できず、\(missing)" }
         if model.offline { return "オフライン: 保存済みのデータで表示中" }
-        if model.incomplete { return "\(missing)。左下の更新ボタンで取得できます" }
+        if model.incomplete { return Features.fetchButton ? "\(missing)。左下の更新ボタンで取得できます" : missing }
         return nil
     }
 }

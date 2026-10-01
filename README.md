@@ -138,6 +138,7 @@ open Yamamuki.xcodeproj
 - 北海道は広い(1 つでは約 130 区画)ので、道央・道南・道北・道東の 4 つに分けている(それぞれ 16〜48 区画)。
 - 量の目安(推定): 長野県で 20 区画・数百 KB。
 - 周辺の山だけを取得するライト版を作るときは、`Features.AREA_DOWNLOAD`(Android、`app/.../Features.kt`)と `Features.areaDownload`(iOS、`ios/Yamamuki/Features.swift`)を false にすると、ボタンと画面が出なくなる。
+- 同じように `Features.FETCH_BUTTON`(Android)と `Features.fetchButton`(iOS)を false にすると、方位盤の更新ボタンが出なくなり、山データは事前ダウンロードでだけ取得する。
 
 ## 設定
 

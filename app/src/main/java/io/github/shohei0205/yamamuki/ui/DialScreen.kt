@@ -299,7 +299,7 @@ fun DialScreen(
                     }
                 }
             }
-            if (hasPermission) {
+            if (Features.FETCH_BUTTON && hasPermission) {
                 FilledTonalIconButton(
                     onClick = viewModel::fetchManually,
                     enabled = state.location != null && !state.loading,
@@ -430,7 +430,8 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
         !state.connected -> "圏外: 保存済みのデータで表示中"
         state.offline && state.incomplete -> "通信できず、$missing"
         state.offline -> "オフライン: 保存済みのデータで表示中"
-        state.incomplete -> "$missing。左下の更新ボタンで取得できます"
+        state.incomplete && Features.FETCH_BUTTON -> "$missing。左下の更新ボタンで取得できます"
+        state.incomplete -> missing
         else -> null
     }
 }
