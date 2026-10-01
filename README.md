@@ -12,6 +12,7 @@
 - `app/` Android アプリ。Room によるキャッシュ実装、設定、画面。
 - `ios/YamamukiCore/` iOS に依存しないロジックの Swift パッケージ。`core/` を Swift に移植したもので、単体でテストできる。キャッシュはタイルごとの JSON ファイル（`FileMountainCache`）に保存する。
 - `ios/Yamamuki/` iOS アプリ。方位盤の描画（`DialCanvasView`）、画面（`DialView`）、設定（`SettingsView`）、現在地と方位の取得（`LocationService`）。
+- `ios/YamamukiUITests/` iOS アプリの UI テスト（XCUITest）。アプリを起動して方位盤・設定・事前ダウンロードの画面を開き、画面を撮る。
 - `ios/project.yml` Xcode プロジェクトの設定（[XcodeGen](https://github.com/yonaskolb/XcodeGen) 用）。`ios/Yamamuki.xcodeproj` はここから生成し、git には入れない。
 
 ## 開発環境
@@ -82,11 +83,22 @@ open Yamamuki.xcodeproj
 
 - Xcode で `Yamamuki` ターゲットの「Signing & Capabilities」の Team に自分の Apple ID を選ぶ。無料の Apple ID でも、自分の iPhone に 7 日間有効な開発用署名で入れられる（期限が切れたら Xcode から入れ直す）。
 - iPhone を USB でつなぎ、Xcode 上部の実行先に選んで Run（⌘R）する。初回は iPhone の「設定 > プライバシーとセキュリティ > デベロッパモード」をオンにし、「設定 > 一般 > VPN とデバイス管理」で開発元を信頼する。
-- コマンドラインでビルドだけ確認するときは、CI と同じ次のコマンドを使う。
+- コマンドラインでビルドだけ確認するときは、CI と同じ次のコマンドを使う。UI テストのコードも一緒にビルドする。
   ```bash
-  xcodebuild build -project Yamamuki.xcodeproj -scheme Yamamuki \
+  xcodebuild build-for-testing -project Yamamuki.xcodeproj -scheme Yamamuki \
     -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
   ```
+- UI テストは Xcode で ⌘U、またはコマンドラインで次のように動かす。実機でもシミュレータでも動く。
+  ```bash
+  # シミュレータ
+  xcodebuild test -project Yamamuki.xcodeproj -scheme Yamamuki \
+    -destination 'platform=iOS Simulator,name=<シミュレータ名>' CODE_SIGNING_ALLOWED=NO
+  # 実機（UDID は xcrun devicectl list devices で調べる。Team ID は Xcode の Settings > Accounts で見る）
+  xcodebuild test -project Yamamuki.xcodeproj -scheme Yamamuki \
+    -destination 'id=<UDID>' -allowProvisioningUpdates DEVELOPMENT_TEAM=<Team ID>
+  ```
+  - 初回起動の確認（山データの取得、位置情報の許可）には「はい」「使用中は許可」で答える。実機では端末に入っている山むきの設定をそのまま使う。
+  - テストで撮った画面はテスト結果に残り、Xcode の Report ナビゲータで見られる。
 - 山データの取得に失敗したときは、原因を Xcode のコンソール（または Mac の「コンソール」アプリ）にカテゴリ `DialModel` で出している。
 
 ## Android 版と iOS 版の違い

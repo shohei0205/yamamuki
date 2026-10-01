@@ -15,6 +15,7 @@
 | `app/` | Android アプリ（画面、Room のキャッシュ、設定） |
 | `ios/YamamukiCore/` | `core/` を Swift に移植したパッケージ。単体テストあり |
 | `ios/Yamamuki/` | iOS アプリ（画面、位置と方位の取得、設定） |
+| `ios/YamamukiUITests/` | iOS アプリの画面を操作する UI テスト（XCUITest） |
 | `ios/project.yml` | XcodeGen の設定。`ios/Yamamuki.xcodeproj` はここから生成する |
 
 ## 言葉づかい
@@ -114,11 +115,12 @@ Co-authored-by: Codex
 # iOS: core の単体テスト（Mac または Swift の入った環境）
 (cd ios/YamamukiCore && swift test)
 
-# iOS: アプリのビルド（Mac のみ。XcodeGen は brew install xcodegen で入れる）
-(cd ios && xcodegen generate && xcodebuild build -project Yamamuki.xcodeproj -scheme Yamamuki \
+# iOS: アプリと UI テストのビルド（Mac のみ。XcodeGen は brew install xcodegen で入れる）
+(cd ios && xcodegen generate && xcodebuild build-for-testing -project Yamamuki.xcodeproj -scheme Yamamuki \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO)
 ```
 
+- iOS の画面を変えたら、手元で UI テストも動かす（手順は README の「iOS 版」）。CI では UI テストのビルドだけを確かめ、実行はしない。
 - CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
 - ロジックを変えたら単体テストを足す。テストを消したり飛ばしたりして通すことはしない。

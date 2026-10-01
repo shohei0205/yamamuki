@@ -32,3 +32,18 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
     scheme:
       gatherCoverageData: false
+      testTargets: [YamamukiUITests]
+  # 画面を実際に操作する UI テスト(XCUITest)。実機でもシミュレータでも動く。
+  YamamukiUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [YamamukiUITests]
+    dependencies:
+      - target: Yamamuki
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.shohei0205.yamamuki.uitests
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
