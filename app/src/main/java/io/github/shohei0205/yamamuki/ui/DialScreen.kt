@@ -54,7 +54,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -113,10 +112,8 @@ fun DialScreen(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { granted -> hasPermission = granted.values.any { it } }
 
-    // 初回は「山データを取得してよいか」を先に聞き、答えてから位置情報の許可を求める(ダイアログを重ねない)。
-    val consentAsked = state.settings.networkConsentAsked
-    LaunchedEffect(consentAsked) {
-        if (consentAsked && !hasPermission) permissionLauncher.launch(LOCATION_PERMISSIONS)
+    LaunchedEffect(Unit) {
+        if (!hasPermission) permissionLauncher.launch(LOCATION_PERMISSIONS)
     }
     LaunchedEffect(hasPermission) {
         if (!hasPermission) return@LaunchedEffect
@@ -249,12 +246,7 @@ fun DialScreen(
             )
         } else {
             Column(Modifier.align(Alignment.TopCenter).padding(top = DialGeometry.CHART_TOP_DP.dp, end = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                StatusLine(
-                    message = statusMessage(state, headingAvailable = compassHeading != null),
-                    // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
-                    actionLabel = if (state.offline && state.connected && !state.loading && !state.settings.manualFetch) "再取得" else null,
-                    onAction = viewModel::retry,
-                )
+                StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null))
             }
         }
 
@@ -275,7 +267,7 @@ fun DialScreen(
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
         )
 
-        // 左下: 設定、事前ダウンロード、手動取得モードなら山データの取得。屋外で押しやすいよう既定(40dp)より大きくする。
+        // 左下: 設定、事前ダウンロード、山データの取得。屋外で押しやすいよう既定(40dp)より大きくする。
         Row(
             Modifier.align(Alignment.BottomStart).padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -307,7 +299,7 @@ fun DialScreen(
                     }
                 }
             }
-            if (hasPermission && state.settings.manualFetch) {
+            if (hasPermission) {
                 FilledTonalIconButton(
                     onClick = viewModel::fetchManually,
                     enabled = state.location != null && !state.loading,
@@ -353,10 +345,6 @@ fun DialScreen(
         onDispose { view.keepScreenOn = false }
     }
 
-    if (!consentAsked) {
-        NetworkConsentDialog(onAnswer = viewModel::answerNetworkConsent)
-    }
-
     // 通信の失敗は、方位を待つ表示などに隠れて気づけないことがないよう、画面中央で知らせる。
     state.fetchErrorMessage?.let { message ->
         FetchErrorDialog(
@@ -375,27 +363,6 @@ fun DialScreen(
     if (showObserver && location != null && !overlay) {
         ObserverDetailDialog(location, onDismiss = { showObserver = false })
     }
-}
-
-/** 初回起動時に、山データを自動で取得してよいかを聞く。どちらかを選ぶまで閉じない。 */
-@Composable
-private fun NetworkConsentDialog(onAnswer: (Boolean) -> Unit) {
-    AlertDialog(
-        onDismissRequest = {},
-        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
-        title = { Text("山データの取得") },
-        text = {
-            Text(
-                "周辺の山の名前・位置・標高を OpenStreetMap（Overpass API）から取得します。" +
-                    "問い合わせには現在地周辺の範囲が含まれます。" +
-                    "通信量は 1 回あたり数十 KB 程度で、取得したデータは端末に保存して使い回します。\n\n" +
-                    "自動で取得してよいですか？\n" +
-                    "「いいえ」なら、画面左下の更新ボタンを押したときだけ通信します。設定はあとから変更できます。",
-            )
-        },
-        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text("はい") } },
-        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text("いいえ") } },
-    )
 }
 
 /** 山データの取得に失敗したことを知らせ、再取得できるようにする。 */
@@ -463,26 +430,15 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
         !state.connected -> "圏外: 保存済みのデータで表示中"
         state.offline && state.incomplete -> "通信できず、$missing"
         state.offline -> "オフライン: 保存済みのデータで表示中"
-        state.settings.manualFetch && state.incomplete -> "$missing。左下の更新ボタンで取得できます"
+        state.incomplete -> "$missing。左下の更新ボタンで取得できます"
         else -> null
     }
 }
 
 @Composable
-private fun StatusLine(
-    message: String?,
-    actionLabel: String?,
-    onAction: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+private fun StatusLine(message: String?, modifier: Modifier = Modifier) {
     if (message == null) return
-    Row(
-        modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(message, style = MaterialTheme.typography.bodySmall)
-        if (actionLabel != null) TextButton(onClick = onAction) { Text(actionLabel) }
-    }
+    Text(message, modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable

@@ -39,8 +39,6 @@ final class DialModel: ObservableObject {
     @Published private(set) var fetchErrorMessage: String?
     /// 範囲内に一度も取得できていない地域がある。
     @Published private(set) var incomplete = false
-    /// 手動取得モードのため、未取得または古い地域があっても通信しなかった。
-    @Published private(set) var networkSkipped = false
     @Published private(set) var settings: Settings
     /// 設定画面に出すキャッシュの状況。読み込むまでは nil。
     @Published private(set) var cacheInfo: CacheInfo?
@@ -96,9 +94,9 @@ final class DialModel: ObservableObject {
         }
     }
 
-    /// 画面が前面に出たとき。初回は「山データを取得してよいか」に答えてから位置情報の許可を求める(ダイアログを重ねない)。
+    /// 画面が前面に出たとき。位置情報をまだ許可も拒否もしていなければ、許可を求める。
     func start() {
-        if settings.networkConsentAsked && authorization == .notDetermined {
+        if authorization == .notDetermined {
             locationService.requestAuthorization()
         }
         locationService.start()
@@ -262,12 +260,10 @@ final class DialModel: ObservableObject {
         fetch()
     }
 
-    func retry() { fetch(forceRefresh: true) }
-
     /// 通信エラーの知らせを閉じる。
     func dismissFetchError() { fetchErrorMessage = nil }
 
-    /// 通信エラーの知らせから取り直す。利用者が求めたので、手動取得モードでも通信する。
+    /// 通信エラーの知らせから取り直す。利用者が求めたので通信する。
     func retryAfterFetchError() {
         fetchErrorMessage = nil
         fetch(manual: true)
@@ -275,16 +271,6 @@ final class DialModel: ObservableObject {
 
     /// 左下の更新ボタン(山データを取得)。今の表示範囲のうち、未取得または古い地域を取得する。
     func fetchManually() { fetch(manual: true) }
-
-    /// 初回起動時の「山データを自動で取得してよいか」への答え。いいえなら手動取得モードにする。
-    func answerNetworkConsent(allow: Bool) {
-        updateSettings {
-            $0.networkConsentAsked = true
-            $0.manualFetch = !allow
-        }
-        if allow { fetch() }
-        if authorization == .notDetermined { locationService.requestAuthorization() }
-    }
 
     func updateSettings(_ transform: (inout Settings) -> Void) {
         let before = settings
@@ -301,8 +287,6 @@ final class DialModel: ObservableObject {
             rangeKm = Double(after.initialRangeKm)
             if DialGeometry.fetchRadiusKm(rangeKm) > fetchedRadiusKm { fetch() }
         }
-        // 手動取得をやめたら、控えていた分をすぐ取得する。
-        if before.manualFetch && !after.manualFetch && networkSkipped { fetch() }
     }
 
     func refreshCacheInfo() {
@@ -311,7 +295,7 @@ final class DialModel: ObservableObject {
         }
     }
 
-    /// キャッシュを消して、現在地周辺を取り直す。事前ダウンロードした地域は残す。
+    /// キャッシュを消して、現在地周辺を読み直す(通信はしない)。事前ダウンロードした地域は残す。
     func clearCache() {
         fetchTask?.cancel()
         let keep = areaDownload.savedTiles
@@ -345,12 +329,14 @@ final class DialModel: ObservableObject {
         }
     }
 
+    /// 今の表示範囲の山を読み込む。通信するのは利用者が取得を求めたとき(`manual`)だけで、
+    /// それ以外は保存済みのデータだけで表示する。
     private func fetch(forceRefresh: Bool = false, manual: Bool = false) {
         guard let here = location else { return }
         let radius = DialGeometry.fetchRadiusKm(rangeKm)
         let settings = self.settings
-        // 初回の問い合わせに答えるまでは、キャッシュだけで表示して通信しない。
-        let wantsNetwork = manual || (!settings.manualFetch && settings.networkConsentAsked)
+        // 山データの取得先を移す準備中のため、自動では通信しない(左下の更新ボタンを押したときだけ取得する)。
+        let wantsNetwork = manual
         // 圏外と分かっていれば通信を試さない(失敗を待たず、エラーの知らせも出さない)。
         let connected = isConnected
         let allowNetwork = wantsNetwork && connected
@@ -394,7 +380,6 @@ final class DialModel: ObservableObject {
                     fetchErrorMessage = nil
                 }
                 incomplete = result.incomplete
-                networkSkipped = result.networkSkipped
                 loading = false
             } catch {
                 guard !Task.isCancelled else { return }

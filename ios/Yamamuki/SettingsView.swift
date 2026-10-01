@@ -58,12 +58,6 @@ struct SettingsView: View {
                 }
 
                 Section("通信とキャッシュ") {
-                    SwitchRow(
-                        title: "山データを手動で取得",
-                        description: "自動では通信せず、保存済みのデータで表示します。方位盤の左下の更新ボタンを押したときだけ、" +
-                            "今の表示範囲を取得します。山に入る前に、電波の届く場所で縮小して広めに取得しておくと安心です。",
-                        isOn: settings.manualFetch
-                    ) { v in model.updateSettings { $0.manualFetch = v } }
                     Choice(
                         title: "取得したデータを使う期間",
                         options: Settings.cacheMaxAgeDaysOptions,

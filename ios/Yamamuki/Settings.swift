@@ -5,8 +5,6 @@ import YamamukiCore
 struct Settings: Codable, Equatable {
     /// この標高(m)以上の山だけ方位盤に出す。0 なら絞り込まない。
     var minElevationM = 0
-    /// 自動では山データを取得せず、方位盤の左下の更新ボタンを押したときだけ取得する。
-    var manualFetch = false
     /// 方位盤を表示している間は画面を消さない。
     var keepScreenOn = false
     /// 方位盤に一度に出す山の上限。
@@ -17,8 +15,6 @@ struct Settings: Codable, Equatable {
     var initialRangeKm = Int(DialGeometry.defaultRangeKm)
     /// 取得した山データを取り直さずに使う日数。
     var cacheMaxAgeDays = 30
-    /// 初回起動時の「山データを自動で取得してよいか」に答えた。答えるまでは通信しない。
-    var networkConsentAsked = false
 
     var cacheMaxAge: TimeInterval { TimeInterval(cacheMaxAgeDays) * 24 * 60 * 60 }
 
@@ -34,13 +30,11 @@ struct Settings: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Settings()
         minElevationM = try c.decodeIfPresent(Int.self, forKey: .minElevationM) ?? d.minElevationM
-        manualFetch = try c.decodeIfPresent(Bool.self, forKey: .manualFetch) ?? d.manualFetch
         keepScreenOn = try c.decodeIfPresent(Bool.self, forKey: .keepScreenOn) ?? d.keepScreenOn
         maxPeaks = try c.decodeIfPresent(Int.self, forKey: .maxPeaks) ?? d.maxPeaks
         textScale = try c.decodeIfPresent(Double.self, forKey: .textScale) ?? d.textScale
         initialRangeKm = try c.decodeIfPresent(Int.self, forKey: .initialRangeKm) ?? d.initialRangeKm
         cacheMaxAgeDays = try c.decodeIfPresent(Int.self, forKey: .cacheMaxAgeDays) ?? d.cacheMaxAgeDays
-        networkConsentAsked = try c.decodeIfPresent(Bool.self, forKey: .networkConsentAsked) ?? d.networkConsentAsked
     }
 }
 

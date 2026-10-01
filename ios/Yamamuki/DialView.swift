@@ -39,18 +39,13 @@ struct DialView: View {
                     onObserverTap: { if model.gpsLocation != nil { showObserver = true } }
                 )
 
-                if model.settings.networkConsentAsked && !model.hasLocationPermission {
+                if !model.hasLocationPermission {
                     PermissionRequest(denied: model.authorization == .denied || model.authorization == .restricted) {
                         model.requestLocationPermission()
                     }
-                } else if model.hasLocationPermission {
+                } else {
                     VStack {
-                        StatusLine(
-                            message: statusMessage,
-                            // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
-                            actionLabel: model.offline && model.isConnected && !model.loading && !model.settings.manualFetch ? "再取得" : nil,
-                            onAction: model.retry
-                        )
+                        StatusLine(message: statusMessage)
                         Spacer()
                     }
                     .padding(.top, CGFloat(DialGeometry.chartTop))
@@ -117,18 +112,6 @@ struct DialView: View {
         .onReceive(model.$settings.map(\.keepScreenOn).removeDuplicates()) { on in
             UIApplication.shared.isIdleTimerDisabled = on
         }
-        .alert("山データの取得", isPresented: .constant(!model.settings.networkConsentAsked)) {
-            Button("はい") { model.answerNetworkConsent(allow: true) }
-            Button("いいえ") { model.answerNetworkConsent(allow: false) }
-        } message: {
-            Text(
-                "周辺の山の名前・位置・標高を OpenStreetMap（Overpass API）から取得します。" +
-                    "問い合わせには現在地周辺の範囲が含まれます。" +
-                    "通信量は 1 回あたり数十 KB 程度で、取得したデータは端末に保存して使い回します。\n\n" +
-                    "自動で取得してよいですか？\n" +
-                    "「いいえ」なら、画面左下の更新ボタンを押したときだけ通信します。設定はあとから変更できます。"
-            )
-        }
         .fetchErrorAlert(model)
         // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
         .sheet(isPresented: $showSettings) {
@@ -146,7 +129,7 @@ struct DialView: View {
         }
     }
 
-    /// 左下: 設定、事前ダウンロード、手動取得モードなら山データの取得。屋外で押しやすいよう大きめにする。
+    /// 左下: 設定、事前ダウンロード、山データの取得。屋外で押しやすいよう大きめにする。
     private var bottomButtons: some View {
         HStack(spacing: 8) {
             RoundButton(label: "設定") {
@@ -157,7 +140,7 @@ struct DialView: View {
             if Features.areaDownload {
                 AreaDownloadButton(download: model.areaDownload) { showDownload = true }
             }
-            if model.hasLocationPermission && model.settings.manualFetch {
+            if model.hasLocationPermission {
                 RoundButton(label: "山データを取得") {
                     if model.loading {
                         ProgressView()
@@ -194,7 +177,7 @@ struct DialView: View {
         if !model.isConnected { return "圏外: 保存済みのデータで表示中" }
         if model.offline && model.incomplete { return "通信できず、\(missing)" }
         if model.offline { return "オフライン: 保存済みのデータで表示中" }
-        if model.settings.manualFetch && model.incomplete { return "\(missing)。左下の更新ボタンで取得できます" }
+        if model.incomplete { return "\(missing)。左下の更新ボタンで取得できます" }
         return nil
     }
 }
@@ -266,19 +249,12 @@ private struct AreaDownloadButton: View {
 
 private struct StatusLine: View {
     let message: String?
-    let actionLabel: String?
-    let onAction: () -> Void
 
     var body: some View {
         if let message {
-            HStack {
-                Text(message).font(.footnote).foregroundStyle(.black)
-                if let actionLabel {
-                    Button(actionLabel, action: onAction).font(.footnote.bold())
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            Text(message).font(.footnote).foregroundStyle(.black)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
         }
     }
 }
