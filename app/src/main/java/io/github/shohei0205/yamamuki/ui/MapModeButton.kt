@@ -9,8 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -36,19 +36,13 @@ fun MapModeButton(manual: Boolean, enabled: Boolean, onClick: () -> Unit, modifi
                 val color = if (!enabled) Color.LightGray else if (manual) Color(0xFF5F6368) else Color(0xFF1A73E8)
                 val u = size.width / 28f
                 if (manual) {
-                    drawCircle(color, radius = 8 * u, style = Stroke(2 * u))
-                    for (direction in listOf(Offset(1f, 0f), Offset(-1f, 0f), Offset(0f, 1f), Offset(0f, -1f))) {
-                        drawLine(color, center + direction * (8 * u), center + direction * (13 * u), strokeWidth = 2 * u)
-                    }
+                    // 全周スコープ: 双眼鏡を中心に 360 度を見渡す円。
+                    drawCircle(color, radius = 11 * u, style = Stroke(2.5f * u))
+                    drawCircle(color, radius = 3 * u)
                 } else {
-                    val arrow = Path().apply {
-                        moveTo(14 * u, 2 * u)
-                        lineTo(24 * u, 25 * u)
-                        lineTo(14 * u, 20 * u)
-                        lineTo(4 * u, 25 * u)
-                        close()
-                    }
-                    drawPath(arrow, color)
+                    // 扇状スコープ: 双眼鏡から向けた方向へ開く扇。
+                    drawArc(color, startAngle = -120f, sweepAngle = 60f, useCenter = true,
+                        topLeft = Offset(-6 * u, 4 * u), size = Size(40 * u, 40 * u))
                 }
             }
         }

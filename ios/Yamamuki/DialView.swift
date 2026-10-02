@@ -58,21 +58,6 @@ struct DialView: View {
                 }
 
                 VStack {
-                    HStack {
-                        Spacer()
-                        Button { model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height)) } label: {
-                            CompassIndicator(heading: model.lockedHeading ?? model.heading)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(model.location == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
-                        .accessibilityLabel("北を上にする")
-                    }
-                    Spacer()
-                }
-                .padding(.top, 80)
-                .padding(.trailing, 8)
-
-                VStack {
                     Spacer()
                     HStack(alignment: .bottom) {
                         bottomButtons
@@ -85,10 +70,8 @@ struct DialView: View {
                                     model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height))
                                 }
                             } label: {
-                                Image(systemName: model.exploring ? "scope" : "location.north.fill")
-                                    .font(.system(size: 26, weight: .medium))
-                                    .foregroundStyle(model.gpsLocation == nil ? Color.gray.opacity(0.4) :
-                                        (model.exploring ? Color.gray : Color(red: 0.102, green: 0.451, blue: 0.910)))
+                                ScopeModeIcon(manual: model.exploring, color: model.gpsLocation == nil ? Color.gray.opacity(0.4) :
+                                    (model.exploring ? Color(red: 0.373, green: 0.388, blue: 0.408) : Color(red: 0.102, green: 0.451, blue: 0.910)))
                                     .frame(width: 56, height: 56)
                                     .background(Circle().fill(Color.white))
                                     .shadow(color: .black.opacity(0.2), radius: 4, y: 2)

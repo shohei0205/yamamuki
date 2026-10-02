@@ -140,6 +140,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onPan(dxPx: Float, dyPx: Float, chartHeightPx: Float, headingDeg: Double) {
+        // ヘディングアップ中はドラッグで手動位置モードに入らない。入るのは右下のボタンだけ。
+        if (!state.value.exploring) return
         northUpJob?.cancel()
         val here = state.value.location ?: return
         val next = PanGeometry.drag(MapCenter(here.latitude, here.longitude), dxPx.toDouble(), dyPx.toDouble(),
@@ -213,6 +215,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onHeadingSwipe(dxPx: Float, widthPx: Float, headingDeg: Double,
         canvasWidth: Double, canvasHeight: Double, started: Boolean) {
+        if (!state.value.exploring) return
         northUpJob?.cancel()
         if (!dxPx.isFinite() || widthPx <= 0 || canvasHeight <= DialGeometry.CHART_INSET_DP) return
         val current = state.value

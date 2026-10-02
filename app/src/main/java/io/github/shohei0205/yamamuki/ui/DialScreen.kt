@@ -258,13 +258,6 @@ fun DialScreen(
             }
         }
 
-        CompassIndicator(
-            heading = heading,
-            onClick = { viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight) },
-            enabled = state.location != null && canvasHeight > DialGeometry.CHART_INSET_DP,
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp),
-        )
-
         MapModeButton(
             manual = state.exploring,
             enabled = hasPermission && state.gpsLocation != null && canvasHeight > DialGeometry.CHART_INSET_DP,

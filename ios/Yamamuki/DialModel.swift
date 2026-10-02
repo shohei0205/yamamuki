@@ -148,6 +148,8 @@ final class DialModel: ObservableObject {
     }
 
     func onPan(dx: Double, dy: Double, chartHeight: Double) {
+        // ヘディングアップ中はドラッグで手動位置モードに入らない。入るのは右下のボタンだけ。
+        guard exploring else { return }
         northUpTask?.cancel()
         guard let here = location else { return }
         let next = PanGeometry.drag(MapCenter(here.latitude, here.longitude), dx: dx, dy: dy,
@@ -192,6 +194,7 @@ final class DialModel: ObservableObject {
     }
 
     func onHeadingSwipe(dx: Double, width: Double, canvasHeight: Double, started: Bool) {
+        guard exploring else { return }
         northUpTask?.cancel()
         guard let here = location, dx.isFinite, width.isFinite, width > 0, canvasHeight > DialGeometry.chartInset else { return }
         let observer = gpsLocation ?? here
