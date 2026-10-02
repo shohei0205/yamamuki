@@ -155,6 +155,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         fetchForViewport()
     }
 
+    /** 右下のボタンで手動位置モードにする。地図の向きは今の方位のまま止め、双眼鏡が上を向いたまま切り替わるようにする。 */
+    fun enterManual(headingDeg: Double) {
+        northUpJob?.cancel()
+        if (state.value.location == null) return
+        _state.update { it.copy(exploring = true, lockedHeading = headingDeg) }
+    }
+
     fun resetCenter(compassHeading: () -> Double) {
         northUpJob?.cancel()
         val initial = state.value

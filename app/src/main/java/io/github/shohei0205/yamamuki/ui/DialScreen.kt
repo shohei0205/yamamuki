@@ -308,7 +308,7 @@ fun DialScreen(
             enabled = hasPermission && state.gpsLocation != null && canvasHeight > DialGeometry.CHART_INSET_DP,
             onClick = {
                 if (state.exploring) viewModel.resetCenter { currentCompassHeading }
-                else viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight)
+                else viewModel.enterManual(heading ?: 0.0)
             },
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
         )

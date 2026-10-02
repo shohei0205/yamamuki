@@ -96,7 +96,7 @@ struct DialView: View {
                                 if model.exploring {
                                     model.resetCenter()
                                 } else {
-                                    model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height))
+                                    model.enterManual()
                                 }
                             } label: {
                                 Image(systemName: model.exploring ? "scope" : "location.north.fill")
@@ -109,7 +109,7 @@ struct DialView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(!model.hasLocationPermission || model.gpsLocation == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
-                            .accessibilityLabel(model.exploring ? "現在地に戻り、進行方向を上にする" : "北を上にして手動位置モードにする")
+                            .accessibilityLabel(model.exploring ? "現在地に戻り、進行方向を上にする" : "今の向きのまま手動位置モードにする")
                             .accessibilityValue(model.exploring ? "手動位置モード" : "ヘディングアップモード")
                             .padding(.trailing, 8)
 

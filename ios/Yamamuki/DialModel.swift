@@ -163,6 +163,13 @@ final class DialModel: ObservableObject {
         fetchForViewport()
     }
 
+    /// 右下のボタンで手動位置モードにする。地図の向きは今の方位のまま止め、双眼鏡が上を向いたまま切り替わるようにする。
+    func enterManual() {
+        northUpTask?.cancel()
+        guard location != nil else { return }
+        beginExploring()
+    }
+
     private func beginExploring() {
         lockedHeading = displayHeading
         exploring = true
