@@ -1,7 +1,7 @@
 import XCTest
 
 /// 方位盤の画面を実際に起動して操作する UI テスト。実機でもシミュレータでも動く。
-/// 実機で動かすと、端末に入っている山むきの設定(通信の同意など)をそのまま使い、初回の確認には「はい」で答える。
+/// 実機で動かすと、端末に入っている山むきの設定をそのまま使い、位置情報の許可には「使用中は許可」で答える。
 final class MainScreenUITests: XCTestCase {
     private let app = XCUIApplication()
     private let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -42,12 +42,8 @@ final class MainScreenUITests: XCTestCase {
         XCTAssertTrue(waitForDisappearance(of: bar))
     }
 
-    /// 初回起動の確認に答える。通信の同意と位置情報の許可は、どちらも 1 度答えると出なくなる。
+    /// 初回起動の確認に答える。位置情報の許可は 1 度答えると出なくなる。
     private func answerFirstLaunchPrompts() {
-        let consent = app.alerts["山データの取得"]
-        if consent.waitForExistence(timeout: 3) {
-            consent.buttons["はい"].tap()
-        }
         let allow = app.buttons["許可する"]
         if allow.waitForExistence(timeout: 2) {
             allow.tap()

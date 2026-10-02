@@ -66,8 +66,6 @@ data class DialUiState(
     val fetchErrorMessage: String? = null,
     /** 範囲内に一度も取得できていない地域がある。 */
     val incomplete: Boolean = false,
-    /** 手動取得モードのため、未取得または古い地域があっても通信しなかった。 */
-    val networkSkipped: Boolean = false,
     val settings: Settings = Settings(),
     /** 設定画面に出すキャッシュの状況。読み込むまでは null。 */
     val cacheInfo: CacheInfo? = null,
@@ -259,24 +257,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         ) fetch()
     }
 
-    fun retry() = fetch(forceRefresh = true)
-
     /** 通信エラーの知らせを閉じる。 */
     fun dismissFetchError() = _state.update { it.copy(fetchErrorMessage = null) }
 
-    /** 通信エラーの知らせから取り直す。利用者が求めたので、手動取得モードでも通信する。 */
+    /** 通信エラーの知らせから取り直す。利用者が求めたので通信する。 */
     fun retryAfterFetchError() {
         dismissFetchError()
         fetch(manual = true)
-    }
-
-    /** 左下の更新ボタン(山データを取得)。今の表示範囲のうち、未取得または古い地域を取得する。 */
-    fun fetchManually() = fetch(manual = true)
-
-    /** 初回起動時の「山データを自動で取得してよいか」への答え。いいえなら手動取得モードにする。 */
-    fun answerNetworkConsent(allow: Boolean) {
-        updateSettings { it.copy(networkConsentAsked = true, manualFetch = !allow) }
-        if (allow) fetch()
     }
 
     fun updateSettings(transform: (Settings) -> Settings) {
@@ -293,8 +280,6 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(rangeKm = after.initialRangeKm.toDouble()) }
             if (DialGeometry.fetchRadiusKm(after.initialRangeKm.toDouble()) > fetchedRadiusKm) fetch()
         }
-        // 手動取得をやめたら、控えていた分をすぐ取得する。
-        if (before.manualFetch && !after.manualFetch && _state.value.networkSkipped) fetch()
     }
 
     fun refreshCacheInfo() {
@@ -304,7 +289,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** キャッシュを消して、現在地周辺を取り直す。事前ダウンロードした地域は残す。 */
+    /** キャッシュを消して、現在地周辺を読み直す(通信はしない)。事前ダウンロードした地域は残す。 */
     fun clearCache() {
         fetchJob?.cancel()
         viewModelScope.launch {
@@ -328,12 +313,16 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 今の表示範囲の山を読み込む。通信するのは利用者が取得を求めたとき([manual])だけで、
+     * それ以外は保存済みのデータだけで表示する。
+     */
     private fun fetch(forceRefresh: Boolean = false, manual: Boolean = false) {
         val here = _state.value.location ?: return
         val radius = DialGeometry.fetchRadiusKm(_state.value.rangeKm)
         val settings = _state.value.settings
-        // 初回の問い合わせに答えるまでは、キャッシュだけで表示して通信しない。
-        val wantsNetwork = manual || (!settings.manualFetch && settings.networkConsentAsked)
+        // 山データの取得先を移す準備中のため、方位盤からは自動では通信しない(山データは事前ダウンロードで取得する)。
+        val wantsNetwork = manual
         // 圏外と分かっていれば通信を試さない(失敗を待たず、エラーの知らせも出さない)。
         val connected = _state.value.connected
         val allowNetwork = wantsNetwork && connected
@@ -368,7 +357,6 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                     loading = false,
                     offline = error != null || skippedOffline,
                     incomplete = result.incomplete,
-                    networkSkipped = result.networkSkipped,
                     fetchErrorMessage = when {
                         error != null -> errorNotice(error, hasCache)
                         // 自分で取得を押したときだけ、圏外で取得できなかったことを知らせる。
