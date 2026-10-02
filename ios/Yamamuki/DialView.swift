@@ -71,12 +71,22 @@ struct DialView: View {
                         }
                         Spacer()
                         if manualChrome {
-                            Button { model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height)) } label: {
-                                CompassIndicator(heading: model.lockedHeading ?? model.heading)
+                            // タップするたびに「北を上」と「端末の向きに合わせる」を入れ替える。方位が未取得なら北を上にするだけ。
+                            let tapFollows = model.heading != nil
+                                && PanGeometry.compassTapFollows(heading: model.displayHeading, following: model.followingCompass)
+                            Button {
+                                let width = Double(geometry.size.width), height = Double(geometry.size.height)
+                                if tapFollows {
+                                    model.followCompass(canvasWidth: width, canvasHeight: height)
+                                } else {
+                                    model.faceNorth(canvasWidth: width, canvasHeight: height)
+                                }
+                            } label: {
+                                CompassIndicator(heading: model.lockedHeading ?? model.heading, following: model.followingCompass)
                             }
                             .buttonStyle(.plain)
                             .disabled(model.location == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
-                            .accessibilityLabel("北を上にする")
+                            .accessibilityHint(tapFollows ? "端末の向きに合わせる" : "北を上にする")
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
                     }
@@ -167,11 +177,11 @@ struct DialView: View {
     /// ヘディングアップと手動位置モードを切り替えるときの、方位目盛り・コンパス・視野の扇の動き。
     private let modeAnimation = Animation.easeInOut(duration: 0.35)
 
-    /// 手動位置モードの左上に出す、端末の向きと現在地の標高。
+    /// 手動位置モードの左上に出す、地図の上が指す方位と現在地の標高。右上のコンパスと同じ向きを文字で示す。
     /// ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
     private var headingLabel: some View {
-        let parts = model.heading.map { readoutParts(headingDeg: $0, altitudeM: model.gpsLocation?.mslAltitudeM) }
-        let text = parts.map { Text("向き \($0.direction)").foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle) }
+        let parts = (model.lockedHeading ?? model.heading).map { readoutParts(headingDeg: $0, altitudeM: model.gpsLocation?.mslAltitudeM) }
+        let text = parts.map { Text("画面上 \($0.direction)").foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle) }
             ?? Text("方位を取得中").foregroundColor(tapeInk)
         return text
             .font(.system(size: 15 * model.settings.textScale, weight: .bold))

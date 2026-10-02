@@ -5,6 +5,17 @@ import kotlin.math.*
 data class MapCenter(val latitude: Double, val longitude: Double)
 
 object PanGeometry {
+    /** 北が上とみなす角度の幅。 */
+    const val NORTH_UP_TOLERANCE_DEG = 0.5
+
+    /**
+     * 手動位置モードでコンパスをタップしたとき、地図を端末の向きに合わせるか。
+     * 北が上で、まだ端末の向きに合わせていないときだけ合わせる。それ以外のときは北を上にする。
+     * タップするたびに「北を上」と「端末の向きに合わせる」が入れ替わる。
+     */
+    fun compassTapFollows(headingDeg: Double, following: Boolean): Boolean =
+        !following && abs(Heading.delta(headingDeg, 0.0)) < NORTH_UP_TOLERANCE_DEG
+
     /** 方角が変わっても双眼鏡を画面上の直線に沿って描画原点へ戻す。offsetはkm、yは上向き。 */
     fun returnViewport(observer: MapCenter, initialOffset: PlanOffset, heading: Double, fraction: Double): MapCenter {
         val remaining = 1.0 - fraction.coerceIn(0.0, 1.0)
@@ -94,5 +105,29 @@ object PanGeometry {
         val nextLon = lon + atan2(sin(bearing) * sin(angular) * cos(lat), cos(angular) - sin(lat) * sin(nextLat))
         // Terrain uses Web Mercator, so stop at its practical latitude limits.
         return MapCenter(Math.toDegrees(nextLat).coerceIn(-85.0, 85.0), (Math.toDegrees(nextLon) + 540) % 360 - 180)
+    }
+}
+
+/**
+ * 二本指の回転の遊び。指のねじれの合計が [thresholdDeg] を超えるまでは回さず、超えたあとの分だけ回す。
+ * ピンチで拡大縮小するつもりの指のわずかなねじれで、地図が少しずつ傾くのを防ぐ。指を置き直すたびに作り直す。
+ */
+class RotationSlop(private val thresholdDeg: Double = DEFAULT_THRESHOLD_DEG) {
+    private var accumulated = 0.0
+    /** 遊びを超えて回し始めたか。 */
+    var rotating = false
+        private set
+
+    /** 指のねじれ(前回からの変化分)を受け取り、地図に反映する回転角を返す。 */
+    fun consume(deltaDeg: Double): Double {
+        if (!deltaDeg.isFinite()) return 0.0
+        if (rotating) return deltaDeg
+        accumulated += deltaDeg
+        if (abs(accumulated) > thresholdDeg) rotating = true
+        return 0.0
+    }
+
+    companion object {
+        const val DEFAULT_THRESHOLD_DEG = 15.0
     }
 }

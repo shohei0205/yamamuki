@@ -10,6 +10,16 @@ public struct MapCenter: Equatable, Sendable {
 }
 
 public enum PanGeometry {
+    /// 北が上とみなす角度の幅。
+    public static let northUpToleranceDeg = 0.5
+
+    /// 手動位置モードでコンパスをタップしたとき、地図を端末の向きに合わせるか。
+    /// 北が上で、まだ端末の向きに合わせていないときだけ合わせる。それ以外のときは北を上にする。
+    /// タップするたびに「北を上」と「端末の向きに合わせる」が入れ替わる。
+    public static func compassTapFollows(heading: Double, following: Bool) -> Bool {
+        !following && abs(Heading.delta(heading, 0)) < northUpToleranceDeg
+    }
+
     /// 方角が変わっても双眼鏡を画面上の直線に沿って描画原点へ戻す。offsetはkm、yは上向き。
     public static func returnViewport(_ observer: MapCenter, initialOffset: PlanOffset, heading: Double, fraction: Double) -> MapCenter {
         let remaining = 1 - min(1, max(0, fraction))
@@ -96,5 +106,28 @@ public enum PanGeometry {
         let after = world(midpoint, newScale, newHeading)
         return drag(observer, dx: offset.x - before.x + after.x,
             dy: -offset.y + before.y - after.y, scale: 1, heading: 0)
+    }
+}
+
+/// 二本指の回転の遊び。指のねじれの合計が [thresholdDeg] を超えるまでは回さず、超えたあとの分だけ回す。
+/// ピンチで拡大縮小するつもりの指のわずかなねじれで、地図が少しずつ傾くのを防ぐ。指を置き直すたびに作り直す。
+public struct RotationSlop {
+    public static let defaultThresholdDeg = 15.0
+    private let thresholdDeg: Double
+    private var accumulated = 0.0
+    /// 遊びを超えて回し始めたか。
+    public private(set) var rotating = false
+
+    public init(thresholdDeg: Double = RotationSlop.defaultThresholdDeg) {
+        self.thresholdDeg = thresholdDeg
+    }
+
+    /// 指のねじれ(前回からの変化分)を受け取り、地図に反映する回転角を返す。
+    public mutating func consume(_ deltaDeg: Double) -> Double {
+        guard deltaDeg.isFinite else { return 0 }
+        if rotating { return deltaDeg }
+        accumulated += deltaDeg
+        if abs(accumulated) > thresholdDeg { rotating = true }
+        return 0
     }
 }

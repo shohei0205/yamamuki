@@ -2,12 +2,17 @@ import SwiftUI
 
 /// 表示中の地図に対する北の方向。方位が未取得の間は針を出さない。
 /// 左上の向きの表示や方位目盛りの下の札と同じく、淡い白の地に濃い色で描く。
+/// 地図を端末の向きに合わせ続けている間([following])は、縁を濃い色の輪で囲む。
 struct CompassIndicator: View {
     let heading: Double?
+    let following: Bool
 
     var body: some View {
         ZStack {
             Circle().fill(Color.white.opacity(0.5))
+            if following {
+                Circle().strokeBorder(tapeInk, lineWidth: 2)
+            }
             if let heading {
                 ZStack(alignment: .top) {
                     Text("N")
@@ -35,6 +40,7 @@ struct CompassIndicator: View {
         }
         .frame(width: 56, height: 56)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(heading == nil ? "コンパス：方位を取得中" : "コンパス：赤い針が北")
+        .accessibilityLabel(heading == nil ? "コンパス：方位を取得中"
+            : following ? "コンパス：端末の向きに合わせています。赤い針が北" : "コンパス：赤い針が北")
     }
 }
