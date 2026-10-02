@@ -40,7 +40,6 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,7 +56,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -286,7 +288,8 @@ fun DialScreen(
             modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 8.dp),
         ) {
             HeadingLabel(
-                text = (compassHeading ?: heading)?.let { "向き " + readoutText(it, location?.mslAltitudeM) } ?: "方位を取得中",
+                headingDeg = compassHeading ?: heading,
+                altitudeM = location?.mslAltitudeM,
                 textScale = state.settings.textScale,
             )
         }
@@ -506,19 +509,31 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
     }
 }
 
-/** 手動位置モードの左上に出す、端末の向きと現在地の標高。コンパスと縦の中心をそろえる。 */
+/**
+ * 手動位置モードの左上に出す、端末の向きと現在地の標高。コンパスと縦の中心をそろえる。
+ * ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
+ */
 @Composable
-private fun HeadingLabel(text: String, textScale: Float) {
-    Box(Modifier.height(56.dp), contentAlignment = Alignment.CenterStart) {
-        Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.9f), shadowElevation = 2.dp) {
-            Text(
-                text,
-                color = Color.Black,
-                fontSize = 15.sp * textScale,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-            )
+private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Float) {
+    val text = buildAnnotatedString {
+        if (headingDeg == null) {
+            append("方位を取得中")
+        } else {
+            val (direction, altitude) = readoutParts(headingDeg, altitudeM)
+            append("向き $direction")
+            withStyle(SpanStyle(color = TapeSubtle)) { append(altitude) }
         }
+    }
+    Box(Modifier.height(56.dp), contentAlignment = Alignment.CenterStart) {
+        Text(
+            text,
+            color = TapeInk,
+            fontSize = 15.sp * textScale,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
+                .padding(horizontal = 12.dp, vertical = 3.dp),
+        )
     }
 }
 

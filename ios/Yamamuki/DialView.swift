@@ -168,14 +168,16 @@ struct DialView: View {
     private let modeAnimation = Animation.easeInOut(duration: 0.35)
 
     /// 手動位置モードの左上に出す、端末の向きと現在地の標高。
+    /// ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
     private var headingLabel: some View {
-        Text(model.heading.map { "向き " + readoutText(headingDeg: $0, altitudeM: model.gpsLocation?.mslAltitudeM) } ?? "方位を取得中")
+        let parts = model.heading.map { readoutParts(headingDeg: $0, altitudeM: model.gpsLocation?.mslAltitudeM) }
+        let text = parts.map { Text("向き \($0.direction)").foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle) }
+            ?? Text("方位を取得中").foregroundColor(tapeInk)
+        return text
             .font(.system(size: 15 * model.settings.textScale, weight: .bold))
-            .foregroundStyle(.black)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(Color.white.opacity(0.9)))
-            .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(Color.white.opacity(0.5)))
     }
 
     private var bottomButtons: some View {

@@ -17,6 +17,11 @@ private let summitRockLight = Color(hex: 0x8A99A8)
 private let flagPole = Color(hex: 0x333333)
 private let fanShade = Color(hex: 0x7A6F45)
 private let fanEdge = Color(hex: 0xC9B35A)
+let tapeInk = Color(hex: 0x2E3A40)
+let tapeSubtle = Color(hex: 0x6B7178)
+/// 方位目盛りの 10° ごとと 5° ごとの線の長さ。
+private let tapeMajorTick: CGFloat = 14
+private let tapeMinorTick: CGFloat = 8
 
 extension Color {
     init(hex: UInt32) {
@@ -369,45 +374,81 @@ struct DialCanvasView: View, Animatable {
     /// 画面上部の方位目盛り。向いている方位が中央に来る。上端は高さが決まっているので文字の倍率を掛けない。
     private func drawTape(_ ctx: GraphicsContext, size: CGSize, tapeHeight: CGFloat) {
         let center = size.width / 2
+        let half = tapeSpanDeg / 2
+        let baseline: CGFloat = 1.5
+        // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ金色にする。
+        ctx.fill(
+            Path(CGRect(x: 0, y: 0, width: size.width, height: tapeHeight)),
+            with: .linearGradient(
+                Gradient(colors: [.white.opacity(0), .white.opacity(0.55), .white.opacity(0)]),
+                startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: size.width, y: 0)
+            )
+        )
+        ctx.fill(
+            Path(CGRect(x: 0, y: tapeHeight - baseline, width: size.width, height: baseline)),
+            with: .linearGradient(
+                Gradient(colors: [fanEdge.opacity(0), fanEdge, fanEdge.opacity(0)]),
+                startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: size.width, y: 0)
+            )
+        )
+        let labelBottom = tapeHeight - baseline - tapeMajorTick
         for tick in DialGeometry.tapeTicks(headingDeg: headingDeg, spanDeg: tapeSpanDeg) {
             let x = center + CGFloat(tick.offsetDeg / tapeSpanDeg) * size.width
+            // 線と数字は端へ行くほど少し薄くして、中央の方位に目が行くようにする。東西南北の文字は薄くしない。
+            let edge = min(1, abs(tick.offsetDeg) / half)
+            let opacity = 1 - 0.4 * edge * edge
+            let major = tick.angleDeg % 10 == 0
+            let length = major ? tapeMajorTick : tapeMinorTick
+            ctx.stroke(
+                line(CGPoint(x: x, y: tapeHeight - baseline), CGPoint(x: x, y: tapeHeight - baseline - length)),
+                with: .color(tapeInk.opacity(opacity)),
+                style: StrokeStyle(lineWidth: major ? 2.5 : 1.5, lineCap: .round)
+            )
+            let label: MeasuredText
             if let cardinal = DialGeometry.cardinalLabel(tick.angleDeg) {
-                let label = measuredText(
-                    ctx,
-                    cardinal,
-                    size: cardinal.count == 1 ? 22 : 15,
-                    color: cardinal == "N" ? northRed : .black
-                )
-                ctx.draw(label.text, at: CGPoint(x: x - label.size.width / 2, y: (tapeHeight - label.size.height) / 2), anchor: .topLeading)
+                label = measuredText(ctx, cardinal, size: cardinal.count == 1 ? 20 : 14, color: cardinal == "N" ? northRed : tapeInk)
+            } else if tick.angleDeg % 30 == 0 {
+                label = measuredText(ctx, String(tick.angleDeg), size: 11, color: tapeSubtle.opacity(opacity))
             } else {
-                let length = tick.angleDeg % 10 == 0 ? tapeHeight * 0.75 : tapeHeight * 0.45
-                ctx.stroke(line(CGPoint(x: x, y: 0), CGPoint(x: x, y: length)), with: .color(.black), lineWidth: 3)
+                continue
             }
+            ctx.draw(label.text, at: CGPoint(x: x - label.size.width / 2, y: (labelBottom - label.size.height) / 2 + 1), anchor: .topLeading)
         }
     }
 
-    /// 目盛りの下に、中央を指す赤い印と「北東 45°　標高 312m」の表示(標高は分かるときだけ)。
+    /// 目盛りの中央を指す赤い印と、その下の淡い白の札に「北東 45°　標高 312m」(標高は分かるときだけ)。
     private func drawReadout(_ ctx: GraphicsContext, size: CGSize, tapeHeight: CGFloat, styles: TextStyles) {
         let center = size.width / 2
-        let caret: CGFloat = 6
+        let caret: CGFloat = 5
         ctx.fill(
             polygon([
-                CGPoint(x: center, y: tapeHeight),
-                CGPoint(x: center + caret, y: tapeHeight + caret),
-                CGPoint(x: center - caret, y: tapeHeight + caret),
+                CGPoint(x: center, y: tapeHeight - 2 * caret),
+                CGPoint(x: center + caret, y: tapeHeight),
+                CGPoint(x: center - caret, y: tapeHeight),
             ]),
             with: .color(northRed)
         )
-        let label = measuredText(ctx, readoutText(headingDeg: headingDeg, altitudeM: altitudeM), size: styles.readout, color: .black)
-        ctx.draw(label.text, at: CGPoint(x: center - label.size.width / 2, y: tapeHeight + caret + 2), anchor: .topLeading)
+        let parts = readoutParts(headingDeg: headingDeg, altitudeM: altitudeM)
+        let font = Font.system(size: styles.readout, weight: .bold)
+        let text = ctx.resolve(Text(parts.direction).font(font).foregroundColor(tapeInk)
+            + Text(parts.altitude).font(font).foregroundColor(tapeSubtle))
+        let textSize = text.measure(in: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude))
+        let padX: CGFloat = 12
+        let padY: CGFloat = 3
+        let pill = CGRect(x: center - textSize.width / 2 - padX, y: tapeHeight + 4,
+                          width: textSize.width + padX * 2, height: textSize.height + padY * 2)
+        let radius = pill.height / 2
+        // 札は目盛りの帯と同じくらいの淡い白にして、帯より目立たせない。同心円と重なっても文字が読める程度の濃さは残す。
+        ctx.fill(Path(roundedRect: pill, cornerRadius: radius), with: .color(.white.opacity(0.5)))
+        ctx.draw(text, at: CGPoint(x: pill.minX + padX, y: pill.minY + padY), anchor: .topLeading)
     }
 }
 
-/// 「北東 45°　標高 312m」の形の方位と標高(標高は分かるときだけ)。
-func readoutText(headingDeg: Double, altitudeM: Double?) -> String {
+/// 方位(「北東 45°」)と標高(「　標高 312m」、分からなければ空)に分けたもの。
+func readoutParts(headingDeg: Double, altitudeM: Double?) -> (direction: String, altitude: String) {
     let deg = Int(headingDeg.rounded()) % 360
     let altitude = altitudeM.map { "　標高 \(groupedInteger(Int($0.rounded())))m" } ?? ""
-    return "\(Heading.directionName(headingDeg)) \(deg)°\(altitude)"
+    return ("\(Heading.directionName(headingDeg)) \(deg)°", altitude)
 }
 
 /// 方位盤の文字の大きさ。設定の文字サイズ([scale])を山名・距離の目盛り・方位の表示に掛ける。

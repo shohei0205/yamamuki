@@ -14,7 +14,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
@@ -22,20 +21,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** 表示中の地図に対する北の方向。方位が未取得の間は針を出さない。 */
+/**
+ * 表示中の地図に対する北の方向。方位が未取得の間は針を出さない。
+ * 左上の向きの表示や方位目盛りの下の札と同じく、淡い白の地に濃い色で描く。
+ */
 @Composable
 fun CompassIndicator(heading: Double?, onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
     Box(
-        modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.9f))
+        modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f))
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = "北を上にする", onClick = onClick)
             .semantics { contentDescription = if (heading == null) "コンパス：方位を取得中" else "コンパス：赤い針が北" },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(56.dp)) {
-            drawCircle(Color.Gray, radius = size.minDimension / 2 - 1.dp.toPx(), style = Stroke(1.dp.toPx()))
-        }
         if (heading == null) {
-            Text("—", color = Color.Gray)
+            Text("—", color = TapeSubtle)
         } else {
             Box(Modifier.size(56.dp).rotate(-heading.toFloat()), contentAlignment = Alignment.TopCenter) {
                 Text("N", color = Color(0xFFCC2525), fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -51,7 +50,7 @@ fun CompassIndicator(heading: Double?, onClick: () -> Unit, enabled: Boolean, mo
                         close()
                     }
                     drawPath(needle(y - length), Color(0xFFCC2525))
-                    drawPath(needle(y + length), Color(0xFF555555))
+                    drawPath(needle(y + length), TapeInk)
                 }
             }
         }

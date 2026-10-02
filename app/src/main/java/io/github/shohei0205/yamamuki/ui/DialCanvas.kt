@@ -71,6 +71,12 @@ private val SummitRockLight = Color(0xFF8A99A8)
 private val FlagPole = Color(0xFF333333)
 private val FanShade = Color(0xFF7A6F45)
 private val FanEdge = Color(0xFFC9B35A)
+internal val TapeInk = Color(0xFF2E3A40)
+internal val TapeSubtle = Color(0xFF6B7178)
+
+/** 方位目盛りの 10° ごとと 5° ごとの線の長さ。 */
+private const val TAPE_MAJOR_TICK_DP = 14f
+private const val TAPE_MINOR_TICK_DP = 8f
 
 /** 画面上部の方位目盛りに収める角度の幅。 */
 private const val TAPE_SPAN_DEG = DialGeometry.TAPE_SPAN_DEG
@@ -559,26 +565,49 @@ private fun DrawScope.drawBinoculars(center: Offset, coneAlpha: Float): Box {
 /** 画面上部の方位目盛り。向いている方位が中央に来る。 */
 private fun DrawScope.drawTape(headingDeg: Double, tapeHeight: Float, textMeasurer: TextMeasurer) {
     val center = size.width / 2
-    val stroke = 3.dp.toPx()
+    val half = TAPE_SPAN_DEG / 2
+    val baseline = 1.5.dp.toPx()
+    // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ金色にする。
+    drawRect(
+        Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0f), Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0f))),
+        size = Size(size.width, tapeHeight),
+    )
+    drawRect(
+        Brush.horizontalGradient(listOf(FanEdge.copy(alpha = 0f), FanEdge, FanEdge.copy(alpha = 0f))),
+        topLeft = Offset(0f, tapeHeight - baseline),
+        size = Size(size.width, baseline),
+    )
+    val labelBottom = tapeHeight - baseline - TAPE_MAJOR_TICK_DP.dp.toPx()
     for (tick in DialGeometry.tapeTicks(headingDeg, TAPE_SPAN_DEG)) {
         val x = center + (tick.offsetDeg / TAPE_SPAN_DEG * size.width).toFloat()
+        // 線と数字は端へ行くほど少し薄くして、中央の方位に目が行くようにする。東西南北の文字は薄くしない。
+        val edge = (kotlin.math.abs(tick.offsetDeg) / half).toFloat().coerceAtMost(1f)
+        val ink = TapeInk.copy(alpha = 1f - 0.4f * edge * edge)
+        val major = tick.angleDeg % 10 == 0
+        val length = (if (major) TAPE_MAJOR_TICK_DP else TAPE_MINOR_TICK_DP).dp.toPx()
+        drawLine(
+            ink,
+            Offset(x, tapeHeight - baseline),
+            Offset(x, tapeHeight - baseline - length),
+            strokeWidth = (if (major) 2.5f else 1.5f).dp.toPx(),
+            cap = StrokeCap.Round,
+        )
         val cardinal = DialGeometry.cardinalLabel(tick.angleDeg)
-        if (cardinal != null) {
-            val style = TextStyle(
-                color = if (cardinal == "N") NorthRed else Color.Black,
-                fontSize = if (cardinal.length == 1) 22.sp else 15.sp,
+        val style = when {
+            cardinal != null -> TextStyle(
+                color = if (cardinal == "N") NorthRed else TapeInk,
+                fontSize = if (cardinal.length == 1) 20.sp else 14.sp,
                 fontWeight = FontWeight.Bold,
             )
-            val label = textMeasurer.measure(cardinal, style)
-            drawText(label, topLeft = Offset(x - label.size.width / 2f, (tapeHeight - label.size.height) / 2))
-        } else {
-            val length = if (tick.angleDeg % 10 == 0) tapeHeight * 0.75f else tapeHeight * 0.45f
-            drawLine(Color.Black, Offset(x, 0f), Offset(x, length), strokeWidth = stroke)
-        }
+            tick.angleDeg % 30 == 0 -> TextStyle(color = TapeSubtle.copy(alpha = ink.alpha), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            else -> null
+        } ?: continue
+        val label = textMeasurer.measure(cardinal ?: tick.angleDeg.toString(), style)
+        drawText(label, topLeft = Offset(x - label.size.width / 2f, (labelBottom - label.size.height) / 2 + 1.dp.toPx()))
     }
 }
 
-/** 目盛りの下に、中央を指す赤い印と「北東 45°　標高 312m」の表示(標高は分かるときだけ)。 */
+/** 目盛りの中央を指す赤い印と、その下の淡い白の札に「北東 45°　標高 312m」(標高は分かるときだけ)。 */
 private fun DrawScope.drawReadout(
     headingDeg: Double,
     altitudeM: Double?,
@@ -587,26 +616,42 @@ private fun DrawScope.drawReadout(
     styles: DialTextStyles,
 ) {
     val center = size.width / 2
-    val caret = 6.dp.toPx()
+    val caret = 5.dp.toPx()
     drawPath(
         polygon(
             listOf(
-                Offset(center, tapeHeight),
-                Offset(center + caret, tapeHeight + caret),
-                Offset(center - caret, tapeHeight + caret),
+                Offset(center, tapeHeight - 2 * caret),
+                Offset(center + caret, tapeHeight),
+                Offset(center - caret, tapeHeight),
             ),
         ),
         NorthRed,
     )
-    val label = textMeasurer.measure(readoutText(headingDeg, altitudeM), styles.readout)
-    drawText(label, topLeft = Offset(center - label.size.width / 2f, tapeHeight + caret + 2.dp.toPx()))
+    val (direction, altitude) = readoutParts(headingDeg, altitudeM)
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        append(direction)
+        if (altitude.isNotEmpty()) {
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = TapeSubtle))
+            append(altitude)
+            pop()
+        }
+    }
+    val label = textMeasurer.measure(text, styles.readout.copy(color = TapeInk))
+    val padX = 12.dp.toPx()
+    val padY = 3.dp.toPx()
+    val pill = Size(label.size.width + padX * 2, label.size.height + padY * 2)
+    val topLeft = Offset(center - pill.width / 2, tapeHeight + 4.dp.toPx())
+    val radius = CornerRadius(pill.height / 2)
+    // 札は目盛りの帯と同じくらいの淡い白にして、帯より目立たせない。同心円と重なっても文字が読める程度の濃さは残す。
+    drawRoundRect(Color.White.copy(alpha = 0.5f), topLeft, pill, radius)
+    drawText(label, topLeft = topLeft + Offset(padX, padY))
 }
 
-/** 「北東 45°　標高 312m」の形の方位と標高(標高は分かるときだけ)。 */
-fun readoutText(headingDeg: Double, altitudeM: Double?): String {
+/** 方位(「北東 45°」)と標高(「　標高 312m」、分からなければ空)に分けたもの。 */
+internal fun readoutParts(headingDeg: Double, altitudeM: Double?): Pair<String, String> {
     val deg = headingDeg.roundToInt() % 360
     val altitude = altitudeM?.let { String.format(java.util.Locale.US, "　標高 %,dm", Math.round(it)) } ?: ""
-    return "${Heading.directionName(headingDeg)} $deg°$altitude"
+    return "${Heading.directionName(headingDeg)} $deg°" to altitude
 }
 
 @Preview(widthDp = 320, heightDp = 560)
