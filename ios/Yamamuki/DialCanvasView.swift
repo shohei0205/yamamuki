@@ -63,6 +63,8 @@ struct DialCanvasView: View, Animatable {
     var tapeHidden: Double
     /// 現在地から画面上部へ広がる視野の扇の濃さ(0〜1)。双眼鏡の短い視野は残りの (1 - 濃さ) で描く。
     var viewFanAlpha: Double
+    /// 画面下端の余白(ホームインジケーターなど)の高さ。視野の扇の外側の暗さだけを、ここまで描き足す。
+    var bottomBleed: CGFloat = 0
     let onPan: (Double, Double, Double) -> Void
     let onTransform: (Double, Double, PlanOffset, PlanOffset, Double) -> Void
     let onMountainTap: (NearbyMountain) -> Void
@@ -80,9 +82,11 @@ struct DialCanvasView: View, Animatable {
     }
 
     var body: some View {
+        // 視野の扇だけを画面下端の余白まで描くので、Canvas を余白の分だけ下へ広げ、扇以外は元の範囲で描く。
         Canvas { context, size in
-            draw(context, size: size)
+            draw(context, size: CGSize(width: size.width, height: size.height - bottomBleed))
         }
+        .padding(.bottom, -bottomBleed)
         .overlay {
             DialTouchSurface(onPan: onPan, onTransform: onTransform) { point in
                 if hitTargets.hitsObserver(point, slop: 8) {
@@ -109,9 +113,11 @@ struct DialCanvasView: View, Animatable {
         }
         if viewFanAlpha > 0 {
             var fanContext = rotatedObserver(ctx, center: observer)
-            fanContext.clip(to: Path(CGRect(x: 0, y: tapeHeight, width: size.width, height: max(0, size.height - tapeHeight))))
+            fanContext.clip(to: Path(CGRect(x: 0, y: tapeHeight, width: size.width, height: max(0, size.height + bottomBleed - tapeHeight))))
             drawViewFan(fanContext, size: size, apex: observer)
         }
+        var ctx = ctx
+        ctx.clip(to: Path(CGRect(origin: .zero, size: size)))
         if pxPerKm > 0 {
             drawRings(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles)
             hitTargets.peaks = drawPeaks(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles)

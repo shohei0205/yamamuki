@@ -34,6 +34,7 @@ struct DialView: View {
                     tapeHidden: manualChrome ? 1 : 0,
                     // 視野の扇は、現在地に戻り終えてから出す。
                     viewFanAlpha: model.exploring ? 0 : 1,
+                    bottomBleed: geometry.safeAreaInsets.bottom,
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
                     onMountainTap: { selectedId = $0.mountain.osmId },

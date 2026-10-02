@@ -9,7 +9,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -35,6 +34,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.shohei0205.yamamuki.core.Box
@@ -119,6 +119,8 @@ fun DialCanvas(
     tapeHidden: Float = 0f,
     /** 現在地から画面上部へ広がる視野の扇の濃さ(0〜1)。双眼鏡の短い視野は残りの (1 - 濃さ) で描く。 */
     viewFanAlpha: Float = 1f,
+    /** 画面下端の余白(ジェスチャーバーなど)の高さ。視野の扇の外側の暗さだけを、ここまで描き足す。 */
+    bottomBleed: Dp = 0.dp,
 ) {
     val styles = remember(textScale) { DialTextStyles(textScale) }
     val textMeasurer = rememberTextMeasurer(cacheSize = 256)
@@ -135,7 +137,8 @@ fun DialCanvas(
             }
         }
     }
-    Canvas(modifier.clipToBounds().then(tapModifier)) {
+    // 視野の扇だけを画面下端の余白まで描くので、全体では切り抜かず、扇以外を描く範囲で切り抜く。
+    Canvas(modifier.then(tapModifier)) {
         val tapeHeight = DialGeometry.TAPE_HEIGHT_DP.dp.toPx()
         val chartTop = DialGeometry.CHART_TOP_DP.dp.toPx()
         val origin = Offset(size.width / 2, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
@@ -146,33 +149,35 @@ fun DialCanvas(
         val observer = origin + Offset((offset.x * pxPerKm).toFloat(), (-offset.y * pxPerKm).toFloat())
         val observerRotation = Heading.delta(headingDeg, compassHeadingDeg).toFloat()
         if (viewFanAlpha > 0f) {
-            clipRect(top = tapeHeight) {
+            clipRect(top = tapeHeight, bottom = size.height + bottomBleed.toPx()) {
                 rotate(observerRotation, pivot = observer) { drawViewFan(observer, viewFanAlpha) }
             }
         }
-        val coneAlpha = 1f - viewFanAlpha
-        hitTargets.peaks = if (pxPerKm > 0f) {
-            hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, hitTargets.ringLabelAngle, headingUp)
-            drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
-        } else {
-            emptyList()
-        }
-        if (summit != null) {
-            hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation, coneAlpha)
-            hitTargets.observer = null
-        } else {
-            hitTargets.observerCenter = observer
-            hitTargets.observerRotation = observerRotation
-            rotate(observerRotation, pivot = observer) {
-                hitTargets.observer = drawBinoculars(observer, coneAlpha)
+        clipRect {
+            val coneAlpha = 1f - viewFanAlpha
+            hitTargets.peaks = if (pxPerKm > 0f) {
+                hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, hitTargets.ringLabelAngle, headingUp)
+                drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
+            } else {
+                emptyList()
             }
-            hitTargets.summit = null
-        }
-        if (tapeHidden < 1f) {
-            // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
-            translate(top = -tapeHidden * chartTop * 1.5f) {
-                drawTape(headingDeg, tapeHeight, textMeasurer)
-                drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles)
+            if (summit != null) {
+                hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation, coneAlpha)
+                hitTargets.observer = null
+            } else {
+                hitTargets.observerCenter = observer
+                hitTargets.observerRotation = observerRotation
+                rotate(observerRotation, pivot = observer) {
+                    hitTargets.observer = drawBinoculars(observer, coneAlpha)
+                }
+                hitTargets.summit = null
+            }
+            if (tapeHidden < 1f) {
+                // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
+                translate(top = -tapeHidden * chartTop * 1.5f) {
+                    drawTape(headingDeg, tapeHeight, textMeasurer)
+                    drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles)
+                }
             }
         }
     }

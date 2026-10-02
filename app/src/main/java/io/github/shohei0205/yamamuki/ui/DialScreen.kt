@@ -241,6 +241,7 @@ fun DialScreen(
             headingUp = !state.exploring,
             tapeHidden = tapeHidden,
             viewFanAlpha = viewFanAlpha,
+            bottomBleed = with(density) { WindowInsets.safeDrawing.getBottom(this).toDp() },
             mountains = state.mountains,
             rangeKm = state.rangeKm,
             modifier = Modifier.fillMaxSize(),
