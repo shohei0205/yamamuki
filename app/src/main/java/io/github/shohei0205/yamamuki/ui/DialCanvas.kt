@@ -156,7 +156,8 @@ fun DialCanvas(
         val observerRotation = Heading.delta(headingDeg, compassHeadingDeg).toFloat()
         if (viewFanAlpha > 0f) {
             clipRect(top = tapeHeight, bottom = size.height + bottomBleed.toPx()) {
-                rotate(observerRotation, pivot = observer) { drawViewFan(observer, viewFanAlpha) }
+                // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
+                drawViewFan(observer, viewFanAlpha)
             }
         }
         clipRect {

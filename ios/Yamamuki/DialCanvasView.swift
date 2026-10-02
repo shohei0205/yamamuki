@@ -117,7 +117,8 @@ struct DialCanvasView: View, Animatable {
             observer.y -= CGFloat(offset.y) * pxPerKm
         }
         if viewFanAlpha > 0 {
-            var fanContext = rotatedObserver(ctx, center: observer)
+            // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
+            var fanContext = ctx
             fanContext.clip(to: Path(CGRect(x: 0, y: tapeHeight, width: size.width, height: max(0, size.height + bottomBleed - tapeHeight))))
             drawViewFan(fanContext, size: size, apex: observer)
         }
