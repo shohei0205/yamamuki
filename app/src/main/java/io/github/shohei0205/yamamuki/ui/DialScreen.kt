@@ -5,6 +5,13 @@ import android.content.pm.PackageManager
 import android.hardware.GeomagneticField
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -18,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -32,6 +40,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,6 +55,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -82,6 +95,9 @@ import kotlinx.coroutines.withContext
 
 /** これより小さい方位の変化は画面に反映しない。 */
 private const val MIN_HEADING_CHANGE_DEG = 0.1
+
+/** ヘディングアップと手動位置モードを切り替えるときの、方位目盛り・コンパス・視野の扇の動きの長さ。 */
+private const val MODE_ANIMATION_MS = 350
 
 private val LOCATION_PERMISSIONS = arrayOf(
     Manifest.permission.ACCESS_FINE_LOCATION,
@@ -150,6 +166,12 @@ fun DialScreen(
     val currentHeading by rememberUpdatedState(heading ?: 0.0)
     val currentCompassHeading by rememberUpdatedState(compassHeading ?: heading ?: 0.0)
 
+    // 手動位置モードの表示(上部の目盛りを隠し、向きの表示とコンパスを出す)。現在地へ戻り始めたらすぐ戻す。
+    val manualChrome = state.exploring && !state.returning
+    val tapeHidden by animateFloatAsState(if (manualChrome) 1f else 0f, tween(MODE_ANIMATION_MS), label = "tapeHidden")
+    // 視野の扇は、現在地に戻り終えてから出す。
+    val viewFanAlpha by animateFloatAsState(if (state.exploring) 0f else 1f, tween(MODE_ANIMATION_MS), label = "viewFan")
+
     // 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -175,8 +197,7 @@ fun DialScreen(
             .pointerInput(showSettings) {
                 if (showSettings) return@pointerInput
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val headingGesture = down.position.y < DialGeometry.CHART_TOP_DP.dp.toPx()
+                    awaitFirstDown(requireUnconsumed = false)
                     var multiTouch = false
                     var dragging = false
                     var pendingPan = Offset.Zero
@@ -186,22 +207,18 @@ fun DialScreen(
                         if (count == 1 && !multiTouch) {
                             val pan = event.calculatePan()
                             pendingPan += pan
-                            val distance = if (headingGesture) kotlin.math.abs(pendingPan.x) else pendingPan.getDistance()
+                            val distance = pendingPan.getDistance()
                             val started = !dragging && distance > viewConfiguration.touchSlop
                             if (started) dragging = true
                             if (dragging) {
                                 val delta = if (started) pendingPan else pan
-                                if (headingGesture) viewModel.onHeadingSwipe(delta.x, size.width.toFloat(), currentHeading,
-                                    size.width / density.density.toDouble(), size.height / density.density.toDouble(), started)
-                                else viewModel.onPan(delta.x, delta.y, size.height - DialGeometry.CHART_INSET_DP.dp.toPx(), currentHeading)
+                                viewModel.onPan(delta.x, delta.y, size.height - DialGeometry.CHART_INSET_DP.dp.toPx(), currentHeading)
                                 event.changes.forEach { it.consume() }
                             }
                         } else if (count >= 2) {
                             multiTouch = true
                             val zoom = event.calculateZoom()
-                            if (headingGesture) {
-                                // A gesture starting on the tape never turns into a map transform.
-                            } else if (count == 2 && event.changes.count { it.pressed && it.previousPressed } == 2) {
+                            if (count == 2 && event.changes.count { it.pressed && it.previousPressed } == 2) {
                                 val origin = Offset(size.width / 2f, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
                                 val previous = event.calculateCentroid(useCurrent = false) - origin
                                 val current = event.calculateCentroid(useCurrent = true) - origin
@@ -222,6 +239,8 @@ fun DialScreen(
             headingDeg = heading ?: 0.0,
             compassHeadingDeg = compassHeading ?: heading ?: 0.0,
             headingUp = !state.exploring,
+            tapeHidden = tapeHidden,
+            viewFanAlpha = viewFanAlpha,
             mountains = state.mountains,
             rangeKm = state.rangeKm,
             modifier = Modifier.fillMaxSize(),
@@ -258,12 +277,30 @@ fun DialScreen(
             }
         }
 
-        CompassIndicator(
-            heading = heading,
-            onClick = { viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight) },
-            enabled = state.location != null && canvasHeight > DialGeometry.CHART_INSET_DP,
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp),
-        )
+        // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。
+        AnimatedVisibility(
+            visible = manualChrome,
+            enter = slideInHorizontally(tween(MODE_ANIMATION_MS)) { -it } + fadeIn(tween(MODE_ANIMATION_MS)),
+            exit = slideOutHorizontally(tween(MODE_ANIMATION_MS)) { -it } + fadeOut(tween(MODE_ANIMATION_MS)),
+            modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 8.dp),
+        ) {
+            HeadingLabel(
+                text = (compassHeading ?: heading)?.let { "向き " + readoutText(it, location?.mslAltitudeM) } ?: "方位を取得中",
+                textScale = state.settings.textScale,
+            )
+        }
+        AnimatedVisibility(
+            visible = manualChrome,
+            enter = slideInHorizontally(tween(MODE_ANIMATION_MS)) { it } + fadeIn(tween(MODE_ANIMATION_MS)),
+            exit = slideOutHorizontally(tween(MODE_ANIMATION_MS)) { it } + fadeOut(tween(MODE_ANIMATION_MS)),
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp),
+        ) {
+            CompassIndicator(
+                heading = heading,
+                onClick = { viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight) },
+                enabled = state.location != null && canvasHeight > DialGeometry.CHART_INSET_DP,
+            )
+        }
 
         MapModeButton(
             manual = state.exploring,
@@ -465,6 +502,22 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
         state.offline -> "オフライン: 保存済みのデータで表示中"
         state.settings.manualFetch && state.incomplete -> "$missing。左下の更新ボタンで取得できます"
         else -> null
+    }
+}
+
+/** 手動位置モードの左上に出す、端末の向きと現在地の標高。コンパスと縦の中心をそろえる。 */
+@Composable
+private fun HeadingLabel(text: String, textScale: Float) {
+    Box(Modifier.height(56.dp), contentAlignment = Alignment.CenterStart) {
+        Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.9f), shadowElevation = 2.dp) {
+            Text(
+                text,
+                color = Color.Black,
+                fontSize = 15.sp * textScale,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            )
+        }
     }
 }
 

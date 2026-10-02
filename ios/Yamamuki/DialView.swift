@@ -31,13 +31,17 @@ struct DialView: View {
                     viewportLocation: model.location,
                     compassHeading: model.heading ?? model.displayHeading,
                     headingUp: !model.exploring,
+                    tapeHidden: manualChrome ? 1 : 0,
+                    // 視野の扇は、現在地に戻り終えてから出す。
+                    viewFanAlpha: model.exploring ? 0 : 1,
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
-                    onHeadingSwipe: { model.onHeadingSwipe(dx: $0, width: $1, canvasHeight: Double(geometry.size.height), started: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
                     onMountainTap: { selectedId = $0.mountain.osmId },
                     // 現在地を取れる前は出す値がないので開かない。
                     onObserverTap: { if model.gpsLocation != nil { showObserver = true } }
                 )
+                .animation(modeAnimation, value: manualChrome)
+                .animation(modeAnimation, value: model.exploring)
 
                 if model.settings.networkConsentAsked && !model.hasLocationPermission {
                     PermissionRequest(denied: model.authorization == .denied || model.authorization == .restricted) {
@@ -57,20 +61,29 @@ struct DialView: View {
                     .padding(.trailing, 72)
                 }
 
+                // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。
                 VStack {
                     HStack {
-                        Spacer()
-                        Button { model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height)) } label: {
-                            CompassIndicator(heading: model.lockedHeading ?? model.heading)
+                        if manualChrome {
+                            headingLabel
+                                .transition(.move(edge: .leading).combined(with: .opacity))
                         }
-                        .buttonStyle(.plain)
-                        .disabled(model.location == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
-                        .accessibilityLabel("北を上にする")
+                        Spacer()
+                        if manualChrome {
+                            Button { model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height)) } label: {
+                                CompassIndicator(heading: model.lockedHeading ?? model.heading)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(model.location == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
+                            .accessibilityLabel("北を上にする")
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                        }
                     }
                     Spacer()
                 }
-                .padding(.top, 80)
-                .padding(.trailing, 8)
+                .padding(.top, 8)
+                .padding(.horizontal, 8)
+                .animation(modeAnimation, value: manualChrome)
 
                 VStack {
                     Spacer()
@@ -147,6 +160,23 @@ struct DialView: View {
     }
 
     /// 左下: 設定、事前ダウンロード、手動取得モードなら山データの取得。屋外で押しやすいよう大きめにする。
+    /// 手動位置モードの表示(上部の目盛りを隠し、向きの表示とコンパスを出す)。現在地へ戻り始めたらすぐ戻す。
+    private var manualChrome: Bool { model.exploring && !model.returning }
+
+    /// ヘディングアップと手動位置モードを切り替えるときの、方位目盛り・コンパス・視野の扇の動き。
+    private let modeAnimation = Animation.easeInOut(duration: 0.35)
+
+    /// 手動位置モードの左上に出す、端末の向きと現在地の標高。
+    private var headingLabel: some View {
+        Text(model.heading.map { "向き " + readoutText(headingDeg: $0, altitudeM: model.gpsLocation?.mslAltitudeM) } ?? "方位を取得中")
+            .font(.system(size: 15 * model.settings.textScale, weight: .bold))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color.white.opacity(0.9)))
+            .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+    }
+
     private var bottomButtons: some View {
         HStack(spacing: 8) {
             RoundButton(label: "設定") {
