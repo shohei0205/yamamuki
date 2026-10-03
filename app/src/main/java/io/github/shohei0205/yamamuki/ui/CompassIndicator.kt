@@ -2,6 +2,7 @@ package io.github.shohei0205.yamamuki.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -24,13 +25,30 @@ import androidx.compose.ui.unit.sp
 /**
  * 表示中の地図に対する北の方向。方位が未取得の間は針を出さない。
  * 左上の向きの表示や方位目盛りの下の札と同じく、淡い白の地に濃い色で描く。
+ * 地図を端末の向きに合わせ続けている間([following])は、縁を濃い色の輪で囲む。
+ * [tapFollows] はタップで端末の向きに合わせるか(false なら北を上にする)。
  */
 @Composable
-fun CompassIndicator(heading: Double?, onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+fun CompassIndicator(
+    heading: Double?,
+    following: Boolean,
+    tapFollows: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
     Box(
         modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f))
-            .clickable(enabled = enabled, role = Role.Button, onClickLabel = "北を上にする", onClick = onClick)
-            .semantics { contentDescription = if (heading == null) "コンパス：方位を取得中" else "コンパス：赤い針が北" },
+            .then(if (following) Modifier.border(2.dp, TapeInk, CircleShape) else Modifier)
+            .clickable(enabled = enabled, role = Role.Button,
+                onClickLabel = if (tapFollows) "端末の向きに合わせる" else "北を上にする", onClick = onClick)
+            .semantics {
+                contentDescription = when {
+                    heading == null -> "コンパス：方位を取得中"
+                    following -> "コンパス：端末の向きに合わせています。赤い針が北"
+                    else -> "コンパス：赤い針が北"
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
         if (heading == null) {

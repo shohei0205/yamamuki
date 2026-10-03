@@ -83,6 +83,8 @@ import io.github.shohei0205.yamamuki.core.Heading
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.NearbyMountain
+import io.github.shohei0205.yamamuki.core.PanGeometry
+import io.github.shohei0205.yamamuki.core.RotationSlop
 import io.github.shohei0205.yamamuki.core.coordinateText
 import io.github.shohei0205.yamamuki.core.distanceText
 import io.github.shohei0205.yamamuki.core.elevationText
@@ -167,6 +169,10 @@ fun DialScreen(
     val heading = state.lockedHeading ?: compassHeading
     val currentHeading by rememberUpdatedState(heading ?: 0.0)
     val currentCompassHeading by rememberUpdatedState(compassHeading ?: heading ?: 0.0)
+    // 手動位置モードで端末の向きに合わせ続けているときは、端末の向きが変わるたびに地図を回す。
+    LaunchedEffect(compassHeading, state.followingCompass) {
+        if (state.followingCompass) compassHeading?.let { viewModel.onCompassHeading(it, canvasWidth, canvasHeight) }
+    }
 
     // 手動位置モードの表示(上部の目盛りを隠し、向きの表示とコンパスを出す)。現在地へ戻り始めたらすぐ戻す。
     val manualChrome = state.exploring && !state.returning
@@ -203,6 +209,7 @@ fun DialScreen(
                     var multiTouch = false
                     var dragging = false
                     var pendingPan = Offset.Zero
+                    val rotationSlop = RotationSlop()
                     do {
                         val event = awaitPointerEvent()
                         val count = event.changes.count { it.pressed }
@@ -224,7 +231,8 @@ fun DialScreen(
                                 val origin = Offset(size.width / 2f, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
                                 val previous = event.calculateCentroid(useCurrent = false) - origin
                                 val current = event.calculateCentroid(useCurrent = true) - origin
-                                viewModel.onTransform(zoom, event.calculateRotation(),
+                                val rotation = rotationSlop.consume(event.calculateRotation().toDouble()).toFloat()
+                                viewModel.onTransform(zoom, rotation,
                                     PlanOffset(previous.x.toDouble(), previous.y.toDouble()),
                                     PlanOffset(current.x.toDouble(), current.y.toDouble()), size.height - DialGeometry.CHART_INSET_DP.dp.toPx())
                             } else if (zoom != 1f) viewModel.onZoom(zoom)
@@ -288,7 +296,7 @@ fun DialScreen(
             modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 8.dp),
         ) {
             HeadingLabel(
-                headingDeg = compassHeading ?: heading,
+                headingDeg = heading,
                 altitudeM = location?.mslAltitudeM,
                 textScale = state.settings.textScale,
             )
@@ -299,9 +307,16 @@ fun DialScreen(
             exit = slideOutHorizontally(tween(MODE_ANIMATION_MS)) { it } + fadeOut(tween(MODE_ANIMATION_MS)),
             modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp),
         ) {
+            // タップするたびに「北を上」と「端末の向きに合わせる」を入れ替える。方位が未取得なら北を上にするだけ。
+            val tapFollows = compassHeading != null && PanGeometry.compassTapFollows(heading ?: 0.0, state.followingCompass)
             CompassIndicator(
                 heading = heading,
-                onClick = { viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight) },
+                following = state.followingCompass,
+                tapFollows = tapFollows,
+                onClick = {
+                    if (tapFollows) viewModel.followCompass({ currentCompassHeading }, canvasWidth, canvasHeight)
+                    else viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight)
+                },
                 enabled = state.location != null && canvasHeight > DialGeometry.CHART_INSET_DP,
             )
         }
@@ -510,7 +525,7 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
 }
 
 /**
- * 手動位置モードの左上に出す、端末の向きと現在地の標高。コンパスと縦の中心をそろえる。
+ * 手動位置モードの左上に出す、地図の上が指す方位と現在地の標高。右上のコンパスと同じ向きを文字で示す。コンパスと縦の中心をそろえる。
  * ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
  */
 @Composable
@@ -520,7 +535,7 @@ private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Flo
             append("方位を取得中")
         } else {
             val (direction, altitude) = readoutParts(headingDeg, altitudeM)
-            append("向き $direction")
+            append("画面上 $direction")
             withStyle(SpanStyle(color = TapeSubtle)) { append(altitude) }
         }
     }

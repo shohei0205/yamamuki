@@ -192,4 +192,35 @@ final class PanGeometryTests: XCTestCase {
         XCTAssertEqual(PanGeometry.transformViewport(tokyo, viewport: tokyo, previous: zero, midpoint: zero,
             oldScale: 0, newScale: 10, oldHeading: 0, newHeading: 90), tokyo)
     }
+
+    func testCompassTapAlternatesBetweenNorthUpAndFollowing() {
+        // 北が上なら端末の向きに合わせる。
+        XCTAssertTrue(PanGeometry.compassTapFollows(heading: 0, following: false))
+        XCTAssertTrue(PanGeometry.compassTapFollows(heading: 359.8, following: false))
+        // 端末の向きに合わせている間や、回した後は北を上にする。
+        XCTAssertFalse(PanGeometry.compassTapFollows(heading: 0, following: true))
+        XCTAssertFalse(PanGeometry.compassTapFollows(heading: 45, following: false))
+        XCTAssertFalse(PanGeometry.compassTapFollows(heading: 359, following: false))
+    }
+
+    func testRotationSlopIgnoresSmallTwistsUntilThreshold() {
+        var slop = RotationSlop(thresholdDeg: 15)
+        XCTAssertEqual(slop.consume(5), 0)
+        XCTAssertEqual(slop.consume(-3), 0)
+        XCTAssertEqual(slop.consume(10), 0)
+        XCTAssertFalse(slop.rotating)
+        // 合計が 15° を超えたところで回し始め、その後の変化はそのまま返す。
+        XCTAssertEqual(slop.consume(4), 0)
+        XCTAssertTrue(slop.rotating)
+        XCTAssertEqual(slop.consume(2), 2)
+        XCTAssertEqual(slop.consume(-1.5), -1.5)
+        XCTAssertEqual(slop.consume(.nan), 0)
+    }
+
+    func testRotationSlopCountsBothDirections() {
+        var slop = RotationSlop(thresholdDeg: 15)
+        XCTAssertEqual(slop.consume(-16), 0)
+        XCTAssertTrue(slop.rotating)
+        XCTAssertEqual(slop.consume(-1), -1)
+    }
 }

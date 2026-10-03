@@ -21,6 +21,8 @@ final class DialModel: ObservableObject {
     /// 右下のボタンで現在地へ戻っている途中。[exploring] は戻り終わるまで true のまま。
     @Published private(set) var returning = false
     @Published private(set) var lockedHeading: Double?
+    /// 手動位置モードで、地図の向きを端末の向きに合わせ続けている(右上のコンパスで切り替える)。
+    @Published private(set) var followingCompass = false
     var displayHeading: Double { lockedHeading ?? heading ?? 0 }
 
     /// 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。
@@ -66,6 +68,8 @@ final class DialModel: ObservableObject {
     private var fetchedRadiusKm = 0.0
     private var fetchTask: Task<Void, Never>?
     private var northUpTask: Task<Void, Never>?
+    /// 端末の向きに合わせ続けるときに使う画面の大きさ(pt)。
+    private var followCanvas = (width: 0.0, height: 0.0)
     /// 圏外のため取得を控えた。値は手動の取得だったか。つながったらその続きを取得する。
     private var skippedWhileDisconnected: Bool?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "DialModel")
@@ -88,7 +92,7 @@ final class DialModel: ObservableObject {
         authorization = locationService.authorization
 
         locationService.onLocation = { [weak self] in self?.onLocation($0) }
-        locationService.onHeading = { [weak self] in self?.heading = $0 }
+        locationService.onHeading = { [weak self] in self?.onHeading($0) }
         networkMonitor.onChange = { [weak self] in self?.onConnectivity($0) }
         // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
         areaDownload.onCacheChanged = { [weak self] in self?.reloadFromCache() }
@@ -167,12 +171,32 @@ final class DialModel: ObservableObject {
     func enterManual() {
         northUpTask?.cancel()
         guard location != nil else { return }
+        followingCompass = false
         beginExploring()
     }
 
     private func beginExploring() {
         lockedHeading = displayHeading
         exploring = true
+    }
+
+    private func onHeading(_ newHeading: Double) {
+        heading = newHeading
+        // 手動位置モードで端末の向きに合わせ続けているときは、端末の向きが変わるたびに地図を回す。
+        guard followingCompass, exploring, !returning, let oldHeading = lockedHeading, let viewport = location,
+              followCanvas.height > DialGeometry.chartInset else { return }
+        let observer = gpsLocation ?? viewport
+        let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
+            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: oldHeading,
+            rangeKm: rangeKm, canvasWidth: followCanvas.width, canvasHeight: followCanvas.height)
+        let next = PanGeometry.rotateViewport(MapCenter(observer.latitude, observer.longitude),
+            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: oldHeading, nextHeading: newHeading,
+            rangeKm: rangeKm, canvasHeight: followCanvas.height, aroundCenter: aroundCenter)
+        if next != MapCenter(viewport.latitude, viewport.longitude) {
+            location = GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+        }
+        lockedHeading = newHeading
+        fetchForViewport()
     }
 
     /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。
@@ -185,6 +209,7 @@ final class DialModel: ObservableObject {
             viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
             rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
         let range = rangeKm
+        followingCompass = false
         beginExploring()
         northUpTask = Task { @MainActor [weak self] in
             let started = ProcessInfo.processInfo.systemUptime
@@ -197,6 +222,43 @@ final class DialModel: ObservableObject {
                     : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
                 self?.lockedHeading = PanGeometry.northUpHeading(startHeading, progress: progress)
                 if progress >= 1 { break }
+                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
+            }
+            if !Task.isCancelled { self?.fetchForViewport() }
+        }
+    }
+
+    /// 手動位置モードのまま、約0.5秒で地図を端末の向きに合わせ、その後も端末の向きに付いていく。
+    /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に回す。
+    func followCompass(canvasWidth: Double, canvasHeight: Double) {
+        guard exploring, let viewport = location, let startHeading = lockedHeading,
+              canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset else { return }
+        northUpTask?.cancel()
+        followCanvas = (canvasWidth, canvasHeight)
+        let observer = gpsLocation ?? viewport
+        let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
+            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
+            rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
+        let range = rangeKm
+        followingCompass = false
+        northUpTask = Task { @MainActor [weak self] in
+            let started = ProcessInfo.processInfo.systemUptime
+            while !Task.isCancelled {
+                guard let self else { return }
+                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
+                // 回している間も端末は動くので、行き先の向きは毎回読み直す。
+                let nextHeading = PanGeometry.returnHeading(startHeading, target: heading ?? startHeading,
+                    fraction: t * t * (3 - 2 * t))
+                let next = PanGeometry.rotateViewport(MapCenter(observer.latitude, observer.longitude),
+                    viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
+                    nextHeading: nextHeading, rangeKm: range, canvasHeight: canvasHeight, aroundCenter: aroundCenter)
+                location = next == MapCenter(viewport.latitude, viewport.longitude) ? viewport
+                    : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+                lockedHeading = nextHeading
+                if t >= 1 {
+                    followingCompass = true
+                    break
+                }
                 do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
             }
             if !Task.isCancelled { self?.fetchForViewport() }
@@ -217,6 +279,8 @@ final class DialModel: ObservableObject {
         location = GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
         rangeKm = range
         lockedHeading = nextHeading
+        // 二本指で回したら、端末の向きに合わせるのをやめる。拡大縮小と移動だけなら続ける。
+        if rotation != 0 { followingCompass = false }
         fetchForViewport()
     }
 
@@ -230,6 +294,7 @@ final class DialModel: ObservableObject {
         returnGeneration += 1
         let generation = returnGeneration
         returning = true
+        followingCompass = false
         northUpTask = Task { @MainActor [weak self] in
             defer { if self?.returnGeneration == generation { self?.returning = false } }
             let started = ProcessInfo.processInfo.systemUptime

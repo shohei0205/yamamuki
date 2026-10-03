@@ -50,6 +50,8 @@ data class DialUiState(
     /** 右下のボタンで現在地へ戻っている途中。[exploring] は戻り終わるまで true のまま。 */
     val returning: Boolean = false,
     val lockedHeading: Double? = null,
+    /** 手動位置モードで、地図の向きを端末の向きに合わせ続けている(右上のコンパスで切り替える)。 */
+    val followingCompass: Boolean = false,
     /** 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。 */
     val mountains: List<NearbyMountain> = emptyList(),
     /**
@@ -159,7 +161,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun enterManual(headingDeg: Double) {
         northUpJob?.cancel()
         if (state.value.location == null) return
-        _state.update { it.copy(exploring = true, lockedHeading = headingDeg) }
+        _state.update { it.copy(exploring = true, lockedHeading = headingDeg, followingCompass = false) }
     }
 
     fun resetCenter(compassHeading: () -> Double) {
@@ -172,7 +174,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val initialOffset = PanGeometry.observerOffset(MapCenter(startObserver.latitude, startObserver.longitude),
             MapCenter(startLocation.latitude, startLocation.longitude), startHeading)
         val generation = ++returnGeneration
-        _state.update { it.copy(returning = true) }
+        _state.update { it.copy(returning = true, followingCompass = false) }
         northUpJob = viewModelScope.launch {
             try {
                 val started = System.nanoTime()
@@ -208,6 +210,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
             startHeading, initial.rangeKm, canvasWidth, canvasHeight,
         )
+        _state.update { it.copy(followingCompass = false) }
         northUpJob = viewModelScope.launch {
             val started = System.nanoTime()
             do {
@@ -229,6 +232,70 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 手動位置モードのまま、約0.5秒で地図を端末の向きに合わせ、その後も端末の向きに付いていく。
+     * 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に回す。
+     */
+    fun followCompass(compassHeading: () -> Double, canvasWidth: Double, canvasHeight: Double) {
+        if (!canvasHeight.isFinite() || canvasHeight <= DialGeometry.CHART_INSET_DP) return
+        northUpJob?.cancel()
+        val initial = state.value
+        if (!initial.exploring) return
+        val here = initial.location ?: return
+        val startHeading = initial.lockedHeading ?: return
+        val observer = initial.gpsLocation ?: here
+        val aroundCenter = !PanGeometry.isObserverVisible(
+            MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
+            startHeading, initial.rangeKm, canvasWidth, canvasHeight,
+        )
+        _state.update { it.copy(followingCompass = false) }
+        northUpJob = viewModelScope.launch {
+            val started = System.nanoTime()
+            do {
+                val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+                // 回している間も端末は動くので、行き先の向きは毎回読み直す。
+                val heading = PanGeometry.returnHeading(startHeading, compassHeading(), t * t * (3 - 2 * t))
+                val next = PanGeometry.rotateViewport(
+                    MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
+                    startHeading, heading, initial.rangeKm, canvasHeight, aroundCenter,
+                )
+                _state.update { it.copy(
+                    location = if (next.latitude == here.latitude && next.longitude == here.longitude) here
+                        else GeoPoint(next.latitude, next.longitude),
+                    lockedHeading = heading,
+                    followingCompass = t >= 1.0,
+                ) }
+                if (t >= 1.0) break
+                delay(16)
+            } while (true)
+            fetchForViewport()
+        }
+    }
+
+    /** 端末の向きが変わった。地図を端末の向きに合わせ続けているときだけ、地図を回す。 */
+    fun onCompassHeading(headingDeg: Double, canvasWidth: Double, canvasHeight: Double) {
+        val current = state.value
+        if (!current.followingCompass || !current.exploring || current.returning) return
+        if (!canvasHeight.isFinite() || canvasHeight <= DialGeometry.CHART_INSET_DP) return
+        val heading = current.lockedHeading ?: return
+        val here = current.location ?: return
+        val observer = current.gpsLocation ?: here
+        val aroundCenter = !PanGeometry.isObserverVisible(
+            MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
+            heading, current.rangeKm, canvasWidth, canvasHeight,
+        )
+        val next = PanGeometry.rotateViewport(
+            MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
+            heading, headingDeg, current.rangeKm, canvasHeight, aroundCenter,
+        )
+        _state.update { it.copy(
+            location = if (next.latitude == here.latitude && next.longitude == here.longitude) here
+                else GeoPoint(next.latitude, next.longitude),
+            lockedHeading = headingDeg,
+        ) }
+        fetchForViewport()
+    }
+
     fun onTransform(zoom: Float, rotationDeg: Float, previousMidpoint: PlanOffset,
         midpoint: PlanOffset, chartHeightPx: Float) {
         northUpJob?.cancel()
@@ -244,7 +311,9 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             MapCenter(viewport.latitude, viewport.longitude), previousMidpoint, midpoint,
             chartHeightPx / current.rangeKm, chartHeightPx / range, heading, nextHeading)
         val point = GeoPoint(next.latitude, next.longitude)
-        _state.update { it.copy(location = point, rangeKm = range, lockedHeading = nextHeading) }
+        // 二本指で回したら、端末の向きに合わせるのをやめる。拡大縮小と移動だけなら続ける。
+        _state.update { it.copy(location = point, rangeKm = range, lockedHeading = nextHeading,
+            followingCompass = it.followingCompass && rotationDeg == 0f) }
         fetchForViewport()
     }
 

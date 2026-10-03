@@ -25,12 +25,14 @@ struct DialTouchSurface: UIViewRepresentable {
         private var start = CGPoint.zero
         private var dragging = false
         private var multiTouch = false
+        private var rotationSlop = RotationSlop()
 
         override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
             if active.isEmpty, let first = touches.first {
                 start = first.location(in: self)
                 dragging = false
                 multiTouch = false
+                rotationSlop = RotationSlop()
             }
             active.append(contentsOf: touches)
             if active.count > 1 { multiTouch = true }
@@ -58,7 +60,8 @@ struct DialTouchSurface: UIViewRepresentable {
                     PlanOffset(x: Double((p.x + q.x - bounds.width) / 2),
                         y: Double((p.y + q.y) / 2 - bounds.height) + DialGeometry.originBottom)
                 }
-                callbacks?.onTransform(zoom, Heading.delta(0, angle), midpoint(a, b), midpoint(c, d), Double(bounds.height) - DialGeometry.chartInset)
+                let rotation = rotationSlop.consume(Heading.delta(0, angle))
+                callbacks?.onTransform(zoom, rotation, midpoint(a, b), midpoint(c, d), Double(bounds.height) - DialGeometry.chartInset)
             }
         }
 

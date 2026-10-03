@@ -192,4 +192,35 @@ class PanGeometryTest {
         val p = PanGeometry.drag(MapCenter(0.0, 179.99), -100.0, 0.0, 10.0, 0.0)
         assertTrue(p.longitude < -179 && p.longitude >= -180)
     }
+
+    @Test fun compassTapAlternatesBetweenNorthUpAndFollowing() {
+        // 北が上なら端末の向きに合わせる。
+        assertTrue(PanGeometry.compassTapFollows(0.0, following = false))
+        assertTrue(PanGeometry.compassTapFollows(359.8, following = false))
+        // 端末の向きに合わせている間や、回した後は北を上にする。
+        assertFalse(PanGeometry.compassTapFollows(0.0, following = true))
+        assertFalse(PanGeometry.compassTapFollows(45.0, following = false))
+        assertFalse(PanGeometry.compassTapFollows(359.0, following = false))
+    }
+
+    @Test fun rotationSlopIgnoresSmallTwistsUntilThreshold() {
+        val slop = RotationSlop(15.0)
+        assertEquals(0.0, slop.consume(5.0))
+        assertEquals(0.0, slop.consume(-3.0))
+        assertEquals(0.0, slop.consume(10.0))
+        assertFalse(slop.rotating)
+        // 合計が 15° を超えたところで回し始め、その後の変化はそのまま返す。
+        assertEquals(0.0, slop.consume(4.0))
+        assertTrue(slop.rotating)
+        assertEquals(2.0, slop.consume(2.0))
+        assertEquals(-1.5, slop.consume(-1.5))
+        assertEquals(0.0, slop.consume(Double.NaN))
+    }
+
+    @Test fun rotationSlopCountsBothDirections() {
+        val slop = RotationSlop(15.0)
+        assertEquals(0.0, slop.consume(-16.0))
+        assertTrue(slop.rotating)
+        assertEquals(-1.0, slop.consume(-1.0))
+    }
 }
