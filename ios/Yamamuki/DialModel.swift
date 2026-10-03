@@ -18,6 +18,8 @@ final class DialModel: ObservableObject {
     /// 現在地。双眼鏡の位置と、山までの距離の基準。手動位置モードでも GPS に付いていく。
     @Published private(set) var gpsLocation: GeoPoint?
     @Published private(set) var exploring = false
+    /// 右下のボタンで現在地へ戻っている途中。[exploring] は戻り終わるまで true のまま。
+    @Published private(set) var returning = false
     @Published private(set) var lockedHeading: Double?
     var displayHeading: Double { lockedHeading ?? heading ?? 0 }
 
@@ -58,11 +60,12 @@ final class DialModel: ObservableObject {
     private let locationService = LocationService()
     private let networkMonitor = NetworkMonitor()
     private var peaks: [Mountain] = []
+    /// 現在地へ戻る動きの通し番号。取り消された古い動きが、新しく始めた動きの [returning] を消さないようにする。
+    private var returnGeneration = 0
     private var fetchedCenter: GeoPoint?
     private var fetchedRadiusKm = 0.0
     private var fetchTask: Task<Void, Never>?
     private var northUpTask: Task<Void, Never>?
-    private var headingSwipeAroundCenter = false
     /// 圏外のため取得を控えた。値は手動の取得だったか。つながったらその続きを取得する。
     private var skippedWhileDisconnected: Bool?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "DialModel")
@@ -147,7 +150,9 @@ final class DialModel: ObservableObject {
         if DialGeometry.fetchRadiusKm(rangeKm) > fetchedRadiusKm { fetch() }
     }
 
+    /// 一本指のドラッグ。モードは右下のボタンだけで切り替えるので、ヘディングアップ中は何もしない。
     func onPan(dx: Double, dy: Double, chartHeight: Double) {
+        guard exploring else { return }
         northUpTask?.cancel()
         guard let here = location else { return }
         let next = PanGeometry.drag(MapCenter(here.latitude, here.longitude), dx: dx, dy: dy,
@@ -156,6 +161,13 @@ final class DialModel: ObservableObject {
         beginExploring()
         location = GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
         fetchForViewport()
+    }
+
+    /// 右下のボタンで手動位置モードにする。地図の向きは今の方位のまま止め、双眼鏡が上を向いたまま切り替わるようにする。
+    func enterManual() {
+        northUpTask?.cancel()
+        guard location != nil else { return }
+        beginExploring()
     }
 
     private func beginExploring() {
@@ -191,26 +203,6 @@ final class DialModel: ObservableObject {
         }
     }
 
-    func onHeadingSwipe(dx: Double, width: Double, canvasHeight: Double, started: Bool) {
-        northUpTask?.cancel()
-        guard let here = location, dx.isFinite, width.isFinite, width > 0, canvasHeight > DialGeometry.chartInset else { return }
-        let observer = gpsLocation ?? here
-        let observerPoint = MapCenter(observer.latitude, observer.longitude)
-        let viewport = MapCenter(here.latitude, here.longitude)
-        let oldHeading = displayHeading
-        if started {
-            headingSwipeAroundCenter = !PanGeometry.isObserverVisible(observerPoint, viewport: viewport,
-                heading: oldHeading, rangeKm: rangeKm, canvasWidth: width, canvasHeight: canvasHeight)
-        }
-        let nextHeading = DialGeometry.swipedHeading(oldHeading, dx: dx, width: width)
-        let next = PanGeometry.rotateViewport(observerPoint, viewport: viewport, heading: oldHeading, nextHeading: nextHeading,
-            rangeKm: rangeKm, canvasHeight: canvasHeight, aroundCenter: headingSwipeAroundCenter)
-        beginExploring()
-        location = next == viewport ? here : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
-        lockedHeading = nextHeading
-        fetchForViewport()
-    }
-
     func onTransform(zoom: Double, rotation: Double, previous: PlanOffset, midpoint: PlanOffset, chartHeight: Double) {
         northUpTask?.cancel()
         guard exploring, let oldHeading = lockedHeading else { onZoom(zoom); return }
@@ -235,7 +227,11 @@ final class DialModel: ObservableObject {
         // 双眼鏡は現在地に付いているので、表示範囲と方角だけを戻す。途中で止めても双眼鏡は現在地に残る。
         let initialOffset = PanGeometry.observerOffset(MapCenter(startObserver.latitude, startObserver.longitude),
             viewport: MapCenter(startLocation.latitude, startLocation.longitude), heading: startHeading)
+        returnGeneration += 1
+        let generation = returnGeneration
+        returning = true
         northUpTask = Task { @MainActor [weak self] in
+            defer { if self?.returnGeneration == generation { self?.returning = false } }
             let started = ProcessInfo.processInfo.systemUptime
             while !Task.isCancelled {
                 guard let self, let target = gpsLocation else { return }

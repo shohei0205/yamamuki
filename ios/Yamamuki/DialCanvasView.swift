@@ -15,6 +15,13 @@ private let lensBlue = Color(hex: 0x5B8DB8)
 private let summitRock = Color(hex: 0x5D6D7E)
 private let summitRockLight = Color(hex: 0x8A99A8)
 private let flagPole = Color(hex: 0x333333)
+private let fanShade = Color(hex: 0x7A6F45)
+private let fanEdge = Color(hex: 0xC9B35A)
+let tapeInk = Color(hex: 0x2E3A40)
+let tapeSubtle = Color(hex: 0x6B7178)
+/// 方位目盛りの 10° ごとと 5° ごとの線の長さ。
+private let tapeMajorTick: CGFloat = 14
+private let tapeMinorTick: CGFloat = 8
 
 extension Color {
     init(hex: UInt32) {
@@ -41,7 +48,7 @@ private let outlineWidth: CGFloat = 1.5
 /// 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。
 /// 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
 /// 現在地がほぼ山頂([summit] が非 nil)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
-struct DialCanvasView: View {
+struct DialCanvasView: View, Animatable {
     let headingDeg: Double
     let mountains: [NearbyMountain]
     let rangeKm: Double
@@ -57,20 +64,36 @@ struct DialCanvasView: View {
     let viewportLocation: GeoPoint?
     let compassHeading: Double
     let headingUp: Bool
+    /// 上部の方位目盛りの引っ込み具合。0 で表示(ヘディングアップ)、1 で画面の上へ隠れる(手動位置モード)。
+    var tapeHidden: Double
+    /// 現在地から画面上部へ広がる視野の扇の濃さ(0〜1)。双眼鏡の短い視野は残りの (1 - 濃さ) で描く。
+    var viewFanAlpha: Double
+    /// 画面下端の余白(ホームインジケーターなど)の高さ。視野の扇の外側の暗さだけを、ここまで描き足す。
+    var bottomBleed: CGFloat = 0
     let onPan: (Double, Double, Double) -> Void
-    let onHeadingSwipe: (Double, Double, Bool) -> Void
     let onTransform: (Double, Double, PlanOffset, PlanOffset, Double) -> Void
     let onMountainTap: (NearbyMountain) -> Void
     let onObserverTap: () -> Void
 
     @State private var hitTargets = HitTargets()
 
-    var body: some View {
-        Canvas { context, size in
-            draw(context, size: size)
+    /// モードを切り替えるときに、目盛りの出し入れと視野の扇の濃さを少しずつ変えて描き直す。
+    var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(tapeHidden, viewFanAlpha) }
+        set {
+            tapeHidden = newValue.first
+            viewFanAlpha = newValue.second
         }
+    }
+
+    var body: some View {
+        // 視野の扇だけを画面下端の余白まで描くので、Canvas を余白の分だけ下へ広げ、扇以外は元の範囲で描く。
+        Canvas { context, size in
+            draw(context, size: CGSize(width: size.width, height: size.height - bottomBleed))
+        }
+        .padding(.bottom, -bottomBleed)
         .overlay {
-            DialTouchSurface(onPan: onPan, onHeadingSwipe: onHeadingSwipe, onTransform: onTransform) { point in
+            DialTouchSurface(onPan: onPan, onTransform: onTransform) { point in
                 if hitTargets.hitsObserver(point, slop: 8) {
                     onObserverTap()
                 } else if let m = hitTargets.find(point, slop: 8) {
@@ -93,6 +116,14 @@ struct DialCanvasView: View {
             observer.x += CGFloat(offset.x) * pxPerKm
             observer.y -= CGFloat(offset.y) * pxPerKm
         }
+        if viewFanAlpha > 0 {
+            // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
+            var fanContext = ctx
+            fanContext.clip(to: Path(CGRect(x: 0, y: tapeHeight, width: size.width, height: max(0, size.height + bottomBleed - tapeHeight))))
+            drawViewFan(fanContext, size: size, apex: observer)
+        }
+        var ctx = ctx
+        ctx.clip(to: Path(CGRect(origin: .zero, size: size)))
         if pxPerKm > 0 {
             drawRings(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles)
             hitTargets.peaks = drawPeaks(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles)
@@ -108,8 +139,13 @@ struct DialCanvasView: View {
             hitTargets.observer = drawBinoculars(rotatedObserver(ctx, center: observer), center: observer)
             hitTargets.summit = nil
         }
-        drawTape(ctx, size: size, tapeHeight: tapeHeight)
-        drawReadout(ctx, size: size, tapeHeight: tapeHeight, styles: styles)
+        if tapeHidden < 1 {
+            // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
+            var tapeContext = ctx
+            tapeContext.translateBy(x: 0, y: -CGFloat(tapeHidden) * chartTop * 1.5)
+            drawTape(tapeContext, size: size, tapeHeight: tapeHeight)
+            drawReadout(tapeContext, size: size, tapeHeight: tapeHeight, styles: styles)
+        }
     }
 
     private func rotatedObserver(_ ctx: GraphicsContext, center: CGPoint) -> GraphicsContext {
@@ -263,6 +299,8 @@ struct DialCanvasView: View {
     /// 向いている方位(画面の上)を示す視野。[apex] から前方へ扇形に広がり、遠くほど薄くなる。
     /// 双眼鏡と山頂アイコンで共通に使う。
     private func drawViewCone(_ ctx: GraphicsContext, apex: CGPoint) {
+        let alpha = 1 - viewFanAlpha
+        guard alpha > 0 else { return }
         let reach: CGFloat = 70
         let halfAngle = 22.0
         var cone = Path()
@@ -272,12 +310,29 @@ struct DialCanvasView: View {
         ctx.fill(
             cone,
             with: .radialGradient(
-                Gradient(colors: [lensBlue.opacity(0.35), lensBlue.opacity(0)]),
+                Gradient(colors: [lensBlue.opacity(0.35 * alpha), lensBlue.opacity(0)]),
                 center: apex,
                 startRadius: 0,
                 endRadius: reach
             )
         )
+    }
+
+    /// ヘディングアップで、上部の方位目盛りと同じ幅(tapeSpanDeg)の視野。[apex] から画面の外まで扇を広げ、
+    /// 扇の外側をうっすら暗くする。山や同心円より下に描き、山名を隠さない。
+    private func drawViewFan(_ ctx: GraphicsContext, size: CGSize, apex: CGPoint) {
+        let reach = hypot(size.width, size.height) * 2
+        let half = tapeSpanDeg / 2 * .pi / 180
+        let left = CGPoint(x: apex.x - reach * CGFloat(sin(half)), y: apex.y - reach * CGFloat(cos(half)))
+        let right = CGPoint(x: apex.x + reach * CGFloat(sin(half)), y: apex.y - reach * CGFloat(cos(half)))
+        var outside = Path(CGRect(x: apex.x - reach, y: apex.y - reach, width: reach * 2, height: reach * 2))
+        outside.addPath(polygon([apex, left, right]))
+        ctx.fill(outside, with: .color(fanShade.opacity(0.16 * viewFanAlpha)), style: FillStyle(eoFill: true))
+        var edge = Path()
+        edge.move(to: left)
+        edge.addLine(to: apex)
+        edge.addLine(to: right)
+        ctx.stroke(edge, with: .color(fanEdge.opacity(viewFanAlpha)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
     }
 
     /// 現在地を表す双眼鏡。対物レンズを上(向いている方位)に向け、前方へ広がる視野を薄く描いて
@@ -320,40 +375,81 @@ struct DialCanvasView: View {
     /// 画面上部の方位目盛り。向いている方位が中央に来る。上端は高さが決まっているので文字の倍率を掛けない。
     private func drawTape(_ ctx: GraphicsContext, size: CGSize, tapeHeight: CGFloat) {
         let center = size.width / 2
+        let half = tapeSpanDeg / 2
+        let baseline: CGFloat = 1.5
+        // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ金色にする。
+        ctx.fill(
+            Path(CGRect(x: 0, y: 0, width: size.width, height: tapeHeight)),
+            with: .linearGradient(
+                Gradient(colors: [.white.opacity(0), .white.opacity(0.55), .white.opacity(0)]),
+                startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: size.width, y: 0)
+            )
+        )
+        ctx.fill(
+            Path(CGRect(x: 0, y: tapeHeight - baseline, width: size.width, height: baseline)),
+            with: .linearGradient(
+                Gradient(colors: [fanEdge.opacity(0), fanEdge, fanEdge.opacity(0)]),
+                startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: size.width, y: 0)
+            )
+        )
+        let labelBottom = tapeHeight - baseline - tapeMajorTick
         for tick in DialGeometry.tapeTicks(headingDeg: headingDeg, spanDeg: tapeSpanDeg) {
             let x = center + CGFloat(tick.offsetDeg / tapeSpanDeg) * size.width
+            // 線と数字は端へ行くほど少し薄くして、中央の方位に目が行くようにする。東西南北の文字は薄くしない。
+            let edge = min(1, abs(tick.offsetDeg) / half)
+            let opacity = 1 - 0.4 * edge * edge
+            let major = tick.angleDeg % 10 == 0
+            let length = major ? tapeMajorTick : tapeMinorTick
+            ctx.stroke(
+                line(CGPoint(x: x, y: tapeHeight - baseline), CGPoint(x: x, y: tapeHeight - baseline - length)),
+                with: .color(tapeInk.opacity(opacity)),
+                style: StrokeStyle(lineWidth: major ? 2.5 : 1.5, lineCap: .round)
+            )
+            let label: MeasuredText
             if let cardinal = DialGeometry.cardinalLabel(tick.angleDeg) {
-                let label = measuredText(
-                    ctx,
-                    cardinal,
-                    size: cardinal.count == 1 ? 22 : 15,
-                    color: cardinal == "N" ? northRed : .black
-                )
-                ctx.draw(label.text, at: CGPoint(x: x - label.size.width / 2, y: (tapeHeight - label.size.height) / 2), anchor: .topLeading)
+                label = measuredText(ctx, cardinal, size: cardinal.count == 1 ? 20 : 14, color: cardinal == "N" ? northRed : tapeInk)
+            } else if tick.angleDeg % 30 == 0 {
+                label = measuredText(ctx, String(tick.angleDeg), size: 11, color: tapeSubtle.opacity(opacity))
             } else {
-                let length = tick.angleDeg % 10 == 0 ? tapeHeight * 0.75 : tapeHeight * 0.45
-                ctx.stroke(line(CGPoint(x: x, y: 0), CGPoint(x: x, y: length)), with: .color(.black), lineWidth: 3)
+                continue
             }
+            ctx.draw(label.text, at: CGPoint(x: x - label.size.width / 2, y: (labelBottom - label.size.height) / 2 + 1), anchor: .topLeading)
         }
     }
 
-    /// 目盛りの下に、中央を指す赤い印と「北東 45°　標高 312m」の表示(標高は分かるときだけ)。
+    /// 目盛りの中央を指す赤い印と、その下の淡い白の札に「北東 45°　標高 312m」(標高は分かるときだけ)。
     private func drawReadout(_ ctx: GraphicsContext, size: CGSize, tapeHeight: CGFloat, styles: TextStyles) {
         let center = size.width / 2
-        let caret: CGFloat = 6
+        let caret: CGFloat = 5
         ctx.fill(
             polygon([
-                CGPoint(x: center, y: tapeHeight),
-                CGPoint(x: center + caret, y: tapeHeight + caret),
-                CGPoint(x: center - caret, y: tapeHeight + caret),
+                CGPoint(x: center, y: tapeHeight - 2 * caret),
+                CGPoint(x: center + caret, y: tapeHeight),
+                CGPoint(x: center - caret, y: tapeHeight),
             ]),
             with: .color(northRed)
         )
-        let deg = Int(headingDeg.rounded()) % 360
-        let altitude = altitudeM.map { "　標高 \(groupedInteger(Int($0.rounded())))m" } ?? ""
-        let label = measuredText(ctx, "\(Heading.directionName(headingDeg)) \(deg)°\(altitude)", size: styles.readout, color: .black)
-        ctx.draw(label.text, at: CGPoint(x: center - label.size.width / 2, y: tapeHeight + caret + 2), anchor: .topLeading)
+        let parts = readoutParts(headingDeg: headingDeg, altitudeM: altitudeM)
+        let font = Font.system(size: styles.readout, weight: .bold)
+        let text = ctx.resolve(Text(parts.direction).font(font).foregroundColor(tapeInk)
+            + Text(parts.altitude).font(font).foregroundColor(tapeSubtle))
+        let textSize = text.measure(in: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude))
+        let padX: CGFloat = 12
+        let padY: CGFloat = 3
+        let pill = CGRect(x: center - textSize.width / 2 - padX, y: tapeHeight + 4,
+                          width: textSize.width + padX * 2, height: textSize.height + padY * 2)
+        let radius = pill.height / 2
+        // 札は目盛りの帯と同じくらいの淡い白にして、帯より目立たせない。同心円と重なっても文字が読める程度の濃さは残す。
+        ctx.fill(Path(roundedRect: pill, cornerRadius: radius), with: .color(.white.opacity(0.5)))
+        ctx.draw(text, at: CGPoint(x: pill.minX + padX, y: pill.minY + padY), anchor: .topLeading)
     }
+}
+
+/// 方位(「北東 45°」)と標高(「　標高 312m」、分からなければ空)に分けたもの。
+func readoutParts(headingDeg: Double, altitudeM: Double?) -> (direction: String, altitude: String) {
+    let deg = Int(headingDeg.rounded()) % 360
+    let altitude = altitudeM.map { "　標高 \(groupedInteger(Int($0.rounded())))m" } ?? ""
+    return ("\(Heading.directionName(headingDeg)) \(deg)°", altitude)
 }
 
 /// 方位盤の文字の大きさ。設定の文字サイズ([scale])を山名・距離の目盛り・方位の表示に掛ける。

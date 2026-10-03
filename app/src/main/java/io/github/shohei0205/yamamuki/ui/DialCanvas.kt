@@ -9,13 +9,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.shohei0205.yamamuki.core.Box
@@ -66,6 +69,14 @@ private val LensBlue = Color(0xFF5B8DB8)
 private val SummitRock = Color(0xFF5D6D7E)
 private val SummitRockLight = Color(0xFF8A99A8)
 private val FlagPole = Color(0xFF333333)
+private val FanShade = Color(0xFF7A6F45)
+private val FanEdge = Color(0xFFC9B35A)
+internal val TapeInk = Color(0xFF2E3A40)
+internal val TapeSubtle = Color(0xFF6B7178)
+
+/** 方位目盛りの 10° ごとと 5° ごとの線の長さ。 */
+private const val TAPE_MAJOR_TICK_DP = 14f
+private const val TAPE_MINOR_TICK_DP = 8f
 
 /** 画面上部の方位目盛りに収める角度の幅。 */
 private const val TAPE_SPAN_DEG = DialGeometry.TAPE_SPAN_DEG
@@ -110,6 +121,12 @@ fun DialCanvas(
     viewportLongitude: Double? = longitude,
     compassHeadingDeg: Double = headingDeg,
     headingUp: Boolean = true,
+    /** 上部の方位目盛りの引っ込み具合。0 で表示(ヘディングアップ)、1 で画面の上へ隠れる(手動位置モード)。 */
+    tapeHidden: Float = 0f,
+    /** 現在地から画面上部へ広がる視野の扇の濃さ(0〜1)。双眼鏡の短い視野は残りの (1 - 濃さ) で描く。 */
+    viewFanAlpha: Float = 1f,
+    /** 画面下端の余白(ジェスチャーバーなど)の高さ。視野の扇の外側の暗さだけを、ここまで描き足す。 */
+    bottomBleed: Dp = 0.dp,
 ) {
     val styles = remember(textScale) { DialTextStyles(textScale) }
     val textMeasurer = rememberTextMeasurer(cacheSize = 256)
@@ -126,7 +143,8 @@ fun DialCanvas(
             }
         }
     }
-    Canvas(modifier.clipToBounds().then(tapModifier)) {
+    // 視野の扇だけを画面下端の余白まで描くので、全体では切り抜かず、扇以外を描く範囲で切り抜く。
+    Canvas(modifier.then(tapModifier)) {
         val tapeHeight = DialGeometry.TAPE_HEIGHT_DP.dp.toPx()
         val chartTop = DialGeometry.CHART_TOP_DP.dp.toPx()
         val origin = Offset(size.width / 2, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
@@ -135,26 +153,40 @@ fun DialCanvas(
             PanGeometry.observerOffset(MapCenter(latitude, longitude), MapCenter(viewportLatitude, viewportLongitude), headingDeg)
         else PlanOffset(0.0, 0.0)
         val observer = origin + Offset((offset.x * pxPerKm).toFloat(), (-offset.y * pxPerKm).toFloat())
-        hitTargets.peaks = if (pxPerKm > 0f) {
-            hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, hitTargets.ringLabelAngle, headingUp)
-            drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
-        } else {
-            emptyList()
-        }
         val observerRotation = Heading.delta(headingDeg, compassHeadingDeg).toFloat()
-        if (summit != null) {
-            hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation)
-            hitTargets.observer = null
-        } else {
-            hitTargets.observerCenter = observer
-            hitTargets.observerRotation = observerRotation
-            rotate(observerRotation, pivot = observer) {
-                hitTargets.observer = drawBinoculars(observer)
+        if (viewFanAlpha > 0f) {
+            clipRect(top = tapeHeight, bottom = size.height + bottomBleed.toPx()) {
+                // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
+                drawViewFan(observer, viewFanAlpha)
             }
-            hitTargets.summit = null
         }
-        drawTape(headingDeg, tapeHeight, textMeasurer)
-        drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles)
+        clipRect {
+            val coneAlpha = 1f - viewFanAlpha
+            hitTargets.peaks = if (pxPerKm > 0f) {
+                hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, hitTargets.ringLabelAngle, headingUp)
+                drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
+            } else {
+                emptyList()
+            }
+            if (summit != null) {
+                hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation, coneAlpha)
+                hitTargets.observer = null
+            } else {
+                hitTargets.observerCenter = observer
+                hitTargets.observerRotation = observerRotation
+                rotate(observerRotation, pivot = observer) {
+                    hitTargets.observer = drawBinoculars(observer, coneAlpha)
+                }
+                hitTargets.summit = null
+            }
+            if (tapeHidden < 1f) {
+                // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
+                translate(top = -tapeHidden * chartTop * 1.5f) {
+                    drawTape(headingDeg, tapeHeight, textMeasurer)
+                    drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles)
+                }
+            }
+        }
     }
 }
 
@@ -397,6 +429,7 @@ private fun DrawScope.drawSummit(
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
     observerRotation: Float,
+    coneAlpha: Float,
 ): PlacedPeak {
     val u = 1.dp.toPx()
     fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + y * u)
@@ -408,7 +441,7 @@ private fun DrawScope.drawSummit(
     val poleTop = at(2f, -24f)
     val poleBottom = at(2f, -8f)
 
-    rotate(observerRotation, pivot = center) { drawViewCone(at(0f, -6f)) }
+    if (coneAlpha > 0f) rotate(observerRotation, pivot = center) { drawViewCone(at(0f, -6f), coneAlpha) }
 
     // 白い縁取り → 本体の順に描く。
     val halo = Stroke(width = 4f * u, join = StrokeJoin.Round)
@@ -446,12 +479,12 @@ private fun DrawScope.drawSummit(
  * 向いている方位(画面の上)を示す視野。[apex] から前方へ扇形に広がり、遠くほど薄くなる。
  * 双眼鏡と山頂アイコンで共通に使う。
  */
-private fun DrawScope.drawViewCone(apex: Offset) {
+private fun DrawScope.drawViewCone(apex: Offset, alpha: Float) {
     val reach = 70.dp.toPx()
     val halfAngle = 22f
     drawArc(
         brush = Brush.radialGradient(
-            colors = listOf(LensBlue.copy(alpha = 0.35f), LensBlue.copy(alpha = 0f)),
+            colors = listOf(LensBlue.copy(alpha = 0.35f * alpha), LensBlue.copy(alpha = 0f)),
             center = apex,
             radius = reach,
         ),
@@ -464,11 +497,34 @@ private fun DrawScope.drawViewCone(apex: Offset) {
 }
 
 /**
+ * ヘディングアップで、上部の方位目盛りと同じ幅([TAPE_SPAN_DEG])の視野。[apex] から画面の外まで扇を広げ、
+ * 扇の外側をうっすら暗くする。山や同心円より下に描き、山名を隠さない。
+ */
+private fun DrawScope.drawViewFan(apex: Offset, alpha: Float) {
+    val reach = hypot(size.width, size.height) * 2
+    val half = Math.toRadians(TAPE_SPAN_DEG / 2).toFloat()
+    val left = apex + Offset(-reach * kotlin.math.sin(half), -reach * kotlin.math.cos(half))
+    val right = apex + Offset(reach * kotlin.math.sin(half), -reach * kotlin.math.cos(half))
+    val outside = Path().apply {
+        fillType = PathFillType.EvenOdd
+        addRect(Rect(apex.x - reach, apex.y - reach, apex.x + reach, apex.y + reach))
+        addPath(polygon(listOf(apex, left, right)))
+    }
+    drawPath(outside, FanShade.copy(alpha = 0.16f * alpha))
+    val edge = Path().apply {
+        moveTo(left.x, left.y)
+        lineTo(apex.x, apex.y)
+        lineTo(right.x, right.y)
+    }
+    drawPath(edge, FanEdge.copy(alpha = alpha), style = Stroke(width = 1.5f.dp.toPx(), join = StrokeJoin.Round))
+}
+
+/**
  * 現在地を表す双眼鏡。対物レンズを上(向いている方位)に向け、前方へ広がる視野を薄く描いて
  * 「前を覗いている」ように見せる。同心円や山と重なっても埋もれないよう、白い縁取りを付ける。
  * タップの当たり判定用に、白い縁取りまで含めた範囲を返す。
  */
-private fun DrawScope.drawBinoculars(center: Offset): Box {
+private fun DrawScope.drawBinoculars(center: Offset, coneAlpha: Float): Box {
     val u = 1.dp.toPx()
 
     /** 中心からのずれ(dp)で矩形を描く。[grow] だけ四方に広げる。 */
@@ -490,7 +546,7 @@ private fun DrawScope.drawBinoculars(center: Offset): Box {
         part(0f, top = -1f, width = 8f, bottom = 6f, corner = 2f, color = color, grow = grow) // ブリッジ
     }
 
-    drawViewCone(Offset(center.x, center.y - 10f * u))
+    if (coneAlpha > 0f) drawViewCone(Offset(center.x, center.y - 10f * u), coneAlpha)
     body(Color.White, grow = 2f)
     body(BinocularBody, grow = 0f)
     drawCircle(BinocularHinge, radius = 3f * u, center = Offset(center.x, center.y + 2.5f * u))
@@ -510,26 +566,49 @@ private fun DrawScope.drawBinoculars(center: Offset): Box {
 /** 画面上部の方位目盛り。向いている方位が中央に来る。 */
 private fun DrawScope.drawTape(headingDeg: Double, tapeHeight: Float, textMeasurer: TextMeasurer) {
     val center = size.width / 2
-    val stroke = 3.dp.toPx()
+    val half = TAPE_SPAN_DEG / 2
+    val baseline = 1.5.dp.toPx()
+    // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ金色にする。
+    drawRect(
+        Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0f), Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0f))),
+        size = Size(size.width, tapeHeight),
+    )
+    drawRect(
+        Brush.horizontalGradient(listOf(FanEdge.copy(alpha = 0f), FanEdge, FanEdge.copy(alpha = 0f))),
+        topLeft = Offset(0f, tapeHeight - baseline),
+        size = Size(size.width, baseline),
+    )
+    val labelBottom = tapeHeight - baseline - TAPE_MAJOR_TICK_DP.dp.toPx()
     for (tick in DialGeometry.tapeTicks(headingDeg, TAPE_SPAN_DEG)) {
         val x = center + (tick.offsetDeg / TAPE_SPAN_DEG * size.width).toFloat()
+        // 線と数字は端へ行くほど少し薄くして、中央の方位に目が行くようにする。東西南北の文字は薄くしない。
+        val edge = (kotlin.math.abs(tick.offsetDeg) / half).toFloat().coerceAtMost(1f)
+        val ink = TapeInk.copy(alpha = 1f - 0.4f * edge * edge)
+        val major = tick.angleDeg % 10 == 0
+        val length = (if (major) TAPE_MAJOR_TICK_DP else TAPE_MINOR_TICK_DP).dp.toPx()
+        drawLine(
+            ink,
+            Offset(x, tapeHeight - baseline),
+            Offset(x, tapeHeight - baseline - length),
+            strokeWidth = (if (major) 2.5f else 1.5f).dp.toPx(),
+            cap = StrokeCap.Round,
+        )
         val cardinal = DialGeometry.cardinalLabel(tick.angleDeg)
-        if (cardinal != null) {
-            val style = TextStyle(
-                color = if (cardinal == "N") NorthRed else Color.Black,
-                fontSize = if (cardinal.length == 1) 22.sp else 15.sp,
+        val style = when {
+            cardinal != null -> TextStyle(
+                color = if (cardinal == "N") NorthRed else TapeInk,
+                fontSize = if (cardinal.length == 1) 20.sp else 14.sp,
                 fontWeight = FontWeight.Bold,
             )
-            val label = textMeasurer.measure(cardinal, style)
-            drawText(label, topLeft = Offset(x - label.size.width / 2f, (tapeHeight - label.size.height) / 2))
-        } else {
-            val length = if (tick.angleDeg % 10 == 0) tapeHeight * 0.75f else tapeHeight * 0.45f
-            drawLine(Color.Black, Offset(x, 0f), Offset(x, length), strokeWidth = stroke)
-        }
+            tick.angleDeg % 30 == 0 -> TextStyle(color = TapeSubtle.copy(alpha = ink.alpha), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            else -> null
+        } ?: continue
+        val label = textMeasurer.measure(cardinal ?: tick.angleDeg.toString(), style)
+        drawText(label, topLeft = Offset(x - label.size.width / 2f, (labelBottom - label.size.height) / 2 + 1.dp.toPx()))
     }
 }
 
-/** 目盛りの下に、中央を指す赤い印と「北東 45°　標高 312m」の表示(標高は分かるときだけ)。 */
+/** 目盛りの中央を指す赤い印と、その下の淡い白の札に「北東 45°　標高 312m」(標高は分かるときだけ)。 */
 private fun DrawScope.drawReadout(
     headingDeg: Double,
     altitudeM: Double?,
@@ -538,21 +617,42 @@ private fun DrawScope.drawReadout(
     styles: DialTextStyles,
 ) {
     val center = size.width / 2
-    val caret = 6.dp.toPx()
+    val caret = 5.dp.toPx()
     drawPath(
         polygon(
             listOf(
-                Offset(center, tapeHeight),
-                Offset(center + caret, tapeHeight + caret),
-                Offset(center - caret, tapeHeight + caret),
+                Offset(center, tapeHeight - 2 * caret),
+                Offset(center + caret, tapeHeight),
+                Offset(center - caret, tapeHeight),
             ),
         ),
         NorthRed,
     )
+    val (direction, altitude) = readoutParts(headingDeg, altitudeM)
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        append(direction)
+        if (altitude.isNotEmpty()) {
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = TapeSubtle))
+            append(altitude)
+            pop()
+        }
+    }
+    val label = textMeasurer.measure(text, styles.readout.copy(color = TapeInk))
+    val padX = 12.dp.toPx()
+    val padY = 3.dp.toPx()
+    val pill = Size(label.size.width + padX * 2, label.size.height + padY * 2)
+    val topLeft = Offset(center - pill.width / 2, tapeHeight + 4.dp.toPx())
+    val radius = CornerRadius(pill.height / 2)
+    // 札は目盛りの帯と同じくらいの淡い白にして、帯より目立たせない。同心円と重なっても文字が読める程度の濃さは残す。
+    drawRoundRect(Color.White.copy(alpha = 0.5f), topLeft, pill, radius)
+    drawText(label, topLeft = topLeft + Offset(padX, padY))
+}
+
+/** 方位(「北東 45°」)と標高(「　標高 312m」、分からなければ空)に分けたもの。 */
+internal fun readoutParts(headingDeg: Double, altitudeM: Double?): Pair<String, String> {
     val deg = headingDeg.roundToInt() % 360
     val altitude = altitudeM?.let { String.format(java.util.Locale.US, "　標高 %,dm", Math.round(it)) } ?: ""
-    val label = textMeasurer.measure("${Heading.directionName(headingDeg)} $deg°$altitude", styles.readout)
-    drawText(label, topLeft = Offset(center - label.size.width / 2f, tapeHeight + caret + 2.dp.toPx()))
+    return "${Heading.directionName(headingDeg)} $deg°" to altitude
 }
 
 @Preview(widthDp = 320, heightDp = 560)

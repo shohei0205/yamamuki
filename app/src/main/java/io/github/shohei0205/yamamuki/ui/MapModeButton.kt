@@ -28,7 +28,7 @@ fun MapModeButton(manual: Boolean, enabled: Boolean, onClick: () -> Unit, modifi
         shadowElevation = 6.dp,
         modifier = modifier.size(56.dp).semantics {
             stateDescription = if (manual) "手動位置モード" else "ヘディングアップモード"
-            contentDescription = if (manual) "現在地に戻り、進行方向を上にする" else "北を上にして手動位置モードにする"
+            contentDescription = if (manual) "現在地に戻り、進行方向を上にする" else "今の向きのまま手動位置モードにする"
         },
     ) {
         Box(contentAlignment = Alignment.Center) {

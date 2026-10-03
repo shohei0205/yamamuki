@@ -47,6 +47,8 @@ data class DialUiState(
     /** 現在地。双眼鏡の位置と、山までの距離の基準。手動位置モードでも GPS に付いていく。 */
     val gpsLocation: GeoPoint? = null,
     val exploring: Boolean = false,
+    /** 右下のボタンで現在地へ戻っている途中。[exploring] は戻り終わるまで true のまま。 */
+    val returning: Boolean = false,
     val lockedHeading: Double? = null,
     /** 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。 */
     val mountains: List<NearbyMountain> = emptyList(),
@@ -85,7 +87,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     )
     val state: StateFlow<DialUiState> = _state.asStateFlow()
     private var northUpJob: Job? = null
-    private var headingSwipeAroundCenter = false
+    /** 現在地へ戻る動きの通し番号。取り消された古い動きが、新しく始めた動きの [DialUiState.returning] を消さないようにする。 */
+    private var returnGeneration = 0
 
     private var peaks: List<Mountain> = emptyList()
     private var fetchedCenter: GeoPoint? = null
@@ -139,7 +142,9 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         if (DialGeometry.fetchRadiusKm(_state.value.rangeKm) > fetchedRadiusKm) fetch()
     }
 
+    /** 一本指のドラッグ。モードは右下のボタンだけで切り替えるので、ヘディングアップ中は何もしない。 */
     fun onPan(dxPx: Float, dyPx: Float, chartHeightPx: Float, headingDeg: Double) {
+        if (!state.value.exploring) return
         northUpJob?.cancel()
         val here = state.value.location ?: return
         val next = PanGeometry.drag(MapCenter(here.latitude, here.longitude), dxPx.toDouble(), dyPx.toDouble(),
@@ -148,6 +153,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val point = GeoPoint(next.latitude, next.longitude)
         _state.update { it.copy(location = point, exploring = true, lockedHeading = it.lockedHeading ?: headingDeg) }
         fetchForViewport()
+    }
+
+    /** 右下のボタンで手動位置モードにする。地図の向きは今の方位のまま止め、双眼鏡が上を向いたまま切り替わるようにする。 */
+    fun enterManual(headingDeg: Double) {
+        northUpJob?.cancel()
+        if (state.value.location == null) return
+        _state.update { it.copy(exploring = true, lockedHeading = headingDeg) }
     }
 
     fun resetCenter(compassHeading: () -> Double) {
@@ -159,21 +171,27 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         // 双眼鏡は現在地に付いているので、表示範囲と方角だけを戻す。途中で止めても双眼鏡は現在地に残る。
         val initialOffset = PanGeometry.observerOffset(MapCenter(startObserver.latitude, startObserver.longitude),
             MapCenter(startLocation.latitude, startLocation.longitude), startHeading)
+        val generation = ++returnGeneration
+        _state.update { it.copy(returning = true) }
         northUpJob = viewModelScope.launch {
-            val started = System.nanoTime()
-            do {
-                val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
-                val fraction = t * t * (3 - 2 * t)
-                val target = state.value.gpsLocation ?: return@launch
-                val heading = PanGeometry.returnHeading(startHeading, compassHeading(), fraction)
-                val viewport = PanGeometry.returnViewport(MapCenter(target.latitude, target.longitude), initialOffset, heading, fraction)
-                _state.update { it.copy(
-                    location = target.copy(latitude = viewport.latitude, longitude = viewport.longitude),
-                    exploring = t < 1.0, lockedHeading = if (t < 1.0) heading else null,
-                ) }
-                if (t >= 1.0) break
-                delay(16)
-            } while (true)
+            try {
+                val started = System.nanoTime()
+                do {
+                    val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+                    val fraction = t * t * (3 - 2 * t)
+                    val target = state.value.gpsLocation ?: return@launch
+                    val heading = PanGeometry.returnHeading(startHeading, compassHeading(), fraction)
+                    val viewport = PanGeometry.returnViewport(MapCenter(target.latitude, target.longitude), initialOffset, heading, fraction)
+                    _state.update { it.copy(
+                        location = target.copy(latitude = viewport.latitude, longitude = viewport.longitude),
+                        exploring = t < 1.0, lockedHeading = if (t < 1.0) heading else null,
+                    ) }
+                    if (t >= 1.0) break
+                    delay(16)
+                } while (true)
+            } finally {
+                if (generation == returnGeneration) _state.update { it.copy(returning = false) }
+            }
             fetch()
         }
     }
@@ -209,26 +227,6 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             } while (true)
             fetchForViewport()
         }
-    }
-
-    fun onHeadingSwipe(dxPx: Float, widthPx: Float, headingDeg: Double,
-        canvasWidth: Double, canvasHeight: Double, started: Boolean) {
-        northUpJob?.cancel()
-        if (!dxPx.isFinite() || widthPx <= 0 || canvasHeight <= DialGeometry.CHART_INSET_DP) return
-        val current = state.value
-        val here = current.location ?: return
-        val observer = current.gpsLocation ?: here
-        val oldHeading = current.lockedHeading ?: headingDeg
-        val observerPoint = MapCenter(observer.latitude, observer.longitude)
-        val viewport = MapCenter(here.latitude, here.longitude)
-        if (started) headingSwipeAroundCenter = !PanGeometry.isObserverVisible(
-            observerPoint, viewport, oldHeading, current.rangeKm, canvasWidth, canvasHeight)
-        val nextHeading = DialGeometry.swipedHeading(oldHeading, dxPx.toDouble(), widthPx.toDouble())
-        val next = PanGeometry.rotateViewport(observerPoint, viewport, oldHeading, nextHeading,
-            current.rangeKm, canvasHeight, headingSwipeAroundCenter)
-        _state.update { it.copy(exploring = true,
-            location = if (next == viewport) here else GeoPoint(next.latitude, next.longitude), lockedHeading = nextHeading) }
-        fetchForViewport()
     }
 
     fun onTransform(zoom: Float, rotationDeg: Float, previousMidpoint: PlanOffset,

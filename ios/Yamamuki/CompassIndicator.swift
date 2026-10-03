@@ -1,13 +1,13 @@
 import SwiftUI
 
 /// 表示中の地図に対する北の方向。方位が未取得の間は針を出さない。
+/// 左上の向きの表示や方位目盛りの下の札と同じく、淡い白の地に濃い色で描く。
 struct CompassIndicator: View {
     let heading: Double?
 
     var body: some View {
         ZStack {
-            Circle().fill(Color.white.opacity(0.9))
-            Circle().strokeBorder(Color.gray, lineWidth: 1)
+            Circle().fill(Color.white.opacity(0.5))
             if let heading {
                 ZStack(alignment: .top) {
                     Text("N")
@@ -25,12 +25,12 @@ struct CompassIndicator: View {
                             }
                         }
                         context.fill(needle(y - 14), with: .color(Color(red: 0.8, green: 0.145, blue: 0.145)))
-                        context.fill(needle(y + 14), with: .color(Color(white: 0.333)))
+                        context.fill(needle(y + 14), with: .color(tapeInk))
                     }
                 }
                 .rotationEffect(.degrees(-heading))
             } else {
-                Text("—").foregroundStyle(.gray)
+                Text("—").foregroundStyle(tapeSubtle)
             }
         }
         .frame(width: 56, height: 56)
