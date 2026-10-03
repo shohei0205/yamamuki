@@ -1,4 +1,5 @@
 import CoreLocation
+import YamamukiCore
 
 /// 現在地と、端末を向けている方位角(真北基準)を流す。
 /// 方位は Core Location の heading を使う。現在地が分かっていれば iOS が偏角を補正した真方位(trueHeading)を返すので、
@@ -11,6 +12,8 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     var onAuthorizationChange: ((CLAuthorizationStatus) -> Void)?
 
     private let manager = CLLocationManager()
+    /// 精度が直前よりはっきり悪い位置で現在地が飛ばないよう、使う位置を選ぶ(Android 版と同じ判定)。
+    private let filter = LocationFilter()
 
     override init() {
         super.init()
@@ -34,7 +37,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     func start() {
         if isAuthorized {
             // 最初に端末が持っている直近の位置を流し、以降は更新を流す。
-            if let last = manager.location { onLocation?(last) }
+            if let last = manager.location { send(last) }
             manager.startUpdatingLocation()
         }
         if CLLocationManager.headingAvailable() { manager.startUpdatingHeading() }
@@ -46,7 +49,14 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        if let last = locations.last { onLocation?(last) }
+        if let last = locations.last { send(last) }
+    }
+
+    private func send(_ location: CLLocation) {
+        // horizontalAccuracy が負の位置は無効なので、精度が分からないものとして捨てる。
+        let accuracy = location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil
+        let timeMs = Int64(location.timestamp.timeIntervalSince1970 * 1000)
+        if filter.accept(timeMs: timeMs, accuracyM: accuracy) { onLocation?(location) }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
