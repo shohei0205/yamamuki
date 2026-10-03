@@ -28,21 +28,23 @@ fun locationUpdates(context: Context): Flow<Location> = callbackFlow {
 
     val filter = LocationFilter()
     // 時刻は端末の時計に左右されない起動からの経過時間で比べる(GPS とネットワーク位置で時計がずれることがある)。
-    fun send(location: Location) {
+    fun accept(location: Location): Boolean {
         val accuracy = if (location.hasAccuracy()) location.accuracy.toDouble() else null
-        if (filter.accept(location.elapsedRealtimeNanos / 1_000_000, accuracy)) trySend(location)
+        return filter.accept(location.elapsedRealtimeNanos / 1_000_000, accuracy)
     }
 
-    // 端末が持っている直近の位置を古い順にフィルタに通す。少しだけ新しい粗いネットワーク位置より、
-    // 精度の良い GPS の位置が選ばれる。
+    // 端末が持っている直近の位置を古い順にフィルタに通し、最後に通った 1 つだけを流す。少しだけ新しい粗い
+    // ネットワーク位置より精度の良い GPS の位置が選ばれ、通った古い位置(別の場所など)が一瞬流れることもない。
     providers.mapNotNull { locationManager.getLastKnownLocation(it) }
         .sortedBy { it.elapsedRealtimeNanos }
-        .forEach { send(it) }
+        .filter { accept(it) }
+        .lastOrNull()
+        ?.let { trySend(it) }
 
     // Android 10 以前は onStatusChanged などが抽象メソッドのため、ラムダではなく全メソッドを実装する。
     val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
-            send(location)
+            if (accept(location)) trySend(location)
         }
 
         override fun onProviderEnabled(provider: String) = Unit
