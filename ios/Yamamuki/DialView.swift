@@ -50,6 +50,15 @@ struct DialView: View {
                     }
                 } else if model.hasLocationPermission {
                     VStack {
+                        // 方位センサーの精度が低いと、方位が数十度ずれたまま別の山の名前を出してしまうので、上部で知らせる。
+                        StatusLine(
+                            // 方位が無効なあいだは方位の値が届かないので、値の有無にかかわらず出す。
+                            message: model.headingAccuracyLow ? "コンパス補正中。8の字に動かしてください" : nil,
+                            actionLabel: nil,
+                            onAction: {},
+                            // 距離の円が文字の後ろを通っても読めるよう、方位の札と同じ淡い白の札にする。
+                            labeled: true
+                        )
                         StatusLine(
                             message: statusMessage,
                             // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
@@ -59,7 +68,7 @@ struct DialView: View {
                         Spacer()
                     }
                     .padding(.top, CGFloat(DialGeometry.chartTop))
-                    .padding(.trailing, 72)
+                    .padding(.horizontal, 16)
                 }
 
                 // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。
@@ -301,11 +310,19 @@ private struct StatusLine: View {
     let message: String?
     let actionLabel: String?
     let onAction: () -> Void
+    var labeled = false
 
     var body: some View {
         if let message {
             HStack {
-                Text(message).font(.footnote).foregroundStyle(.black)
+                if labeled {
+                    Text(message).font(.footnote).foregroundStyle(.black)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.white.opacity(0.5)))
+                } else {
+                    Text(message).font(.footnote).foregroundStyle(.black)
+                }
                 if let actionLabel {
                     Button(actionLabel, action: onAction).font(.footnote.bold())
                 }
