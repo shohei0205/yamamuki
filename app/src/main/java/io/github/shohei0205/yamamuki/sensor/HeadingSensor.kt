@@ -62,20 +62,25 @@ fun magneticHeadingUpdates(context: Context): Flow<Double> = callbackFlow {
 }
 
 /**
- * 方位の精度が低い(ずれているかもしれない)かを流す。方位に使うセンサー(回転ベクトル、無い端末では地磁気)が
- * 知らせる精度が「低い」か「当てにならない」のとき true。センサーが無い端末では何も流さない。
+ * 方位の精度が低い(ずれているかもしれない)かを流す。地磁気センサー(無い端末では回転ベクトル)が知らせる
+ * 精度が「低い」か「当てにならない」のとき true。センサーが無い端末では何も流さない。
+ *
+ * 回転ベクトルの精度は、端末によっては補正の状態を表さないため、地磁気センサーの精度を優先して使う。
+ * 精度の変化の通知(onAccuracyChanged)は、最初から「当てにならない」のときは届かないので、
+ * 値ごとに付いてくる精度も見る。
  */
 fun headingAccuracyLowUpdates(context: Context): Flow<Boolean> = callbackFlow {
     val sensorManager = context.getSystemService(SensorManager::class.java)
-    val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-        ?: sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+    val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+        ?: sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
+    fun send(accuracy: Int) {
+        trySend(accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE || accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW)
+    }
     val listener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent) = Unit
+        override fun onSensorChanged(event: SensorEvent) = send(event.accuracy)
 
-        override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {
-            trySend(accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE || accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW)
-        }
+        override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = send(accuracy)
     }
 
     if (sensor != null) sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)

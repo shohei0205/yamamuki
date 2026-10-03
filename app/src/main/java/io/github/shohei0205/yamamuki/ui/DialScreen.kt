@@ -283,6 +283,8 @@ fun DialScreen(
                     message = if (headingAccuracyLow && compassHeading != null) HEADING_ACCURACY_LOW_MESSAGE else null,
                     actionLabel = null,
                     onAction = {},
+                    // 距離の円が文字の後ろを通っても読めるよう、方位の札と同じ淡い白の札にする。
+                    labeled = true,
                 )
                 StatusLine(
                     message = statusMessage(state, headingAvailable = compassHeading != null),
@@ -556,13 +558,24 @@ private fun StatusLine(
     actionLabel: String?,
     onAction: () -> Unit,
     modifier: Modifier = Modifier,
+    labeled: Boolean = false,
 ) {
     if (message == null) return
     Row(
         modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(message, style = MaterialTheme.typography.bodySmall)
+        Text(
+            message,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = if (labeled) {
+                Modifier
+                    .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp, vertical = 3.dp)
+            } else {
+                Modifier
+            },
+        )
         if (actionLabel != null) TextButton(onClick = onAction) { Text(actionLabel) }
     }
 }
