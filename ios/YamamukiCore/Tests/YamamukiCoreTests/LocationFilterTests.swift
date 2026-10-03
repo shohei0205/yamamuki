@@ -33,13 +33,30 @@ final class LocationFilterTests: XCTestCase {
         XCTAssertTrue(filter.accept(timeMs: 5_000, accuracyM: 10))
     }
 
-    func testAcceptsCoarseLocationWhenGoodOnesStop() {
-        // 良い位置が 1 分届かなければ、粗い位置でも使い、以降はそれを基準にする。
+    func testKeepsRejectingCoarseLocationWhileStandingStill() {
+        // 立ち止まって GPS が届かず、ネットワーク位置(誤差 800m)だけが 10 秒ごとに届いても、数分は使わない。
+        let filter = LocationFilter()
+        XCTAssertTrue(filter.accept(timeMs: 0, accuracyM: 8))
+        for t in stride(from: Int64(10_000), through: 300_000, by: 10_000) {
+            XCTAssertFalse(filter.accept(timeMs: t, accuracyM: 800), "\(t)ms")
+        }
+    }
+
+    func testAcceptsCoarseLocationWhenGoodOnesStopLong() {
+        // 良い位置が 6 分ほど届かなければ、粗い位置でも使い、以降はそれを基準にする。
         let filter = LocationFilter()
         XCTAssertTrue(filter.accept(timeMs: 0, accuracyM: 10))
-        XCTAssertFalse(filter.accept(timeMs: 30_000, accuracyM: 800))
-        XCTAssertTrue(filter.accept(timeMs: 60_000, accuracyM: 800))
-        XCTAssertTrue(filter.accept(timeMs: 65_000, accuracyM: 700))
+        XCTAssertFalse(filter.accept(timeMs: 360_000, accuracyM: 800))
+        XCTAssertTrue(filter.accept(timeMs: 380_000, accuracyM: 800))
+        XCTAssertTrue(filter.accept(timeMs: 385_000, accuracyM: 700))
+    }
+
+    func testFollowsGpsWhoseAccuracyDropsGradually() {
+        // GPS の誤差が 5m から 70m に落ちても(樹林帯など)、数秒で使い始める。
+        let filter = LocationFilter()
+        XCTAssertTrue(filter.accept(timeMs: 0, accuracyM: 5))
+        XCTAssertFalse(filter.accept(timeMs: 5_000, accuracyM: 70))
+        XCTAssertTrue(filter.accept(timeMs: 10_000, accuracyM: 70))
     }
 
     func testOldLastKnownLocationDoesNotBlockNewFixes() {

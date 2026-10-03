@@ -42,13 +42,30 @@ class LocationFilterTest {
     }
 
     @Test
-    fun acceptsCoarseLocationWhenGoodOnesStop() {
-        // 良い位置が 1 分届かなければ、粗い位置でも使い、以降はそれを基準にする。
+    fun keepsRejectingCoarseLocationWhileStandingStill() {
+        // 立ち止まって GPS が届かず、ネットワーク位置(誤差 800m)だけが 10 秒ごとに届いても、数分は使わない。
+        val filter = LocationFilter()
+        assertTrue(filter.accept(0, 8.0))
+        for (t in 10_000L..300_000L step 10_000L) assertFalse(filter.accept(t, 800.0), "${t}ms")
+    }
+
+    @Test
+    fun acceptsCoarseLocationWhenGoodOnesStopLong() {
+        // 良い位置が 6 分ほど届かなければ、粗い位置でも使い、以降はそれを基準にする。
         val filter = LocationFilter()
         assertTrue(filter.accept(0, 10.0))
-        assertFalse(filter.accept(30_000, 800.0))
-        assertTrue(filter.accept(60_000, 800.0))
-        assertTrue(filter.accept(65_000, 700.0))
+        assertFalse(filter.accept(360_000, 800.0))
+        assertTrue(filter.accept(380_000, 800.0))
+        assertTrue(filter.accept(385_000, 700.0))
+    }
+
+    @Test
+    fun followsGpsWhoseAccuracyDropsGradually() {
+        // GPS の誤差が 5m から 70m に落ちても(樹林帯など)、数秒で使い始める。
+        val filter = LocationFilter()
+        assertTrue(filter.accept(0, 5.0))
+        assertFalse(filter.accept(5_000, 70.0))
+        assertTrue(filter.accept(10_000, 70.0))
     }
 
     @Test

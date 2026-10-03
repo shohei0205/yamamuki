@@ -33,9 +33,11 @@ fun locationUpdates(context: Context): Flow<Location> = callbackFlow {
         if (filter.accept(location.elapsedRealtimeNanos / 1_000_000, accuracy)) trySend(location)
     }
 
+    // 端末が持っている直近の位置を古い順にフィルタに通す。少しだけ新しい粗いネットワーク位置より、
+    // 精度の良い GPS の位置が選ばれる。
     providers.mapNotNull { locationManager.getLastKnownLocation(it) }
-        .maxByOrNull { it.elapsedRealtimeNanos }
-        ?.let { send(it) }
+        .sortedBy { it.elapsedRealtimeNanos }
+        .forEach { send(it) }
 
     // Android 10 以前は onStatusChanged などが抽象メソッドのため、ラムダではなく全メソッドを実装する。
     val listener = object : LocationListener {
@@ -50,8 +52,11 @@ fun locationUpdates(context: Context): Flow<Location> = callbackFlow {
         @Deprecated("Deprecated in Java")
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
     }
+    // GPS は立ち止まっていても位置が届くよう、距離の条件を付けない。付けると山頂で止まっている間は
+    // ネットワーク位置しか届かず、フィルタの基準が古くなって粗い位置を使ってしまう。
     providers.forEach {
-        locationManager.requestLocationUpdates(it, UPDATE_INTERVAL_MS, UPDATE_DISTANCE_M, listener, Looper.getMainLooper())
+        val minDistanceM = if (it == LocationManager.GPS_PROVIDER) 0f else UPDATE_DISTANCE_M
+        locationManager.requestLocationUpdates(it, UPDATE_INTERVAL_MS, minDistanceM, listener, Looper.getMainLooper())
     }
     awaitClose { locationManager.removeUpdates(listener) }
 }

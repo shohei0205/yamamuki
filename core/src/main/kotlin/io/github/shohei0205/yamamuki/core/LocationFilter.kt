@@ -5,12 +5,15 @@ package io.github.shohei0205.yamamuki.core
  *
  * Android は GPS とネットワーク位置(基地局や Wi-Fi から推定した位置)の両方を受け取る。山では基地局が遠く、
  * ネットワーク位置の誤差は数百m〜数km になるため、そのまま使うと現在地が飛ぶ。そこで、直前に使った位置より
- * 精度(誤差の半径)がはっきり悪い位置は捨てる。ただし良い位置が [staleMs] 以上届かないときは、現在地が
- * 止まったままにならないよう悪い位置も使う。
+ * 精度(誤差の半径)がはっきり悪い位置は捨てる。
+ *
+ * 許す誤差は「直前の誤差 + [toleranceM] + 経過時間 × [speedMps]」とし、時間とともに広げる。直前の位置から
+ * 歩いて動ける範囲より粗い位置は使わないということで、良い位置が長く届かないときだけ粗い位置も使う
+ * (誤差 10m の後の誤差 800m の位置なら、6 分ほど良い位置が届かなかったとき)。
  */
 class LocationFilter(
-    private val staleMs: Long = 60_000,
     private val toleranceM: Double = 50.0,
+    private val speedMps: Double = 2.0,
 ) {
     private var lastTimeMs: Long? = null
     private var lastAccuracyM: Double? = null
@@ -25,8 +28,8 @@ class LocationFilter(
         val prevAccuracy = lastAccuracyM
         if (prevTime != null && prevAccuracy != null) {
             if (timeMs <= prevTime) return false
-            val worse = accuracyM > prevAccuracy + toleranceM
-            if (worse && timeMs - prevTime < staleMs) return false
+            val allowedM = prevAccuracy + toleranceM + (timeMs - prevTime) / 1000.0 * speedMps
+            if (accuracyM > allowedM) return false
         }
         lastTimeMs = timeMs
         lastAccuracyM = accuracyM
