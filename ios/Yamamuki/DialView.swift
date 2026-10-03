@@ -53,7 +53,7 @@ struct DialView: View {
                         // 方位センサーの精度が低いと、方位が数十度ずれたまま別の山の名前を出してしまうので、上部で知らせる。
                         StatusLine(
                             message: model.headingAccuracyLow && model.heading != nil
-                                ? "方位がずれているかもしれません。端末を 8 の字に動かしてください" : nil,
+                                ? "コンパス補正中。8の字に動かしてください" : nil,
                             actionLabel: nil,
                             onAction: {}
                         )

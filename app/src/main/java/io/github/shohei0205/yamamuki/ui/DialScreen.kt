@@ -97,7 +97,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 /** 方位センサーの精度が低いときに、上部の情報ラベルの下に出す案内。 */
-private const val HEADING_ACCURACY_LOW_MESSAGE = "方位がずれているかもしれません。端末を 8 の字に動かしてください"
+private const val HEADING_ACCURACY_LOW_MESSAGE = "コンパス補正中。8の字に動かしてください"
 
 /** これより小さい方位の変化は画面に反映しない。 */
 private const val MIN_HEADING_CHANGE_DEG = 0.1
