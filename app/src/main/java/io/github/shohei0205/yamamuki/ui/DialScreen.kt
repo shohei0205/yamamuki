@@ -278,7 +278,7 @@ fun DialScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
         } else {
-            Column(Modifier.align(Alignment.TopCenter).padding(top = DialGeometry.CHART_TOP_DP.dp, end = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.align(Alignment.TopCenter).padding(top = DialGeometry.CHART_TOP_DP.dp, start = 16.dp, end = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 StatusLine(
                     message = if (headingAccuracyLow && compassHeading != null) HEADING_ACCURACY_LOW_MESSAGE else null,
                     actionLabel = null,

@@ -66,7 +66,7 @@ struct DialView: View {
                         Spacer()
                     }
                     .padding(.top, CGFloat(DialGeometry.chartTop))
-                    .padding(.trailing, 72)
+                    .padding(.horizontal, 16)
                 }
 
                 // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。
