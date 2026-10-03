@@ -9,9 +9,12 @@ import YamamukiCore
 final class LocationService: NSObject, CLLocationManagerDelegate {
     var onLocation: ((CLLocation) -> Void)?
     var onHeading: ((Double) -> Void)?
+    /// 方位の精度が低い(ずれているかもしれない)か。変わったときに呼ぶ。
+    var onHeadingAccuracyLow: ((Bool) -> Void)?
     var onAuthorizationChange: ((CLAuthorizationStatus) -> Void)?
 
     private let manager = CLLocationManager()
+    private var headingAccuracyLow = false
     /// 精度が直前よりはっきり悪い位置で現在地が飛ばないよう、使う位置を選ぶ(Android 版と同じ判定)。
     private let filter = LocationFilter()
 
@@ -60,10 +63,19 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        // headingAccuracy は方位の誤差の見積もり(度)。負の値は方位が無効(補正が要る)という意味。
+        let low = newHeading.headingAccuracy < 0 || newHeading.headingAccuracy > Self.lowHeadingAccuracyDeg
+        if low != headingAccuracyLow {
+            headingAccuracyLow = low
+            onHeadingAccuracyLow?(low)
+        }
         guard newHeading.headingAccuracy >= 0 else { return }
         // trueHeading は現在地が分かるまで負の値になる。その間は磁北基準で代用する。
         onHeading?(newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading)
     }
+
+    /// 方位の誤差がこれを超えたら、精度が低いとして知らせる。
+    private static let lowHeadingAccuracyDeg = 30.0
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         onAuthorizationChange?(manager.authorizationStatus)

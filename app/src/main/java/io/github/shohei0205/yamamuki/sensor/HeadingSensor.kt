@@ -60,3 +60,24 @@ fun magneticHeadingUpdates(context: Context): Flow<Double> = callbackFlow {
     }
     awaitClose { sensorManager.unregisterListener(listener) }
 }
+
+/**
+ * 方位の精度が低い(ずれているかもしれない)かを流す。方位に使うセンサー(回転ベクトル、無い端末では地磁気)が
+ * 知らせる精度が「低い」か「当てにならない」のとき true。センサーが無い端末では何も流さない。
+ */
+fun headingAccuracyLowUpdates(context: Context): Flow<Boolean> = callbackFlow {
+    val sensorManager = context.getSystemService(SensorManager::class.java)
+    val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        ?: sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+
+    val listener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) = Unit
+
+        override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {
+            trySend(accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE || accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW)
+        }
+    }
+
+    if (sensor != null) sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+    awaitClose { sensorManager.unregisterListener(listener) }
+}

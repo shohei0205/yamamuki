@@ -86,6 +86,7 @@ import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.coordinateText
 import io.github.shohei0205.yamamuki.core.distanceText
 import io.github.shohei0205.yamamuki.core.elevationText
+import io.github.shohei0205.yamamuki.sensor.headingAccuracyLowUpdates
 import io.github.shohei0205.yamamuki.sensor.locationUpdates
 import io.github.shohei0205.yamamuki.sensor.magneticHeadingUpdates
 import io.github.shohei0205.yamamuki.sensor.mslAltitudeM
@@ -94,6 +95,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+
+/** 方位センサーの精度が低いときに、上部の情報ラベルの下に出す案内。 */
+private const val HEADING_ACCURACY_LOW_MESSAGE = "方位がずれているかもしれません。端末を 8 の字に動かしてください"
 
 /** これより小さい方位の変化は画面に反映しない。 */
 private const val MIN_HEADING_CHANGE_DEG = 0.1
@@ -155,6 +159,10 @@ fun DialScreen(
             // 画面上でほぼ動かない変化(表示範囲の上端でも数 px)は流さない。
             .distinctUntilChanged { old, new -> abs(Heading.delta(old, new)) < MIN_HEADING_CHANGE_DEG }
     }.collectAsStateWithLifecycle<Double?>(initialValue = null)
+    // 方位センサーの精度が低いと、方位が数十度ずれたまま別の山の名前を出してしまうので、上部で知らせる。
+    val headingAccuracyLow by remember(context) {
+        headingAccuracyLowUpdates(context).distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
     val location = state.gpsLocation
     val declination = remember(location) {
         location?.let {
@@ -271,6 +279,11 @@ fun DialScreen(
             )
         } else {
             Column(Modifier.align(Alignment.TopCenter).padding(top = DialGeometry.CHART_TOP_DP.dp, end = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                StatusLine(
+                    message = if (headingAccuracyLow && compassHeading != null) HEADING_ACCURACY_LOW_MESSAGE else null,
+                    actionLabel = null,
+                    onAction = {},
+                )
                 StatusLine(
                     message = statusMessage(state, headingAvailable = compassHeading != null),
                     // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。

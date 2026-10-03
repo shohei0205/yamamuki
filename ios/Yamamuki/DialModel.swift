@@ -30,6 +30,8 @@ final class DialModel: ObservableObject {
     @Published private(set) var summit: NearbyMountain?
     /// 端末を向けている方位(真北基準)。センサーの値が届くまでは nil。
     @Published private(set) var heading: Double?
+    /// 方位センサーの精度が低く、方位がずれているかもしれない。
+    @Published private(set) var headingAccuracyLow = false
     /// 現在地から画面上端までの距離。
     @Published private(set) var rangeKm: Double
     @Published private(set) var loading = false
@@ -89,6 +91,7 @@ final class DialModel: ObservableObject {
 
         locationService.onLocation = { [weak self] in self?.onLocation($0) }
         locationService.onHeading = { [weak self] in self?.heading = $0 }
+        locationService.onHeadingAccuracyLow = { [weak self] in self?.headingAccuracyLow = $0 }
         networkMonitor.onChange = { [weak self] in self?.onConnectivity($0) }
         // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
         areaDownload.onCacheChanged = { [weak self] in self?.reloadFromCache() }

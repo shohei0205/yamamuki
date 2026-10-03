@@ -50,6 +50,13 @@ struct DialView: View {
                     }
                 } else if model.hasLocationPermission {
                     VStack {
+                        // 方位センサーの精度が低いと、方位が数十度ずれたまま別の山の名前を出してしまうので、上部で知らせる。
+                        StatusLine(
+                            message: model.headingAccuracyLow && model.heading != nil
+                                ? "方位がずれているかもしれません。端末を 8 の字に動かしてください" : nil,
+                            actionLabel: nil,
+                            onAction: {}
+                        )
                         StatusLine(
                             message: statusMessage,
                             // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
