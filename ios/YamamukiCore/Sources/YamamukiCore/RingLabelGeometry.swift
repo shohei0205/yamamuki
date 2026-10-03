@@ -7,6 +7,12 @@ public struct RingLabelAnchor {
 }
 
 public enum RingLabelGeometry {
+    /// 前回のラベルの方向を地図と同じだけ回す。画面座標では方位角の増加と逆向き。
+    public static func rotatedAngle(_ angle: Double?, previousHeading: Double?, heading: Double) -> Double? {
+        guard let angle, let previousHeading else { return angle }
+        return angle - Heading.delta(previousHeading, heading) * .pi / 180
+    }
+
     /// 全距離で共通の方向。前の方向で表示できる間は固定し、見切れたら中央へ向け直す。
     public static func direction(cx: Double, cy: Double, left: Double, top: Double, right: Double, bottom: Double,
         previousAngle: Double? = nil, minimumSpan: Double = 48, visibleCount: ((Double) -> Int)? = nil) -> Double {

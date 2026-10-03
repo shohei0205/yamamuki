@@ -163,7 +163,9 @@ fun DialCanvas(
         clipRect {
             val coneAlpha = 1f - viewFanAlpha
             hitTargets.peaks = if (pxPerKm > 0f) {
-                hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, hitTargets.ringLabelAngle, headingUp)
+                val previousAngle = RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle, hitTargets.ringLabelHeading, headingDeg)
+                hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, previousAngle, headingUp)
+                hitTargets.ringLabelHeading = headingDeg
                 drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
             } else {
                 emptyList()
@@ -257,6 +259,7 @@ private class PlacedPeak(
 /** 直近に描いた山。描画のたびに差し替え、タップ位置から山を引く。 */
 private class HitTargets {
     var ringLabelAngle: Double? = null
+    var ringLabelHeading: Double? = null
     var peaks: List<PlacedPeak> = emptyList()
 
     /** 現在地の山頂アイコンと山名。山と重なっても優先する。 */
