@@ -394,32 +394,60 @@ private fun DrawScope.drawPeaks(
     )
     selection.drawnIds = groups.mapTo(HashSet()) { it.peak.mountain.mountain.osmId }
 
-    // まとめた山はアイコンだけを先に描き、代表の山のアイコンと山名を上に重ねる。
-    for (group in groups) {
-        for (member in group.members) drawPeakIcon(member.position, PeakIcon.of(member.mountain.mountain.elevationClass()))
-    }
+    // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
     val placedBoxes = groups.map { it.peak.box }
-    return groups.map { group ->
+    val othersLabels = groups.map { group ->
+        val peak = group.peak
+        if (group.members.isEmpty()) return@map null
+        // 「ほか 3 山」は山名の下に添える。ほかの山の山名と重なるときは添えない(タップすれば一覧は出る)。
+        val others = textMeasurer.measure(othersText(group.members.size), styles.others)
+        val p = peak.position
+        val top = p.y + gap + peak.label.size.height
+        val half = others.size.width / 2f
+        val below = Box(min(peak.box.left, p.x - half), top, max(peak.box.right, p.x + half), top + others.size.height)
+        if (placedBoxes.any { it !== peak.box && it.intersects(below) }) null else others to below
+    }
+    val textBoxes = groups.map { it.peak.labelBox(gap) } + othersLabels.mapNotNull { it?.second }
+
+    // まとめた山のアイコンは薄く描き、代表の山のアイコンと山名を上に重ねる。標高が不明な山と、
+    // どれかの山名や「ほか 3 山」にかかる山は描かない(一覧には残る)。描いたアイコンを押すと一覧を開く。
+    val memberTargets = mutableListOf<PlacedPeak>()
+    for (group in groups) {
+        val members = group.members.map { it.mountain }
+        for (member in group.members) {
+            if (member.mountain.mountain.elevationM == null) continue
+            val icon = PeakIcon.of(member.mountain.mountain.elevationClass())
+            val p = member.position
+            val halfWidth = icon.halfWidthDp.dp.toPx()
+            val iconBox = Box(p.x - halfWidth, p.y - icon.heightDp.dp.toPx(), p.x + halfWidth, p.y)
+            if (textBoxes.any { it.intersects(iconBox) }) continue
+            drawPeakIcon(p, icon, alpha = MEMBER_ICON_ALPHA)
+            memberTargets += PlacedPeak(group.peak.mountain, p, group.peak.label, iconBox, members)
+        }
+    }
+    val reps = groups.mapIndexed { i, group ->
         val peak = group.peak
         val p = peak.position
         drawPeakIcon(p, PeakIcon.of(peak.mountain.mountain.elevationClass()))
         drawText(peak.label, topLeft = Offset(p.x - peak.label.size.width / 2f, p.y + gap))
         var box = peak.box
-        if (group.members.isNotEmpty()) {
-            // 「ほか 3 山」は山名の下に添える。ほかの山の山名と重なるときは添えない(タップすれば一覧は出る)。
-            val others = textMeasurer.measure(othersText(group.members.size), styles.others)
-            val top = p.y + gap + peak.label.size.height
-            val half = others.size.width / 2f
-            val extended = Box(min(box.left, p.x - half), box.top, max(box.right, p.x + half), top + others.size.height)
-            val below = Box(extended.left, top, extended.right, extended.bottom)
-            if (placedBoxes.none { it !== peak.box && it.intersects(below) }) {
-                drawText(others, topLeft = Offset(p.x - half, top))
-                box = extended
-            }
+        othersLabels[i]?.let { (others, below) ->
+            drawText(others, topLeft = Offset(p.x - others.size.width / 2f, below.top))
+            box = Box(min(box.left, below.left), box.top, max(box.right, below.right), below.bottom)
         }
         PlacedPeak(peak.mountain, p, peak.label, box, group.members.map { it.mountain })
     }
+    return reps + memberTargets
 }
+
+/** 山名の範囲。 */
+private fun PlacedPeak.labelBox(gap: Float): Box {
+    val half = label.size.width / 2f
+    return Box(position.x - half, position.y + gap, position.x + half, position.y + gap + label.size.height)
+}
+
+/** 代表の山にまとめた山のアイコンの濃さ。代表の山と見分けられるように薄くする。 */
+private const val MEMBER_ICON_ALPHA = 0.45f
 
 /** 標高の区分ごとの山アイコンの大きさ(dp)。底辺の中点が山の位置に来る。 */
 private enum class PeakIcon(val halfWidthDp: Float, val heightDp: Float) {
@@ -444,7 +472,7 @@ private enum class PeakIcon(val halfWidthDp: Float, val heightDp: Float) {
     }
 }
 
-private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon) {
+private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon, alpha: Float = 1f) {
     val halfWidth = icon.halfWidthDp.dp.toPx()
     val height = icon.heightDp.dp.toPx()
     // 3 種類とも同じ太さの縁取りにそろえる。
@@ -454,7 +482,7 @@ private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon) {
             // 底辺を直径とする半楕円。縁取りで背景のベージュから浮かせる。
             val topLeft = Offset(p.x - halfWidth, p.y - height)
             val oval = Size(halfWidth * 2, height * 2)
-            drawArc(HillGreen, startAngle = 180f, sweepAngle = 180f, useCenter = true, topLeft = topLeft, size = oval)
+            drawArc(HillGreen, startAngle = 180f, sweepAngle = 180f, useCenter = true, topLeft = topLeft, size = oval, alpha = alpha)
             drawArc(
                 PeakGreen,
                 startAngle = 180f,
@@ -462,19 +490,20 @@ private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon) {
                 useCenter = true,
                 topLeft = topLeft,
                 size = oval,
+                alpha = alpha,
                 style = outline,
             )
         }
         PeakIcon.PEAK -> {
-            drawTriangle(p, halfWidth, height, PeakYellow)
-            drawTriangle(p, halfWidth, height, PeakGreen, outline)
+            drawTriangle(p, halfWidth, height, PeakYellow, alpha = alpha)
+            drawTriangle(p, halfWidth, height, PeakGreen, outline, alpha)
         }
         PeakIcon.ALPINE -> {
-            drawTriangle(p, halfWidth, height, PeakBrown)
+            drawTriangle(p, halfWidth, height, PeakBrown, alpha = alpha)
             // 頂上から高さの 35% を白く塗って雪を表す。相似な三角形なので幅も同じ比率。
             val snow = 0.35f
-            drawTriangle(Offset(p.x, p.y - height * (1 - snow)), halfWidth * snow, height * snow, SnowWhite)
-            drawTriangle(p, halfWidth, height, PeakBrownDark, outline)
+            drawTriangle(Offset(p.x, p.y - height * (1 - snow)), halfWidth * snow, height * snow, SnowWhite, alpha = alpha)
+            drawTriangle(p, halfWidth, height, PeakBrownDark, outline, alpha)
         }
     }
 }
@@ -489,6 +518,7 @@ private fun DrawScope.drawTriangle(
     height: Float,
     color: Color,
     style: DrawStyle = Fill,
+    alpha: Float = 1f,
 ) {
     val path = polygon(
         listOf(
@@ -497,7 +527,7 @@ private fun DrawScope.drawTriangle(
             Offset(bottomCenter.x - halfWidth, bottomCenter.y),
         ),
     )
-    drawPath(path, color, style = style)
+    drawPath(path, color, alpha = alpha, style = style)
 }
 
 /** [points] を順に結んで閉じた多角形。Offset は value class で vararg にできないため List で受ける。 */

@@ -262,32 +262,62 @@ struct DialCanvasView: View, Animatable {
         )
         selection.drawnIds = Set(groups.map { $0.peak.mountain.mountain.osmId })
 
-        // まとめた山はアイコンだけを先に描き、代表の山のアイコンと山名を上に重ねる。
-        for member in groups.flatMap(\.members) {
-            drawPeakIcon(ctx, at: member.position, icon: PeakIcon.of(member.mountain.mountain.elevationClass))
-        }
+        // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
         let placedBoxes = groups.map(\.peak.box)
-        return groups.map { group in
+        let labels = groups.map { measuredText(ctx, $0.peak.mountain.mountain.name, size: styles.label, color: .black) }
+        let othersLabels: [(text: MeasuredText, box: ScreenBox)?] = groups.indices.map { i -> (text: MeasuredText, box: ScreenBox)? in
+            let group = groups[i]
+            guard !group.members.isEmpty else { return nil }
+            // 「ほか 3 山」は山名の下に添える。ほかの山の山名と重なるときは添えない(タップすれば一覧は出る)。
+            let peak = group.peak
+            let others = measuredText(ctx, othersText(group.members.count), size: styles.others, color: tapeSubtle)
+            let top = Double(peak.position.y + gap + labels[i].size.height)
+            let half = Double(others.size.width / 2)
+            let x = Double(peak.position.x)
+            let below = ScreenBox(left: min(peak.box.left, x - half), top: top, right: max(peak.box.right, x + half), bottom: top + Double(others.size.height))
+            if placedBoxes.contains(where: { $0 != peak.box && $0.intersects(below) }) { return nil }
+            return (text: others, box: below)
+        }
+        let labelBoxes = groups.indices.map { i -> ScreenBox in
+            let p = groups[i].peak.position
+            let half = Double(labels[i].size.width / 2)
+            return ScreenBox(left: Double(p.x) - half, top: Double(p.y + gap), right: Double(p.x) + half, bottom: Double(p.y + gap + labels[i].size.height))
+        }
+        let textBoxes = labelBoxes + othersLabels.compactMap { $0?.box }
+
+        // まとめた山のアイコンは薄く描き、代表の山のアイコンと山名を上に重ねる。標高が不明な山と、
+        // どれかの山名や「ほか 3 山」にかかる山は描かない(一覧には残る)。描いたアイコンを押すと一覧を開く。
+        var faded = ctx
+        faded.opacity = memberIconAlpha
+        var memberTargets: [PlacedPeak] = []
+        for group in groups {
+            let members = group.members.map(\.mountain)
+            for member in group.members where member.mountain.mountain.elevationM != nil {
+                let icon = PeakIcon.of(member.mountain.mountain.elevationClass)
+                let p = member.position
+                let iconBox = ScreenBox(left: Double(p.x - icon.halfWidth), top: Double(p.y - icon.height),
+                    right: Double(p.x + icon.halfWidth), bottom: Double(p.y))
+                if textBoxes.contains(where: { $0.intersects(iconBox) }) { continue }
+                drawPeakIcon(faded, at: p, icon: icon)
+                memberTargets.append(PlacedPeak(mountain: group.peak.mountain, position: p, box: iconBox, members: members))
+            }
+        }
+        let reps = groups.indices.map { i -> PlacedPeak in
+            let group = groups[i]
             let peak = group.peak
             let p = peak.position
-            let label = measuredText(ctx, peak.mountain.mountain.name, size: styles.label, color: .black)
+            let label = labels[i]
             drawPeakIcon(ctx, at: p, icon: PeakIcon.of(peak.mountain.mountain.elevationClass))
             ctx.draw(label.text, at: CGPoint(x: p.x - label.size.width / 2, y: p.y + gap), anchor: .topLeading)
             var box = peak.box
-            if !group.members.isEmpty {
-                // 「ほか 3 山」は山名の下に添える。ほかの山の山名と重なるときは添えない(タップすれば一覧は出る)。
-                let others = measuredText(ctx, othersText(group.members.count), size: styles.others, color: tapeSubtle)
-                let top = Double(p.y + gap + label.size.height)
-                let half = Double(others.size.width / 2)
-                let x = Double(p.x)
-                let below = ScreenBox(left: min(box.left, x - half), top: top, right: max(box.right, x + half), bottom: top + Double(others.size.height))
-                if !placedBoxes.contains(where: { $0 != peak.box && $0.intersects(below) }) {
-                    ctx.draw(others.text, at: CGPoint(x: x - half, y: top), anchor: .topLeading)
-                    box = ScreenBox(left: below.left, top: box.top, right: below.right, bottom: below.bottom)
-                }
+            if let others = othersLabels[i] {
+                ctx.draw(others.text.text, at: CGPoint(x: p.x - others.text.size.width / 2, y: CGFloat(others.box.top)), anchor: .topLeading)
+                box = ScreenBox(left: min(box.left, others.box.left), top: box.top,
+                    right: max(box.right, others.box.right), bottom: others.box.bottom)
             }
             return PlacedPeak(mountain: peak.mountain, position: p, box: box, members: group.members.map(\.mountain))
         }
+        return reps + memberTargets
     }
 
     private func drawPeakIcon(_ ctx: GraphicsContext, at p: CGPoint, icon: PeakIcon) {
@@ -554,6 +584,9 @@ private let reachStep: CGFloat = 64
 
 /// 新しく画面に出す山に求める、ほかの山との余白(pt)。境目で出たり消えたりしないようにする。
 private let newPeakMargin = 4.0
+
+/// 代表の山にまとめた山のアイコンの濃さ。代表の山と見分けられるように薄くする。
+private let memberIconAlpha = 0.45
 
 /// 方位盤に出す山の候補。向きによらずに周り全体から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
 /// 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
