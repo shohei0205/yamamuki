@@ -100,6 +100,18 @@ Co-authored-by: Codex GPT-6
 - `core/`（Kotlin）と `ios/YamamukiCore/`（Swift）は同じロジックの移植。片方を変えたらもう片方も同じに変え、テストも両方に足す。
 - 両 OS の違いは端末の機能による差だけにする。違いを増やしたら README の「Android 版と iOS 版の違い」を更新する。
 
+## DB の版と移行
+
+Android 版の山データの DB（Room）は、配布したあとも端末に残る。アップデートで版が変わったときに読めないと、起動直後に落ちる。
+
+- テーブルや列を変えたら、DB の版（`MountainDatabase.VERSION`）を上げ、同じ PR で古い版からの移行を入れる。
+  - テーブルや列を足すだけなら、`@Database` の `autoMigrations` に `AutoMigration(from, to)` を足す。
+  - Room が自動で作れない移行（列の名前を変える・消すなど）は、`MountainMigrations.kt` に `Migration(from, to)` を足す。
+- 事前ダウンロードした山データ（`mountains` と `fetched_tiles`）は移行で消さない。DB をまるごと作り直す `fallbackToDestructiveMigration()` は使わない。取り直せるテーブルだけは、移行の中で作り直してよい。
+- ビルドで書き出したスキーマ（`app/schemas/` の版ごとの JSON）をコミットし、既にある版の JSON は書き換えない。
+- 移行は、`app/schemas/` のすべての版から今の版へ移して山データが残るかを、単体テスト（`MountainDatabaseMigrationTest`）で確かめる。新しい版で必須の列を足したら、テストの見本の行にも値を足す。
+- iOS 版のキャッシュはタイルごとの JSON で、読めないファイルは取得していないものとして取り直す。形式を変えるときは、項目を省略可能にして古いファイルも読めるようにする。
+
 ## 変更の確かめ方
 
 コミットの前に、変えた部分に応じて次を通す。CI（`.github/workflows/`）でも同じものを動かしている。
@@ -108,9 +120,11 @@ Co-authored-by: Codex GPT-6
 # すべて: 改行コードと BOM の確認
 .github/scripts/check-text-format.sh
 
-# Android: core の単体テストとアプリのビルド
+# Android: core の単体テスト、アプリのビルドと単体テスト、DB のスキーマの確認
 ./gradlew -p core test
 ./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
+.github/scripts/check-room-schemas.sh origin/main
 
 # iOS: core の単体テスト（Mac または Swift の入った環境）
 (cd ios/YamamukiCore && swift test)
@@ -121,6 +135,7 @@ Co-authored-by: Codex GPT-6
 ```
 
 - iOS の画面を変えたら、手元で UI テストも動かす（手順は README の「iOS 版」）。CI では UI テストのビルドだけを確かめ、実行はしない。
+- CI の「Build」（Android）は、アプリの単体テストと DB のスキーマの確認（スキーマのコミット漏れと、既にある版のスキーマの書き換え）も行う。
 - CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
 - ロジックを変えたら単体テストを足す。テストを消したり飛ばしたりして通すことはしない。

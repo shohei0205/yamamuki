@@ -56,6 +56,9 @@
 # デバッグ用 APK のビルド（app/build/outputs/apk/debug/app-debug.apk）
 ./gradlew :app:assembleDebug
 
+# アプリの単体テスト（DB の移行など。Robolectric で動かす）
+./gradlew :app:testDebugUnitTest
+
 # USB でつないだ端末にインストール
 ./gradlew :app:installDebug
 ```

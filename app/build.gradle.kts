@@ -58,6 +58,11 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // 単体テストは Robolectric で Android の SQLite を動かす(DB の移行のテスト)。
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 kotlin {
@@ -90,4 +95,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }
