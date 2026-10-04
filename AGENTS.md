@@ -109,7 +109,7 @@ Android 版の山データの DB（Room）は、配布したあとも端末に�
   - Room が自動で作れない移行（列の名前を変える・消すなど）は、`MountainMigrations.kt` に `Migration(from, to)` を足す。
 - 事前ダウンロードした山データ（`mountains` と `fetched_tiles`）は移行で消さない。DB をまるごと作り直す `fallbackToDestructiveMigration()` は使わない。取り直せるテーブルだけは、移行の中で作り直してよい。
 - ビルドで書き出したスキーマ（`app/schemas/` の版ごとの JSON）をコミットし、既にある版の JSON は書き換えない。
-- 移行は、`app/schemas/` のすべての版から今の版へ移して山データが残るかを、単体テスト（`MountainDatabaseMigrationTest`）で確かめる。新しい版で必須の列を足したら、テストの見本の行にも値を足す。
+- 移行は、`app/schemas/` のすべての版から今の版へ移して山データが残るかを、単体テスト（`MountainDatabaseMigrationTest`）で確かめる。新しい版で初期値の無い必須の列を足したら、テストの見本の行にも値を足す。
 - iOS 版のキャッシュはタイルごとの JSON で、読めないファイルは取得していないものとして取り直す。形式を変えるときは、項目を省略可能にして古いファイルも読めるようにする。
 
 ## 変更の確かめ方
@@ -124,7 +124,7 @@ Android 版の山データの DB（Room）は、配布したあとも端末に�
 ./gradlew -p core test
 ./gradlew :app:assembleDebug
 ./gradlew :app:testDebugUnitTest
-.github/scripts/check-room-schemas.sh origin/main
+git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
 
 # iOS: core の単体テスト（Mac または Swift の入った環境）
 (cd ios/YamamukiCore && swift test)

@@ -100,7 +100,10 @@ class MountainDatabaseMigrationTest {
         }
     }
 
-    /** 見本の行のうち、その版にある列だけを入れる。見本に無い必須の列があればテストを直すよう知らせる。 */
+    /**
+     * 見本の行のうち、その版にある列だけを入れる。見本に無い列は、省略できる列(NULL を許すか初期値がある)なら
+     * 飛ばし、省略できない必須の列ならテストを直すよう知らせる。
+     */
     private fun insertSample(db: SQLiteDatabase, entity: JSONObject, sample: Map<String, Any>, version: Int) {
         val table = entity.getString("tableName")
         val fields = entity.getJSONArray("fields")
@@ -110,7 +113,7 @@ class MountainDatabaseMigrationTest {
             val column = field.getString("columnName")
             when {
                 column in sample -> columns += column
-                field.optBoolean("notNull") -> fail("版 $version の $table.$column の見本の値を SAMPLE_ROWS に足す")
+                field.optBoolean("notNull") && !field.has("defaultValue") -> fail("版 $version の $table.$column の見本の値を SAMPLE_ROWS に足す")
             }
         }
         db.execSQL(

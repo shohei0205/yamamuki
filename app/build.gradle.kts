@@ -58,11 +58,6 @@ android {
     buildFeatures {
         compose = true
     }
-
-    // 単体テストは Robolectric で Android の SQLite を動かす(DB の移行のテスト)。
-    testOptions {
-        unitTests.isIncludeAndroidResources = true
-    }
 }
 
 kotlin {
