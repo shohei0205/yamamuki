@@ -47,8 +47,10 @@ import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.RingLabelGeometry
 import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.MapCenter
-import io.github.shohei0205.yamamuki.core.declutter
+import io.github.shohei0205.yamamuki.core.PeakLayout
 import io.github.shohei0205.yamamuki.core.elevationClass
+import io.github.shohei0205.yamamuki.core.othersText
+import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -87,6 +89,7 @@ private const val TAPE_SPAN_DEG = DialGeometry.TAPE_SPAN_DEG
  */
 private class DialTextStyles(scale: Float) {
     val label = TextStyle(color = Color.Black, fontSize = 13.sp * scale, fontWeight = FontWeight.Bold)
+    val others = TextStyle(color = TapeSubtle, fontSize = 11.sp * scale, fontWeight = FontWeight.Bold)
     val ringLabel = TextStyle(color = RingGray, fontSize = 12.sp * scale, fontWeight = FontWeight.Bold)
     val readout = TextStyle(color = Color.Black, fontSize = 15.sp * scale, fontWeight = FontWeight.Bold)
 }
@@ -94,8 +97,10 @@ private class DialTextStyles(scale: Float) {
 /**
  * 方位盤。現在地(画面下部の双眼鏡)から向いている方向を上にとり、山をアイコンと山名で描く。
  * アイコンの色と形は標高の区分([ElevationClass])で変える。
- * [mountains] は表示の優先順(標高の高い順)に並んでいること。重なる山は優先度の低いほうを省く。
- * 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。
+ * 表示する山は、現在地から見上げる角度(仰角)の大きい順に選び、すぐそばの山どうしは標高の高いほうを残す([PeakLayout])。
+ * 画面に描くときは前回描いた山を先に置くので、向きを変えても、描いている山は実際に重なるまで消えない。
+ * 重なって山名を省いた山はアイコンだけを描き、代表の山の山名の下に「ほか 3 山」と添える。
+ * 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。代表の山なら、まとめた山を含む一覧を [onGroupTap] に渡す。
  * 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
  * 現在地がほぼ山頂([summit] が非 null)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
  */
@@ -106,10 +111,12 @@ fun DialCanvas(
     rangeKm: Double,
     modifier: Modifier = Modifier,
     onMountainTap: (NearbyMountain) -> Unit = {},
+    /** 重なる山をまとめた代表の山をタップしたとき。代表の山を先頭に、まとめた山を優先順に並べて渡す。 */
+    onGroupTap: (List<NearbyMountain>) -> Unit = {},
     onObserverTap: () -> Unit = {},
     /** 現在地がほぼ山頂のとき、その山。 */
     summit: NearbyMountain? = null,
-    /** 現在地の標高(海抜)。方位の表示の後ろに添える。null なら出さない。 */
+    /** 現在地の標高(海抜)。方位の表示の後ろに添え、山の仰角の計算にも使う。null なら出さない(仰角は 0m とみなす)。 */
     altitudeM: Double? = null,
     /** 一度に表示する山の上限。 */
     maxPeaks: Int = 40,
@@ -129,9 +136,11 @@ fun DialCanvas(
     bottomBleed: Dp = 0.dp,
 ) {
     val styles = remember(textScale) { DialTextStyles(textScale) }
-    val textMeasurer = rememberTextMeasurer(cacheSize = 256)
+    val textMeasurer = rememberTextMeasurer(cacheSize = 512)
     val hitTargets = remember { HitTargets() }
+    val peakSelection = remember { PeakSelection() }
     val currentOnTap by rememberUpdatedState(onMountainTap)
+    val currentOnGroupTap by rememberUpdatedState(onGroupTap)
     val currentOnObserverTap by rememberUpdatedState(onObserverTap)
     val tapModifier = Modifier.pointerInput(Unit) {
         val slop = 8.dp.toPx()
@@ -139,7 +148,9 @@ fun DialCanvas(
             if (hitTargets.hitsObserver(tap, slop)) {
                 currentOnObserverTap()
             } else {
-                hitTargets.find(tap, slop)?.let(currentOnTap)
+                hitTargets.find(tap, slop)?.let { peak ->
+                    if (peak.members.isEmpty()) currentOnTap(peak.mountain) else currentOnGroupTap(listOf(peak.mountain) + peak.members)
+                }
             }
         }
     }
@@ -166,7 +177,7 @@ fun DialCanvas(
                 val previousAngle = RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle, hitTargets.ringLabelHeading, headingDeg)
                 hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, previousAngle, headingUp)
                 hitTargets.ringLabelHeading = headingDeg
-                drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
+                drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, maxPeaks, peakSelection)
             } else {
                 emptyList()
             }
@@ -254,6 +265,8 @@ private class PlacedPeak(
     val label: TextLayoutResult,
     /** アイコンと山名を合わせた範囲。重なりの判定とタップの当たり判定に使う。 */
     val box: Box,
+    /** 重なるので山名を省き、この山にまとめた山(優先順)。 */
+    val members: List<NearbyMountain> = emptyList(),
 )
 
 /** 直近に描いた山。描画のたびに差し替え、タップ位置から山を引く。 */
@@ -282,58 +295,159 @@ private class HitTargets {
     }
 
     /** [tap] を含む山のうち、アイコンが最も近いもの。枠を [slop] だけ広げて判定する。 */
-    fun find(tap: Offset, slop: Float): NearbyMountain? {
+    fun find(tap: Offset, slop: Float): PlacedPeak? {
         fun PlacedPeak.hit() = box.contains(tap, slop)
-        summit?.takeIf { it.hit() }?.let { return it.mountain }
-        return peaks.filter { it.hit() }.minByOrNull { (it.position - tap).getDistanceSquared() }?.mountain
+        summit?.takeIf { it.hit() }?.let { return it }
+        return peaks.filter { it.hit() }.minByOrNull { (it.position - tap).getDistanceSquared() }
     }
 }
 
 private fun Box.contains(p: Offset, slop: Float) =
     p.x in left - slop..right + slop && p.y in top - slop..bottom + slop
 
+/** 選んだ山の 1 件。位置は現在地からの px(北が上)、範囲は山の位置を原点にしたもの。 */
+private class SelectedPeak(
+    val mountain: NearbyMountain,
+    val label: TextLayoutResult,
+    val box: Box,
+)
+
+/**
+ * 方位盤に出す山の候補。向きによらずに周り全体から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
+ * 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
+ */
+private class PeakSelection {
+    var key: List<Any?>? = null
+    var selected: List<SelectedPeak> = emptyList()
+    var selectedIds: Set<Long> = emptySet()
+    var drawnIds: Set<Long> = emptySet()
+}
+
+/** 選び直すかどうかを決める、現在地から画面の角までの距離の刻み。地図を少し動かしただけでは選び直さない。 */
+private val REACH_STEP = 64.dp
+
+/** 新しく画面に出す山に求める、ほかの山との余白。境目で出たり消えたりしないようにする。 */
+private val NEW_PEAK_MARGIN = 4.dp
+
 private fun DrawScope.drawPeaks(
     observer: Offset,
     pxPerKm: Float,
     headingDeg: Double,
     mountains: List<NearbyMountain>,
+    observerAltitudeM: Double?,
     chartTop: Float,
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
     maxPeaks: Int,
+    selection: PeakSelection,
 ): List<PlacedPeak> {
     val gap = 2.dp.toPx()
+    val chartBottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()
 
-    val visible = mountains.asSequence()
-        .map { m ->
-            val o = DialGeometry.project(m.distanceKm, m.bearingDeg, headingDeg)
-            m to Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
-        }
-        .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx() }
-        .map { (m, p) ->
+    // 山の位置が画面に入りうる、現在地からの最大の距離(画面の最も遠い角まで)。
+    val farthestCorner = listOf(Offset(0f, chartTop), Offset(size.width, chartTop), Offset(0f, chartBottom), Offset(size.width, chartBottom))
+        .maxOf { (it - observer).getDistance() }
+    val step = REACH_STEP.toPx()
+    val reachPx = ceil(farthestCorner / step) * step
+
+    val key = listOf(mountains, pxPerKm, observerAltitudeM, styles, maxPeaks, reachPx, size.width, chartBottom - chartTop)
+    if (selection.key != key) {
+        val viewArea = size.width.toDouble() * (chartBottom - chartTop)
+        selection.selected = PeakLayout.candidates(
+            mountains, observerAltitudeM, selection.selectedIds,
+            reachKm = (reachPx / pxPerKm).toDouble(),
+            limit = PeakLayout.aroundLimit(maxPeaks, reachPx.toDouble(), viewArea),
+        ).map { m ->
             val icon = PeakIcon.of(m.mountain.elevationClass())
             val halfWidth = icon.halfWidthDp.dp.toPx()
             val label = textMeasurer.measure(m.mountain.name, styles.label)
             val labelHalf = label.size.width / 2f
             val box = Box(
-                left = min(p.x - halfWidth, p.x - labelHalf),
-                top = p.y - icon.heightDp.dp.toPx(),
-                right = max(p.x + halfWidth, p.x + labelHalf),
-                bottom = p.y + gap + label.size.height,
+                left = min(-halfWidth, -labelHalf),
+                top = -icon.heightDp.dp.toPx(),
+                right = max(halfWidth, labelHalf),
+                bottom = gap + label.size.height,
             )
-            PlacedPeak(m, p, label, box)
+            SelectedPeak(m, label, box)
         }
+        selection.selectedIds = selection.selected.mapTo(HashSet()) { it.mountain.mountain.osmId }
+        selection.key = key
+    }
 
-    // 列は遅延評価なので、上限に達したら残りの山名は測らない。
-    val placed = declutter(visible, limit = maxPeaks) { it.box }
+    val visible = selection.selected
+        .map { s ->
+            val o = DialGeometry.project(s.mountain.distanceKm, s.mountain.bearingDeg, headingDeg)
+            s to Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
+        }
+        .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < chartBottom }
+        .map { (s, p) ->
+            PlacedPeak(s.mountain, p, s.label, Box(p.x + s.box.left, p.y + s.box.top, p.x + s.box.right, p.y + s.box.bottom))
+        }
+    val groups = PeakLayout.placeVisible(
+        visible,
+        limit = maxPeaks,
+        box = { it.box },
+        drawnBefore = { it.mountain.mountain.osmId in selection.drawnIds },
+        neighbors = { a, b -> PeakLayout.areNeighbors(a.mountain, b.mountain) },
+        elevationM = { it.mountain.mountain.elevationM },
+        margin = NEW_PEAK_MARGIN.toPx(),
+    )
+    selection.drawnIds = groups.mapTo(HashSet()) { it.peak.mountain.mountain.osmId }
 
-    for (peak in placed) {
+    // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
+    val placedBoxes = groups.map { it.peak.box }
+    val othersLabels = groups.map { group ->
+        val peak = group.peak
+        if (group.members.isEmpty()) return@map null
+        // 「ほか 3 山」は山名の下に添える。ほかの山の山名と重なるときは添えない(タップすれば一覧は出る)。
+        val others = textMeasurer.measure(othersText(group.members.size), styles.others)
+        val p = peak.position
+        val top = p.y + gap + peak.label.size.height
+        val half = others.size.width / 2f
+        val below = Box(min(peak.box.left, p.x - half), top, max(peak.box.right, p.x + half), top + others.size.height)
+        if (placedBoxes.any { it !== peak.box && it.intersects(below) }) null else others to below
+    }
+    val textBoxes = groups.map { it.peak.labelBox(gap) } + othersLabels.mapNotNull { it?.second }
+
+    // まとめた山のアイコンは薄く描き、代表の山のアイコンと山名を上に重ねる。標高が不明な山と、
+    // どれかの山名や「ほか 3 山」にかかる山は描かない(一覧には残る)。描いたアイコンを押すと一覧を開く。
+    val memberTargets = mutableListOf<PlacedPeak>()
+    for (group in groups) {
+        val members = group.members.map { it.mountain }
+        for (member in group.members) {
+            if (member.mountain.mountain.elevationM == null) continue
+            val icon = PeakIcon.of(member.mountain.mountain.elevationClass())
+            val p = member.position
+            val halfWidth = icon.halfWidthDp.dp.toPx()
+            val iconBox = Box(p.x - halfWidth, p.y - icon.heightDp.dp.toPx(), p.x + halfWidth, p.y)
+            if (textBoxes.any { it.intersects(iconBox) }) continue
+            drawPeakIcon(p, icon, alpha = MEMBER_ICON_ALPHA)
+            memberTargets += PlacedPeak(group.peak.mountain, p, group.peak.label, iconBox, members)
+        }
+    }
+    val reps = groups.mapIndexed { i, group ->
+        val peak = group.peak
         val p = peak.position
         drawPeakIcon(p, PeakIcon.of(peak.mountain.mountain.elevationClass()))
         drawText(peak.label, topLeft = Offset(p.x - peak.label.size.width / 2f, p.y + gap))
+        var box = peak.box
+        othersLabels[i]?.let { (others, below) ->
+            drawText(others, topLeft = Offset(p.x - others.size.width / 2f, below.top))
+            box = Box(min(box.left, below.left), box.top, max(box.right, below.right), below.bottom)
+        }
+        PlacedPeak(peak.mountain, p, peak.label, box, group.members.map { it.mountain })
     }
-    return placed
+    return reps + memberTargets
 }
+
+/** 山名の範囲。 */
+private fun PlacedPeak.labelBox(gap: Float): Box {
+    val half = label.size.width / 2f
+    return Box(position.x - half, position.y + gap, position.x + half, position.y + gap + label.size.height)
+}
+
+/** 代表の山にまとめた山のアイコンの濃さ。代表の山と見分けられるように薄くする。 */
+private const val MEMBER_ICON_ALPHA = 0.45f
 
 /** 標高の区分ごとの山アイコンの大きさ(dp)。底辺の中点が山の位置に来る。 */
 private enum class PeakIcon(val halfWidthDp: Float, val heightDp: Float) {
@@ -358,7 +472,7 @@ private enum class PeakIcon(val halfWidthDp: Float, val heightDp: Float) {
     }
 }
 
-private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon) {
+private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon, alpha: Float = 1f) {
     val halfWidth = icon.halfWidthDp.dp.toPx()
     val height = icon.heightDp.dp.toPx()
     // 3 種類とも同じ太さの縁取りにそろえる。
@@ -368,7 +482,7 @@ private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon) {
             // 底辺を直径とする半楕円。縁取りで背景のベージュから浮かせる。
             val topLeft = Offset(p.x - halfWidth, p.y - height)
             val oval = Size(halfWidth * 2, height * 2)
-            drawArc(HillGreen, startAngle = 180f, sweepAngle = 180f, useCenter = true, topLeft = topLeft, size = oval)
+            drawArc(HillGreen, startAngle = 180f, sweepAngle = 180f, useCenter = true, topLeft = topLeft, size = oval, alpha = alpha)
             drawArc(
                 PeakGreen,
                 startAngle = 180f,
@@ -376,19 +490,20 @@ private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon) {
                 useCenter = true,
                 topLeft = topLeft,
                 size = oval,
+                alpha = alpha,
                 style = outline,
             )
         }
         PeakIcon.PEAK -> {
-            drawTriangle(p, halfWidth, height, PeakYellow)
-            drawTriangle(p, halfWidth, height, PeakGreen, outline)
+            drawTriangle(p, halfWidth, height, PeakYellow, alpha = alpha)
+            drawTriangle(p, halfWidth, height, PeakGreen, outline, alpha)
         }
         PeakIcon.ALPINE -> {
-            drawTriangle(p, halfWidth, height, PeakBrown)
+            drawTriangle(p, halfWidth, height, PeakBrown, alpha = alpha)
             // 頂上から高さの 35% を白く塗って雪を表す。相似な三角形なので幅も同じ比率。
             val snow = 0.35f
-            drawTriangle(Offset(p.x, p.y - height * (1 - snow)), halfWidth * snow, height * snow, SnowWhite)
-            drawTriangle(p, halfWidth, height, PeakBrownDark, outline)
+            drawTriangle(Offset(p.x, p.y - height * (1 - snow)), halfWidth * snow, height * snow, SnowWhite, alpha = alpha)
+            drawTriangle(p, halfWidth, height, PeakBrownDark, outline, alpha)
         }
     }
 }
@@ -403,6 +518,7 @@ private fun DrawScope.drawTriangle(
     height: Float,
     color: Color,
     style: DrawStyle = Fill,
+    alpha: Float = 1f,
 ) {
     val path = polygon(
         listOf(
@@ -411,7 +527,7 @@ private fun DrawScope.drawTriangle(
             Offset(bottomCenter.x - halfWidth, bottomCenter.y),
         ),
     )
-    drawPath(path, color, style = style)
+    drawPath(path, color, alpha = alpha, style = style)
 }
 
 /** [points] を順に結んで閉じた多角形。Offset は value class で vararg にできないため List で受ける。 */

@@ -23,7 +23,7 @@ final class DialModel: ObservableObject {
     @Published private(set) var lockedHeading: Double?
     var displayHeading: Double { lockedHeading ?? heading ?? 0 }
 
-    /// 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。
+    /// 現在地から見た山。最低標高で絞り込んだもの。表示する山の選び方と順は方位盤で決める。現在地が変わるたびに計算し直す。
     @Published private(set) var mountains: [NearbyMountain] = []
     /// 現在地がほぼ山頂([summitRadiusKm] 以内)のとき、その山。
     /// 最低標高の絞り込みとは関係なく探し、[mountains] からは除く(現在地の位置に別のアイコンで出す)。
@@ -433,7 +433,6 @@ final class DialModel: ObservableObject {
         let minElevation = settings.minElevationM
         mountains = all
             .filter { $0.mountain.osmId != top?.mountain.osmId && $0.mountain.meetsMinElevation(minElevation) }
-            .sorted(by: displayPriority)
         summit = top
     }
 }

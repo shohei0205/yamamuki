@@ -29,6 +29,19 @@ object GeoMath {
         val x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(dLon)
         return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
     }
+
+    /** 大気の屈折の標準的な係数。光が地面に沿って少し曲がり、遠くの山が実際より少し高く見える。 */
+    const val REFRACTION_COEFFICIENT = 0.13
+
+    /**
+     * 標高 [observerAltitudeM] の地点から、[distanceKm] 先の標高 [targetElevationM] の地点を見上げる角度(仰角、°)。
+     * 地球の丸みで遠くほど低く沈んで見える分と、大気の屈折で浮き上がる分を考える。下に見えるときは負。
+     */
+    fun elevationAngleDeg(observerAltitudeM: Double, targetElevationM: Double, distanceKm: Double): Double {
+        val distanceM = distanceKm * 1000.0
+        val drop = distanceM * distanceM / (2 * EARTH_RADIUS_KM * 1000.0) * (1 - REFRACTION_COEFFICIENT)
+        return Math.toDegrees(atan2(targetElevationM - observerAltitudeM - drop, distanceM))
+    }
 }
 
 /** 緯度経度の矩形。日付変更線をまたぐ範囲は扱わない。 */
