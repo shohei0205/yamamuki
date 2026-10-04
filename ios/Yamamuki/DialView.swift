@@ -408,7 +408,8 @@ private struct PeakGroupView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        // iOS 15 でも使えるよう NavigationView にする。
+        NavigationView {
             List(peaks) { nearby in
                 NavigationLink {
                     MountainDetailView(nearby: nearby)
@@ -428,6 +429,7 @@ private struct PeakGroupView: View {
                 }
             }
         }
+        .navigationViewStyle(.stack)
         .mediumDetent()
     }
 }
