@@ -6,10 +6,9 @@
 - iOS 版: Swift + SwiftUI（Android 版とほぼ同じ機能）
 - 山データは OpenStreetMap の Overpass API から取得し、端末内にキャッシュしてオフラインでも使えるようにする
 
-<p>
-  <img src="docs/images/heading-up-kamikochi.png" width="270" alt="上高地から北へ向けた方位盤。槍ヶ岳・南岳・奥穂高岳などが並ぶ">
-  <img src="docs/images/manual-okuhotaka.png" width="270" alt="奥穂高岳の山頂を中心にした地図。槍ヶ岳・常念岳・焼岳などが周りに並ぶ">
-</p>
+| ヘディングアップモード | 手動位置モード |
+|---|---|
+| <img src="docs/images/heading-up-kamikochi.png" width="270" alt="上高地から北へ向けた方位盤。槍ヶ岳・南岳・奥穂高岳などが並ぶ"> | <img src="docs/images/manual-okuhotaka.png" width="270" alt="奥穂高岳の山頂を中心にした地図。槍ヶ岳・常念岳・焼岳などが周りに並ぶ"> |
 
 ## 構成
 
