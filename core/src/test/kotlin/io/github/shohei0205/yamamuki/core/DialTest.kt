@@ -151,70 +151,21 @@ class PeakLayoutTest {
         assertEquals(listOf("A", "B"), PeakLayout.priorityOrder(listOf(a, b), 0.0, kept).map { it.mountain.name })
     }
 
-    private val square = Box(-10f, -10f, 10f, 10f)
-
     @Test
-    fun clearanceIsFarthestCorner() {
-        assertEquals(hypot(20.0, 20.0), PeakLayout.clearance(square, square), 1e-9)
-        // 山名が下に長く出る範囲どうしでも、縦横それぞれの最大のずれで決まる。
-        val label = Box(-30f, -20f, 30f, 15f)
-        assertEquals(hypot(35.0, 30.0), PeakLayout.clearance(label, square.copy(left = -5f, right = 5f)), 1e-9)
-    }
-
-    /** 名前の 1 文字目が同じ山を同じ山塊とし、名前の数字を標高とみなす。 */
-    private fun neighbors(a: String, b: String) = a[0] == b[0]
-    private fun higher(a: String, b: String) = a.drop(1).toInt() > b.drop(1).toInt()
-
-    private fun selectAround(items: List<String>, positions: Map<String, PlanOffset>, kept: Set<String> = emptySet()) =
-        PeakLayout.selectAround(items.asSequence(), position = { positions.getValue(it) }, box = { square },
-            neighbors = ::neighbors, higher = ::higher, keptBefore = { it in kept })
-
-    @Test
-    fun selectAroundKeepsMainPeakOfNeighbors() {
-        // A2 は今の向きでは A1 と重ならないが、45° 回すと重なる。同じ山塊なので標高の高い A2 だけを残す。
-        val positions = mapOf("A1" to PlanOffset(0.0, 0.0), "A2" to PlanOffset(25.0, 0.0), "A3" to PlanOffset(0.0, 100.0))
-        assertEquals(listOf("A2", "A3"), selectAround(listOf("A1", "A2", "A3"), positions))
-        assertEquals(listOf("A2", "A3"), selectAround(listOf("A2", "A1", "A3"), positions))
+    fun candidatesAreLimitedByReachAndCount() {
+        val near = m("近い", 1000.0, 2.0)
+        val far = m("遠い", 3000.0, 30.0)
+        val nearLow = m("低い", 100.0, 3.0)
+        val all = listOf(far, nearLow, near)
+        assertEquals(listOf("近い", "低い"), PeakLayout.candidates(all, 0.0, emptySet(), reachKm = 10.0, limit = 5).map { it.mountain.name })
+        assertEquals(listOf("近い"), PeakLayout.candidates(all, 0.0, emptySet(), reachKm = 50.0, limit = 1).map { it.mountain.name })
     }
 
     @Test
-    fun selectAroundKeepsPeaksOfOtherMassifs() {
-        // 別の山塊の山は、重なりうる位置でもここでは省かない(描くときに今の向きで判定する)。
-        val positions = mapOf("A1" to PlanOffset(0.0, 0.0), "B1" to PlanOffset(5.0, 0.0))
-        assertEquals(listOf("A1", "B1"), selectAround(listOf("A1", "B1"), positions))
-    }
-
-    @Test
-    fun selectAroundKeepsPreviouslySelectedPairs() {
-        val positions = mapOf("A2" to PlanOffset(0.0, 0.0), "A1" to PlanOffset(27.0, 0.0))
-        assertEquals(listOf("A2"), selectAround(listOf("A2", "A1"), positions))
-        // どちらも前回選んでいたら、少し近づいても両方残す。
-        assertEquals(listOf("A2", "A1"), selectAround(listOf("A2", "A1"), positions, kept = setOf("A2", "A1")))
-        assertEquals(listOf("A2"), selectAround(listOf("A2", "A1"), positions, kept = setOf("A2")))
-    }
-
-    @Test
-    fun selectAroundStopsPullingItemsAtLimit() {
-        val pulled = mutableListOf<Int>()
-        val items = (0 until 10).asSequence().onEach { pulled += it }
-        val placed = PeakLayout.selectAround(items, limit = 2, position = { PlanOffset(it * 100.0, 0.0) }, box = { square },
-            neighbors = { _, _ -> true }, higher = { _, _ -> false })
-        assertEquals(listOf(0, 1), placed)
-        // 上限に達したあとの項目は取り出さない(山名の計測を省くため)。
-        assertEquals(listOf(0, 1), pulled)
-    }
-
-    @Test
-    fun neighborsAndHeight() {
-        fun at(name: String, lat: Double, ele: Double?) = NearbyMountain(Mountain(name.hashCode().toLong(), name, lat, 137.0, ele), 5.0, 0.0)
-        val oku = at("奥穂高岳", 36.2894, 3190.0)
-        val jandarme = at("ジャンダルム", 36.2862, 3163.0)
-        val far = at("遠い山", 36.40, 3000.0)
-        assertTrue(PeakLayout.areNeighbors(oku, jandarme))
-        assertFalse(PeakLayout.areNeighbors(oku, far))
-        assertTrue(PeakLayout.isHigher(oku, jandarme))
-        assertFalse(PeakLayout.isHigher(jandarme, oku))
-        assertTrue(PeakLayout.isHigher(jandarme, at("不明", 36.2862, null)))
+    fun neighbors() {
+        fun at(name: String, lat: Double) = NearbyMountain(Mountain(name.hashCode().toLong(), name, lat, 137.0, 1000.0), 5.0, 0.0)
+        assertTrue(PeakLayout.areNeighbors(at("奥穂高岳", 36.2894), at("ジャンダルム", 36.2862)))
+        assertFalse(PeakLayout.areNeighbors(at("奥穂高岳", 36.2894), at("遠い山", 36.40)))
     }
 
     @Test
@@ -224,30 +175,76 @@ class PeakLayoutTest {
         assertEquals(40, PeakLayout.aroundLimit(40, reachPx = 10.0, viewAreaPx = 10000.0))
     }
 
-    private fun boxAt(x: Float) = Box(x, 0f, x + 10f, 10f)
+    /** 名前の 1 文字目が同じ山を同じ山塊とし、名前の数字を標高とみなす。箱は x の位置に幅 10。 */
+    private fun place(
+        visible: List<String>,
+        xs: Map<String, Float>,
+        limit: Int = 10,
+        drawn: Set<String> = emptySet(),
+        margin: Float = 0f,
+    ): List<Pair<String, List<String>>> =
+        PeakLayout.placeVisible(
+            visible, limit,
+            box = { Box(xs.getValue(it), 0f, xs.getValue(it) + 10f, 10f) },
+            drawnBefore = { it in drawn },
+            neighbors = { a, b -> a[0] == b[0] },
+            elevationM = { it.drop(1).toDoubleOrNull() },
+            margin = margin,
+        ).map { it.peak to it.members }
 
     @Test
-    fun placeVisibleDropsOverlapsAtCurrentHeading() {
-        val boxes = mapOf("A" to boxAt(0f), "B" to boxAt(5f), "C" to boxAt(20f))
-        assertEquals(listOf("A", "C"), PeakLayout.placeVisible(listOf("A", "B", "C"), 10, { boxes.getValue(it) }, { false }))
-        assertEquals(listOf("A"), PeakLayout.placeVisible(listOf("A", "B", "C"), 1, { boxes.getValue(it) }, { false }))
+    fun placeVisibleGroupsOverlapsAtCurrentHeading() {
+        val xs = mapOf("A1" to 0f, "B1" to 5f, "C1" to 20f)
+        // B1 は A1 と重なるので山名を省き、A1 にまとめる。
+        assertEquals(listOf("A1" to listOf("B1"), "C1" to emptyList()), place(listOf("A1", "B1", "C1"), xs))
+        // 上限で省いた C1 は、どの山とも重ならないのでまとめない。
+        assertEquals(listOf("A1" to listOf("B1")), place(listOf("A1", "B1", "C1"), xs, limit = 1))
     }
 
     @Test
     fun placeVisibleKeepsDrawnPeaks() {
-        val boxes = mapOf("A" to boxAt(0f), "B" to boxAt(5f), "C" to boxAt(40f))
-        // 前回描いた B は、優先度の高い A が入ってきても残る。順は優先順のまま。
-        assertEquals(listOf("B", "C"), PeakLayout.placeVisible(listOf("A", "B", "C"), 10, { boxes.getValue(it) }, { it != "A" }))
+        val xs = mapOf("A1" to 0f, "B1" to 5f, "C1" to 40f)
+        // 前回描いた B1 は、優先度の高い A1 が入ってきても残る。順は優先順のまま。
+        assertEquals(listOf("B1" to listOf("A1"), "C1" to emptyList()), place(listOf("A1", "B1", "C1"), xs, drawn = setOf("B1", "C1")))
         // 上限に達しているときも、前回描いた山を先に残す。
-        assertEquals(listOf("C"), PeakLayout.placeVisible(listOf("A", "C"), 1, { boxes.getValue(it) }, { it == "C" }))
+        assertEquals(listOf("C1" to emptyList<String>()), place(listOf("A1", "C1"), xs, limit = 1, drawn = setOf("C1")))
     }
 
     @Test
     fun placeVisibleNeedsMarginForNewPeaks() {
-        val boxes = mapOf("A" to boxAt(0f), "B" to boxAt(12f))
-        // 2px しか離れていない B は、新しく出すときは余白 4px に足りないので出さないが、描いているなら残す。
-        assertEquals(listOf("A"), PeakLayout.placeVisible(listOf("A", "B"), 10, { boxes.getValue(it) }, { it == "A" }, margin = 4f))
-        assertEquals(listOf("A", "B"), PeakLayout.placeVisible(listOf("A", "B"), 10, { boxes.getValue(it) }, { true }, margin = 4f))
+        val xs = mapOf("A1" to 0f, "B1" to 12f)
+        // 2px しか離れていない B1 は、新しく出すときは余白 4px に足りないので山名を出さないが、描いているなら残す。
+        assertEquals(listOf("A1" to listOf("B1")), place(listOf("A1", "B1"), xs, drawn = setOf("A1"), margin = 4f))
+        assertEquals(listOf("A1" to emptyList(), "B1" to emptyList()), place(listOf("A1", "B1"), xs, drawn = setOf("A1", "B1"), margin = 4f))
+    }
+
+    @Test
+    fun placeVisiblePrefersHigherNeighbor() {
+        val xs = mapOf("A2900" to 0f, "A3190" to 5f)
+        // 仰角で先に来る A2900 が描いてあっても、そばの高い A3190 と重なるなら A3190 を出す。
+        assertEquals(listOf("A3190" to listOf("A2900")), place(listOf("A2900", "A3190"), xs, drawn = setOf("A2900")))
+    }
+
+    @Test
+    fun placeVisibleResolvesChainOfNeighborsByHeight() {
+        // A1 < A2 < A3 が鎖のように並び、A1 と A2、A2 と A3 は重なるが、A1 と A3 は重ならない。
+        // 並ぶ順によらず、A3 を残して A2 を省き、A2 が省かれたので A1 は残す。
+        val xs = mapOf("A1" to 0f, "A2" to 8f, "A3" to 16f)
+        val expected = listOf("A1" to emptyList(), "A3" to listOf("A2"))
+        assertEquals(expected, place(listOf("A1", "A2", "A3"), xs))
+        assertEquals(listOf("A3" to listOf("A2"), "A1" to emptyList()), place(listOf("A3", "A2", "A1"), xs))
+    }
+
+    @Test
+    fun placeVisibleDoesNotLetOtherMassifsDominate() {
+        // 別の山塊の高い山は、重なっても優先しない(優先順で先に置いた山が残る)。
+        val xs = mapOf("A1000" to 0f, "B3000" to 5f)
+        assertEquals(listOf("A1000" to listOf("B3000")), place(listOf("A1000", "B3000"), xs))
+    }
+
+    @Test
+    fun othersTextCountsPeaks() {
+        assertEquals("ほか 3 山", othersText(3))
     }
 
     @Test

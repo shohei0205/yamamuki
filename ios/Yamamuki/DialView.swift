@@ -13,6 +13,8 @@ struct DialView: View {
     @State private var showSettings = false
     @State private var showDownload = false
     @State private var showObserver = false
+    /// 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
+    @State private var groupIds: [Int64]?
 
     var body: some View {
         GeometryReader { geometry in
@@ -38,6 +40,7 @@ struct DialView: View {
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
                     onMountainTap: { selectedId = $0.mountain.osmId },
+                    onGroupTap: { groupIds = $0.map(\.mountain.osmId) },
                     // 現在地を取れる前は出す値がないので開かない。
                     onObserverTap: { if model.gpsLocation != nil { showObserver = true } }
                 )
@@ -163,6 +166,9 @@ struct DialView: View {
         .sheet(item: selectedMountain) { nearby in
             MountainDetailView(nearby: nearby).fetchErrorAlert(model)
         }
+        .sheet(isPresented: showGroup) {
+            PeakGroupView(peaks: group).fetchErrorAlert(model)
+        }
         // 開いている間も歩けば値が更新される。
         .sheet(isPresented: $showObserver) {
             ObserverDetailView(model: model).fetchErrorAlert(model)
@@ -223,6 +229,19 @@ struct DialView: View {
                     ?? model.summit.flatMap { $0.mountain.osmId == id ? $0 : nil }
             },
             set: { if $0 == nil { selectedId = nil } }
+        )
+    }
+
+    /// まとめた山のうち、今の一覧にある山。取り直しで消えた山は除く。
+    private var group: [NearbyMountain] {
+        (groupIds ?? []).compactMap { id in model.mountains.first { $0.mountain.osmId == id } }
+    }
+
+    /// 取り直しで一覧の山がすべて消えたら、一覧のシートを閉じる。
+    private var showGroup: Binding<Bool> {
+        Binding(
+            get: { groupIds != nil && !group.isEmpty },
+            set: { if !$0 { groupIds = nil } }
         )
     }
 
@@ -379,6 +398,36 @@ private struct MountainDetailView: View {
             Spacer()
         }
         .padding(24)
+        .mediumDetent()
+    }
+}
+
+/// 重なる山をまとめた代表の山をタップしたときの一覧。山を選ぶと、その山の詳細を開く。
+private struct PeakGroupView: View {
+    let peaks: [NearbyMountain]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(peaks) { nearby in
+                NavigationLink {
+                    MountainDetailView(nearby: nearby)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(nearby.mountain.name).font(.body)
+                        Text("\(nearby.mountain.elevationText)・\(distanceText(nearby.distanceKm))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("この付近の山")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+        }
         .mediumDetent()
     }
 }
