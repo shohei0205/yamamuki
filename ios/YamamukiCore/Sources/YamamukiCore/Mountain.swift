@@ -88,6 +88,9 @@ public func coordinateText(latitude: Double, longitude: Double) -> String {
     return "\(latitude >= 0 ? "北緯" : "南緯") \(lat)\n\(longitude >= 0 ? "東経" : "西経") \(lon)"
 }
 
+/// 重なって山名を省いた山の数を、代表の山の山名の下に添える文言。「ほか 3 山」。
+public func othersText(_ count: Int) -> String { "ほか \(count) 山" }
+
 /// 詳細表示の距離。1km 未満は「850 m」、以上は「12.3 km」。
 public func distanceText(_ distanceKm: Double) -> String {
     if distanceKm < 1 {

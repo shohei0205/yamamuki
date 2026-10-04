@@ -4,6 +4,38 @@ import kotlin.math.*
 import kotlin.test.*
 
 class RingLabelGeometryTest {
+    @Test fun rotationKeepsOffscreenObserverLabelsOnTheMap() {
+        val initialAngle = -PI / 2 + 0.1
+        for (heading in listOf(0.0, 30.0, 90.0, 180.0, 270.0, 359.0)) {
+            val turn = -Math.toRadians(heading)
+            fun rotate(x: Double, y: Double) = Pair(
+                180 + (x - 180) * cos(turn) - (y - 412) * sin(turn),
+                412 + (x - 180) * sin(turn) + (y - 412) * cos(turn))
+            val (cx, cy) = rotate(180.0, 900.0)
+            fun place(radius: Double, angle: Double) =
+                RingLabelGeometry.place(cx, cy, radius, 0.0, 76.0, 360.0, 748.0, 60.0, 22.0, angle)
+            val rotated = assertNotNull(RingLabelGeometry.rotatedAngle(initialAngle, 0.0, heading))
+            val chosen = RingLabelGeometry.direction(cx, cy, 0.0, 76.0, 360.0, 748.0, rotated,
+                visibleCount = { angle -> listOf(500.0, 600.0).count { place(it, angle) != null } })
+            assertEquals(rotated, chosen)
+            for (radius in listOf(500.0, 600.0)) {
+                val expected = rotate(180 + radius * cos(initialAngle), 900 + radius * sin(initialAngle))
+                val actual = assertNotNull(place(radius, chosen))
+                assertEquals(expected.first, actual.x, 1e-7)
+                assertEquals(expected.second, actual.y, 1e-7)
+            }
+        }
+    }
+
+    @Test fun rotationCrossesNorthInBothDirectionsAndHandlesFirstFrame() {
+        val angle = -PI / 2
+        assertEquals(angle - Math.toRadians(2.0), RingLabelGeometry.rotatedAngle(angle, 359.0, 1.0)!!, 1e-7)
+        assertEquals(angle + Math.toRadians(2.0), RingLabelGeometry.rotatedAngle(angle, 1.0, 359.0)!!, 1e-7)
+        assertEquals(angle, RingLabelGeometry.rotatedAngle(angle, 45.0, 45.0))
+        assertEquals(angle, RingLabelGeometry.rotatedAngle(angle, null, 45.0))
+        assertNull(RingLabelGeometry.rotatedAngle(null, null, 45.0))
+    }
+
     @Test fun directionChangesWithOneLabelButStaysWithTwo() {
         fun count(angle: Double) = listOf(100.0, 200.0, 300.0).count { radius ->
             RingLabelGeometry.place(180.0, 700.0, radius, 0.0, 76.0, 360.0, 748.0, 60.0, 22.0, angle) != null

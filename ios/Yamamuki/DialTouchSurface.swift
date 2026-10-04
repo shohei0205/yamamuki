@@ -5,7 +5,6 @@ import YamamukiCore
 /// Canvasと同じ座標系でタップと複数指を扱う。上に重なるボタンは通常のSwiftUI操作を保つ。
 struct DialTouchSurface: UIViewRepresentable {
     let onPan: (Double, Double, Double) -> Void
-    let onHeadingSwipe: (Double, Double, Bool) -> Void
     let onTransform: (Double, Double, PlanOffset, PlanOffset, Double) -> Void
     let onTap: (CGPoint) -> Void
 
@@ -26,12 +25,10 @@ struct DialTouchSurface: UIViewRepresentable {
         private var start = CGPoint.zero
         private var dragging = false
         private var multiTouch = false
-        private var headingGesture = false
 
         override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
             if active.isEmpty, let first = touches.first {
                 start = first.location(in: self)
-                headingGesture = Double(start.y) < DialGeometry.chartTop
                 dragging = false
                 multiTouch = false
             }
@@ -46,14 +43,12 @@ struct DialTouchSurface: UIViewRepresentable {
             guard points.count == previous.count else { return }
             if points.count == 1 && !multiTouch {
                 let p = points[0]
-                let distance = headingGesture ? abs(p.x - start.x) : hypot(p.x - start.x, p.y - start.y)
+                let distance = hypot(p.x - start.x, p.y - start.y)
                 guard dragging || distance > 8 else { return }
                 let old = dragging ? previous[0] : start
-                let started = !dragging
                 dragging = true
-                if headingGesture { callbacks?.onHeadingSwipe(Double(p.x - old.x), Double(bounds.width), started) }
-                else { callbacks?.onPan(Double(p.x - old.x), Double(p.y - old.y), Double(bounds.height) - DialGeometry.chartInset) }
-            } else if points.count == 2 && !headingGesture {
+                callbacks?.onPan(Double(p.x - old.x), Double(p.y - old.y), Double(bounds.height) - DialGeometry.chartInset)
+            } else if points.count == 2 {
                 let a = previous[0], b = previous[1], c = points[0], d = points[1]
                 let oldDistance = hypot(b.x - a.x, b.y - a.y)
                 guard oldDistance > 0 else { return }

@@ -13,6 +13,8 @@ struct DialView: View {
     @State private var showSettings = false
     @State private var showDownload = false
     @State private var showObserver = false
+    /// 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
+    @State private var groupIds: [Int64]?
 
     var body: some View {
         GeometryReader { geometry in
@@ -31,13 +33,19 @@ struct DialView: View {
                     viewportLocation: model.location,
                     compassHeading: model.heading ?? model.displayHeading,
                     headingUp: !model.exploring,
+                    tapeHidden: manualChrome ? 1 : 0,
+                    // 視野の扇は、現在地に戻り終えてから出す。
+                    viewFanAlpha: model.exploring ? 0 : 1,
+                    bottomBleed: geometry.safeAreaInsets.bottom,
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
-                    onHeadingSwipe: { model.onHeadingSwipe(dx: $0, width: $1, canvasHeight: Double(geometry.size.height), started: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
                     onMountainTap: { selectedId = $0.mountain.osmId },
+                    onGroupTap: { groupIds = $0.map(\.mountain.osmId) },
                     // 現在地を取れる前は出す値がないので開かない。
                     onObserverTap: { if model.gpsLocation != nil { showObserver = true } }
                 )
+                .animation(modeAnimation, value: manualChrome)
+                .animation(modeAnimation, value: model.exploring)
 
                 if !model.hasLocationPermission {
                     PermissionRequest(denied: model.authorization == .denied || model.authorization == .restricted) {
@@ -45,27 +53,43 @@ struct DialView: View {
                     }
                 } else {
                     VStack {
+                        // 方位センサーの精度が低いと、方位が数十度ずれたまま別の山の名前を出してしまうので、上部で知らせる。
+                        StatusLine(
+                            // 方位が無効なあいだは方位の値が届かないので、値の有無にかかわらず出す。
+                            message: model.headingAccuracyLow ? "コンパス補正中。8の字に動かしてください" : nil,
+                            // 距離の円が文字の後ろを通っても読めるよう、方位の札と同じ淡い白の札にする。
+                            labeled: true
+                        )
                         StatusLine(message: statusMessage)
                         Spacer()
                     }
                     .padding(.top, CGFloat(DialGeometry.chartTop))
-                    .padding(.trailing, 72)
+                    .padding(.horizontal, 16)
                 }
 
+                // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。
                 VStack {
                     HStack {
-                        Spacer()
-                        Button { model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height)) } label: {
-                            CompassIndicator(heading: model.lockedHeading ?? model.heading)
+                        if manualChrome {
+                            headingLabel
+                                .transition(.move(edge: .leading).combined(with: .opacity))
                         }
-                        .buttonStyle(.plain)
-                        .disabled(model.location == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
-                        .accessibilityLabel("北を上にする")
+                        Spacer()
+                        if manualChrome {
+                            Button { model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height)) } label: {
+                                CompassIndicator(heading: model.lockedHeading ?? model.heading)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(model.location == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
+                            .accessibilityLabel("北を上にする")
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                        }
                     }
                     Spacer()
                 }
-                .padding(.top, 80)
-                .padding(.trailing, 8)
+                .padding(.top, 8)
+                .padding(.horizontal, 8)
+                .animation(modeAnimation, value: manualChrome)
 
                 VStack {
                     Spacer()
@@ -77,7 +101,7 @@ struct DialView: View {
                                 if model.exploring {
                                     model.resetCenter()
                                 } else {
-                                    model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height))
+                                    model.enterManual()
                                 }
                             } label: {
                                 Image(systemName: model.exploring ? "scope" : "location.north.fill")
@@ -90,7 +114,7 @@ struct DialView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(!model.hasLocationPermission || model.gpsLocation == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
-                            .accessibilityLabel(model.exploring ? "現在地に戻り、進行方向を上にする" : "北を上にして手動位置モードにする")
+                            .accessibilityLabel(model.exploring ? "現在地に戻り、進行方向を上にする" : "今の向きのまま手動位置モードにする")
                             .accessibilityValue(model.exploring ? "手動位置モード" : "ヘディングアップモード")
                             .padding(.trailing, 8)
 
@@ -123,10 +147,32 @@ struct DialView: View {
         .sheet(item: selectedMountain) { nearby in
             MountainDetailView(nearby: nearby).fetchErrorAlert(model)
         }
+        .sheet(isPresented: showGroup) {
+            PeakGroupView(peaks: group).fetchErrorAlert(model)
+        }
         // 開いている間も歩けば値が更新される。
         .sheet(isPresented: $showObserver) {
             ObserverDetailView(model: model).fetchErrorAlert(model)
         }
+    }
+
+    /// 手動位置モードの表示(上部の目盛りを隠し、向きの表示とコンパスを出す)。現在地へ戻り始めたらすぐ戻す。
+    private var manualChrome: Bool { model.exploring && !model.returning }
+
+    /// ヘディングアップと手動位置モードを切り替えるときの、方位目盛り・コンパス・視野の扇の動き。
+    private let modeAnimation = Animation.easeInOut(duration: 0.35)
+
+    /// 手動位置モードの左上に出す、端末の向きと現在地の標高。
+    /// ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
+    private var headingLabel: some View {
+        let parts = model.heading.map { readoutParts(headingDeg: $0, altitudeM: model.gpsLocation?.mslAltitudeM) }
+        let text = parts.map { Text("向き \($0.direction)").foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle) }
+            ?? Text("方位を取得中").foregroundColor(tapeInk)
+        return text
+            .font(.system(size: 15 * model.settings.textScale, weight: .bold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(Color.white.opacity(0.5)))
     }
 
     /// 左下: 設定と事前ダウンロード。屋外で押しやすいよう大きめにする。
@@ -152,6 +198,19 @@ struct DialView: View {
                     ?? model.summit.flatMap { $0.mountain.osmId == id ? $0 : nil }
             },
             set: { if $0 == nil { selectedId = nil } }
+        )
+    }
+
+    /// まとめた山のうち、今の一覧にある山。取り直しで消えた山は除く。
+    private var group: [NearbyMountain] {
+        (groupIds ?? []).compactMap { id in model.mountains.first { $0.mountain.osmId == id } }
+    }
+
+    /// 取り直しで一覧の山がすべて消えたら、一覧のシートを閉じる。
+    private var showGroup: Binding<Bool> {
+        Binding(
+            get: { groupIds != nil && !group.isEmpty },
+            set: { if !$0 { groupIds = nil } }
         )
     }
 
@@ -237,12 +296,22 @@ private struct AreaDownloadButton: View {
 
 private struct StatusLine: View {
     let message: String?
+    var labeled = false
 
     var body: some View {
         if let message {
-            Text(message).font(.footnote).foregroundStyle(.black)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+            Group {
+                if labeled {
+                    Text(message).font(.footnote).foregroundStyle(.black)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.white.opacity(0.5)))
+                } else {
+                    Text(message).font(.footnote).foregroundStyle(.black)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
     }
 }
@@ -293,6 +362,38 @@ private struct MountainDetailView: View {
             Spacer()
         }
         .padding(24)
+        .mediumDetent()
+    }
+}
+
+/// 重なる山をまとめた代表の山をタップしたときの一覧。山を選ぶと、その山の詳細を開く。
+private struct PeakGroupView: View {
+    let peaks: [NearbyMountain]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        // iOS 15 でも使えるよう NavigationView にする。
+        NavigationView {
+            List(peaks) { nearby in
+                NavigationLink {
+                    MountainDetailView(nearby: nearby)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(nearby.mountain.name).font(.body)
+                        Text("\(nearby.mountain.elevationText)・\(distanceText(nearby.distanceKm))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("この付近の山")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+        }
+        .navigationViewStyle(.stack)
         .mediumDetent()
     }
 }

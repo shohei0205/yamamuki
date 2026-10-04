@@ -73,6 +73,9 @@ fun distanceText(distanceKm: Double): String =
         String.format(Locale.US, "%,.1f km", distanceKm)
     }
 
+/** 重なって山名を省いた山の数を、代表の山の山名の下に添える文言。「ほか 3 山」。 */
+fun othersText(count: Int): String = "ほか $count 山"
+
 /**
  * 標高が [minElevationM] 以上の山だけにする。0 以下なら絞り込まない。
  * 絞り込むときは、標高が不明な山は基準を満たすか分からないので除く。

@@ -5,6 +5,11 @@ import kotlin.math.*
 data class RingLabelAnchor(val x: Double, val y: Double, val angle: Double)
 
 object RingLabelGeometry {
+    /** 前回のラベルの方向を地図と同じだけ回す。画面座標では方位角の増加と逆向き。 */
+    fun rotatedAngle(angle: Double?, previousHeading: Double?, heading: Double): Double? =
+        if (angle == null || previousHeading == null) angle
+        else angle - Math.toRadians(Heading.delta(previousHeading, heading))
+
     /** 全距離で共通の方向。前の方向で表示できる間は固定し、見切れたら中央へ向け直す。 */
     fun direction(cx: Double, cy: Double, left: Double, top: Double, right: Double, bottom: Double,
         previousAngle: Double? = null, minimumSpan: Double = 48.0, visibleCount: ((Double) -> Int)? = null): Double {
