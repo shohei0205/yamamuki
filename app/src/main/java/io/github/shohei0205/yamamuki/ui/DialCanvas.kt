@@ -47,8 +47,9 @@ import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.RingLabelGeometry
 import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.MapCenter
-import io.github.shohei0205.yamamuki.core.declutter
+import io.github.shohei0205.yamamuki.core.PeakLayout
 import io.github.shohei0205.yamamuki.core.elevationClass
+import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -94,7 +95,8 @@ private class DialTextStyles(scale: Float) {
 /**
  * 方位盤。現在地(画面下部の双眼鏡)から向いている方向を上にとり、山をアイコンと山名で描く。
  * アイコンの色と形は標高の区分([ElevationClass])で変える。
- * [mountains] は表示の優先順(標高の高い順)に並んでいること。重なる山は優先度の低いほうを省く。
+ * 表示する山は、現在地から見上げる角度(仰角)の大きい順に、地図をどの向きに回しても重ならないものを選ぶ([PeakLayout])。
+ * 選び直すのは山の一覧・表示範囲・文字の大きさなどが変わったときだけで、向きを変えただけでは山が入れ替わらない。
  * 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。
  * 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
  * 現在地がほぼ山頂([summit] が非 null)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
@@ -109,7 +111,7 @@ fun DialCanvas(
     onObserverTap: () -> Unit = {},
     /** 現在地がほぼ山頂のとき、その山。 */
     summit: NearbyMountain? = null,
-    /** 現在地の標高(海抜)。方位の表示の後ろに添える。null なら出さない。 */
+    /** 現在地の標高(海抜)。方位の表示の後ろに添え、山の仰角の計算にも使う。null なら出さない(仰角は 0m とみなす)。 */
     altitudeM: Double? = null,
     /** 一度に表示する山の上限。 */
     maxPeaks: Int = 40,
@@ -129,8 +131,9 @@ fun DialCanvas(
     bottomBleed: Dp = 0.dp,
 ) {
     val styles = remember(textScale) { DialTextStyles(textScale) }
-    val textMeasurer = rememberTextMeasurer(cacheSize = 256)
+    val textMeasurer = rememberTextMeasurer(cacheSize = 512)
     val hitTargets = remember { HitTargets() }
+    val peakSelection = remember { PeakSelection() }
     val currentOnTap by rememberUpdatedState(onMountainTap)
     val currentOnObserverTap by rememberUpdatedState(onObserverTap)
     val tapModifier = Modifier.pointerInput(Unit) {
@@ -166,7 +169,7 @@ fun DialCanvas(
                 val previousAngle = RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle, hitTargets.ringLabelHeading, headingDeg)
                 hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, previousAngle, headingUp)
                 hitTargets.ringLabelHeading = headingDeg
-                drawPeaks(observer, pxPerKm, headingDeg, mountains, chartTop, textMeasurer, styles, maxPeaks)
+                drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, maxPeaks, peakSelection)
             } else {
                 emptyList()
             }
@@ -292,40 +295,90 @@ private class HitTargets {
 private fun Box.contains(p: Offset, slop: Float) =
     p.x in left - slop..right + slop && p.y in top - slop..bottom + slop
 
+/** 選んだ山の 1 件。位置は現在地からの px(北が上)、範囲は山の位置を原点にしたもの。 */
+private class SelectedPeak(
+    val mountain: NearbyMountain,
+    val label: TextLayoutResult,
+    val box: Box,
+)
+
+/**
+ * 方位盤に出す山の選択。向きによらずに周り全体から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
+ * 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
+ */
+private class PeakSelection {
+    var key: List<Any?>? = null
+    var selected: List<SelectedPeak> = emptyList()
+    var selectedIds: Set<Long> = emptySet()
+    var drawnIds: Set<Long> = emptySet()
+}
+
+/** 選び直すかどうかを決める、現在地から画面の角までの距離の刻み。地図を少し動かしただけでは選び直さない。 */
+private val REACH_STEP = 64.dp
+
 private fun DrawScope.drawPeaks(
     observer: Offset,
     pxPerKm: Float,
     headingDeg: Double,
     mountains: List<NearbyMountain>,
+    observerAltitudeM: Double?,
     chartTop: Float,
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
     maxPeaks: Int,
+    selection: PeakSelection,
 ): List<PlacedPeak> {
     val gap = 2.dp.toPx()
+    val chartBottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()
 
-    val visible = mountains.asSequence()
-        .map { m ->
-            val o = DialGeometry.project(m.distanceKm, m.bearingDeg, headingDeg)
-            m to Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
-        }
-        .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx() }
-        .map { (m, p) ->
-            val icon = PeakIcon.of(m.mountain.elevationClass())
-            val halfWidth = icon.halfWidthDp.dp.toPx()
-            val label = textMeasurer.measure(m.mountain.name, styles.label)
-            val labelHalf = label.size.width / 2f
-            val box = Box(
-                left = min(p.x - halfWidth, p.x - labelHalf),
-                top = p.y - icon.heightDp.dp.toPx(),
-                right = max(p.x + halfWidth, p.x + labelHalf),
-                bottom = p.y + gap + label.size.height,
-            )
-            PlacedPeak(m, p, label, box)
-        }
+    // 山の位置が画面に入りうる、現在地からの最大の距離(画面の最も遠い角まで)。
+    val farthestCorner = listOf(Offset(0f, chartTop), Offset(size.width, chartTop), Offset(0f, chartBottom), Offset(size.width, chartBottom))
+        .maxOf { (it - observer).getDistance() }
+    val step = REACH_STEP.toPx()
+    val reachPx = ceil(farthestCorner / step) * step
 
-    // 列は遅延評価なので、上限に達したら残りの山名は測らない。
-    val placed = declutter(visible, limit = maxPeaks) { it.box }
+    val key = listOf(mountains, pxPerKm, observerAltitudeM, styles, maxPeaks, reachPx, size.width, chartBottom - chartTop)
+    if (selection.key != key) {
+        val viewArea = size.width.toDouble() * (chartBottom - chartTop)
+        val candidates = PeakLayout.priorityOrder(mountains, observerAltitudeM, selection.selectedIds)
+            .asSequence()
+            .filter { it.distanceKm * pxPerKm <= reachPx }
+            .map { m ->
+                val icon = PeakIcon.of(m.mountain.elevationClass())
+                val halfWidth = icon.halfWidthDp.dp.toPx()
+                val label = textMeasurer.measure(m.mountain.name, styles.label)
+                val labelHalf = label.size.width / 2f
+                val box = Box(
+                    left = min(-halfWidth, -labelHalf),
+                    top = -icon.heightDp.dp.toPx(),
+                    right = max(halfWidth, labelHalf),
+                    bottom = gap + label.size.height,
+                )
+                SelectedPeak(m, label, box)
+            }
+        // 列は遅延評価なので、上限に達したら残りの山名は測らない。
+        selection.selected = PeakLayout.selectAround(
+            candidates,
+            limit = PeakLayout.aroundLimit(maxPeaks, reachPx.toDouble(), viewArea),
+            position = { DialGeometry.project(it.mountain.distanceKm * pxPerKm, it.mountain.bearingDeg, 0.0) },
+            box = { it.box },
+            keptBefore = { it.mountain.mountain.osmId in selection.selectedIds },
+        )
+        selection.selectedIds = selection.selected.mapTo(HashSet()) { it.mountain.mountain.osmId }
+        selection.key = key
+    }
+
+    val visible = selection.selected
+        .map { s ->
+            val o = DialGeometry.project(s.mountain.distanceKm, s.mountain.bearingDeg, headingDeg)
+            s to Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
+        }
+        .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < chartBottom }
+    val placed = PeakLayout.capVisible(visible, maxPeaks) { (s, _) -> s.mountain.mountain.osmId in selection.drawnIds }
+        .map { (s, p) ->
+            PlacedPeak(s.mountain, p, s.label, Box(p.x + s.box.left, p.y + s.box.top, p.x + s.box.right, p.y + s.box.bottom))
+        }
+    selection.drawnIds = placed.mapTo(HashSet()) { it.mountain.mountain.osmId }
 
     for (peak in placed) {
         val p = peak.position

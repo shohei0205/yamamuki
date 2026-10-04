@@ -1,8 +1,11 @@
 package io.github.shohei0205.yamamuki.core
 
+import kotlin.math.PI
+import kotlin.math.hypot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class HeadingTest {
     @Test
@@ -105,36 +108,101 @@ class DialGeometryTest {
     }
 }
 
-class DeclutterTest {
+class PeakLayoutTest {
     private fun m(name: String, ele: Double?, km: Double) =
         NearbyMountain(Mountain(name.hashCode().toLong(), name, 0.0, 0.0, ele), km, 0.0)
 
     @Test
-    fun keepsHigherPriorityWhenOverlapping() {
-        val boxes = mapOf(
-            "A" to Box(0f, 0f, 10f, 10f),
-            "B" to Box(5f, 5f, 15f, 15f),
-            "C" to Box(20f, 0f, 30f, 10f),
-        )
-        assertEquals(listOf("A", "C"), declutter(listOf("A", "B", "C")) { boxes.getValue(it) })
-        assertEquals(listOf("A"), declutter(listOf("A", "B", "C"), limit = 1) { boxes.getValue(it) })
+    fun elevationAngleAccountsForEarthCurve() {
+        // 1km 先の 1000m 上は、ほぼ 45° に見える。
+        assertEquals(45.0, GeoMath.elevationAngleDeg(0.0, 1000.0, 1.0), 0.01)
+        // 100km 先では、地球の丸みで約 683m 沈む(屈折で少し浮き上がった後の値)。
+        assertEquals(0.0, GeoMath.elevationAngleDeg(0.0, 682.8, 100.0), 0.001)
+        assertTrue(GeoMath.elevationAngleDeg(0.0, 600.0, 100.0) < 0.0)
+        // 自分より低い山は負の角度になる。
+        assertTrue(GeoMath.elevationAngleDeg(1500.0, 1400.0, 1.0) < 0.0)
     }
 
     @Test
-    fun stopsPullingItemsAtLimit() {
+    fun priorityPrefersHigherLookingPeaks() {
+        // 近くの低い山は、遠くの高い山より見かけが高いので先。標高不明は最後。
+        val sorted = listOf(m("富士", 3776.0, 80.0), m("不明", null, 0.5), m("裏山", 300.0, 2.0), m("遠い丘", 300.0, 30.0))
+            .sortedWith(displayPriority(observerAltitudeM = 0.0))
+        assertEquals(listOf("裏山", "富士", "遠い丘", "不明"), sorted.map { it.mountain.name })
+    }
+
+    @Test
+    fun priorityUsesObserverAltitude() {
+        val near = m("近い", 1400.0, 1.0)
+        val far = m("遠い", 2000.0, 20.0)
+        assertEquals(listOf("近い", "遠い"), listOf(far, near).sortedWith(displayPriority(null)).map { it.mountain.name })
+        // 自分が 1500m にいると、1400m の山は見下ろすので後ろに回る。
+        assertEquals(listOf("遠い", "近い"), listOf(near, far).sortedWith(displayPriority(1500.0)).map { it.mountain.name })
+    }
+
+    @Test
+    fun keptPeaksGetBonus() {
+        val a = m("A", 1000.0, 10.0)
+        val b = m("B", 1010.0, 10.0)
+        assertEquals(listOf("B", "A"), PeakLayout.priorityOrder(listOf(a, b), 0.0).map { it.mountain.name })
+        // 前回選んだ A は、わずかな差なら B より先に残る。
+        val kept = setOf(a.mountain.osmId)
+        assertEquals(listOf("A", "B"), PeakLayout.priorityOrder(listOf(a, b), 0.0, kept).map { it.mountain.name })
+    }
+
+    private val square = Box(-10f, -10f, 10f, 10f)
+
+    @Test
+    fun clearanceIsFarthestCorner() {
+        assertEquals(hypot(20.0, 20.0), PeakLayout.clearance(square, square), 1e-9)
+        // 山名が下に長く出る範囲どうしでも、縦横それぞれの最大のずれで決まる。
+        val label = Box(-30f, -20f, 30f, 15f)
+        assertEquals(hypot(35.0, 30.0), PeakLayout.clearance(label, square.copy(left = -5f, right = 5f)), 1e-9)
+    }
+
+    @Test
+    fun selectAroundDropsPeaksThatOverlapAtSomeHeading() {
+        val positions = mapOf("A" to PlanOffset(0.0, 0.0), "B" to PlanOffset(25.0, 0.0), "C" to PlanOffset(0.0, 30.0))
+        // B は今の向きでは A と重ならないが、45° 回すと重なるので捨てる。
+        val placed = PeakLayout.selectAround(sequenceOf("A", "B", "C"), position = { positions.getValue(it) }, box = { square })
+        assertEquals(listOf("A", "C"), placed)
+        assertEquals(listOf("A"), PeakLayout.selectAround(sequenceOf("A", "B", "C"), limit = 1, position = { positions.getValue(it) }, box = { square }))
+    }
+
+    @Test
+    fun selectAroundKeepsPreviouslySelectedPairs() {
+        val positions = mapOf("A" to PlanOffset(0.0, 0.0), "B" to PlanOffset(27.0, 0.0))
+        fun select(kept: Set<String>) = PeakLayout.selectAround(sequenceOf("A", "B"),
+            position = { positions.getValue(it) }, box = { square }, keptBefore = { it in kept })
+        assertEquals(listOf("A"), select(emptySet()))
+        // どちらも前回選んでいたら、少し近づいても両方残す。
+        assertEquals(listOf("A", "B"), select(setOf("A", "B")))
+        assertEquals(listOf("A"), select(setOf("A")))
+    }
+
+    @Test
+    fun selectAroundStopsPullingItemsAtLimit() {
         val pulled = mutableListOf<Int>()
         val items = (0 until 10).asSequence().onEach { pulled += it }
-        val placed = declutter(items, limit = 2) { Box(it * 20f, 0f, it * 20f + 10f, 10f) }
+        val placed = PeakLayout.selectAround(items, limit = 2, position = { PlanOffset(it * 100.0, 0.0) }, box = { square })
         assertEquals(listOf(0, 1), placed)
         // 上限に達したあとの項目は取り出さない(山名の計測を省くため)。
         assertEquals(listOf(0, 1), pulled)
     }
 
     @Test
-    fun priorityPrefersHighThenNear() {
-        val sorted = listOf(m("低", 500.0, 1.0), m("不明", null, 0.5), m("高遠", 2000.0, 9.0), m("高近", 2000.0, 3.0))
-            .sortedWith(displayPriority)
-        assertEquals(listOf("高近", "高遠", "低", "不明"), sorted.map { it.mountain.name })
+    fun aroundLimitScalesWithArea() {
+        assertEquals(80, PeakLayout.aroundLimit(40, reachPx = 100.0, viewAreaPx = PI * 100 * 100 / 2))
+        // 円が画面より狭くても、画面の上限より減らさない。
+        assertEquals(40, PeakLayout.aroundLimit(40, reachPx = 10.0, viewAreaPx = 10000.0))
+    }
+
+    @Test
+    fun capVisibleKeepsDrawnPeaks() {
+        assertEquals(listOf("A", "B"), PeakLayout.capVisible(listOf("A", "B", "C"), 2) { false })
+        // 前回描いた C は、優先度の高い B が入ってきても残る。順は優先順のまま。
+        assertEquals(listOf("A", "C"), PeakLayout.capVisible(listOf("A", "B", "C"), 2) { it != "B" })
+        assertEquals(listOf("A", "B", "C"), PeakLayout.capVisible(listOf("A", "B", "C"), 5) { false })
     }
 
     @Test

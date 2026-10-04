@@ -44,7 +44,8 @@ private let outlineWidth: CGFloat = 1.5
 
 /// 方位盤。現在地(画面下部の双眼鏡)から向いている方向を上にとり、山をアイコンと山名で描く。
 /// アイコンの色と形は標高の区分([ElevationClass])で変える。
-/// [mountains] は表示の優先順(標高の高い順)に並んでいること。重なる山は優先度の低いほうを省く。
+/// 表示する山は、現在地から見上げる角度(仰角)の大きい順に、地図をどの向きに回しても重ならないものを選ぶ([PeakLayout])。
+/// 選び直すのは山の一覧・表示範囲・文字の大きさなどが変わったときだけで、向きを変えただけでは山が入れ替わらない。
 /// 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。
 /// 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
 /// 現在地がほぼ山頂([summit] が非 nil)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
@@ -54,7 +55,7 @@ struct DialCanvasView: View, Animatable {
     let rangeKm: Double
     /// 現在地がほぼ山頂のとき、その山。
     let summit: NearbyMountain?
-    /// 現在地の標高(海抜)。方位の表示の後ろに添える。nil なら出さない。
+    /// 現在地の標高(海抜)。方位の表示の後ろに添え、山の仰角の計算にも使う。nil なら出さない(仰角は 0m とみなす)。
     let altitudeM: Double?
     /// 一度に表示する山の上限。
     let maxPeaks: Int
@@ -76,6 +77,7 @@ struct DialCanvasView: View, Animatable {
     let onObserverTap: () -> Void
 
     @State private var hitTargets = HitTargets()
+    @State private var peakSelection = PeakSelection()
 
     /// モードを切り替えるときに、目盛りの出し入れと視野の扇の濃さを少しずつ変えて描き直す。
     var animatableData: AnimatablePair<Double, Double> {
@@ -202,29 +204,63 @@ struct DialCanvasView: View, Animatable {
 
     private func drawPeaks(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, pxPerKm: CGFloat, chartTop: CGFloat, styles: TextStyles) -> [PlacedPeak] {
         let gap: CGFloat = 2
-        // 優先順に置いていき、先に置いた山と重なるものは省く(core の declutter と同じ考え方)。
-        // 上限に達したら残りの山名は測らない。
-        var placed: [PlacedPeak] = []
-        for m in mountains {
-            if placed.count >= maxPeaks { break }
-            let o = DialGeometry.project(distanceKm: m.distanceKm, bearingDeg: m.bearingDeg, headingDeg: headingDeg)
-            let p = CGPoint(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
-            guard p.x >= 0, p.x <= size.width, p.y - PeakIcon.maxHeight >= chartTop, p.y < size.height - originBottom else { continue }
-            let icon = PeakIcon.of(m.mountain.elevationClass)
-            let label = measuredText(ctx, m.mountain.name, size: styles.label, color: .black)
-            let labelHalf = label.size.width / 2
-            let box = ScreenBox(
-                left: Double(min(p.x - icon.halfWidth, p.x - labelHalf)),
-                top: Double(p.y - icon.height),
-                right: Double(max(p.x + icon.halfWidth, p.x + labelHalf)),
-                bottom: Double(p.y + gap + label.size.height)
+        let chartBottom = size.height - originBottom
+
+        // 山の位置が画面に入りうる、現在地からの最大の距離(画面の最も遠い角まで)。
+        let corners = [CGPoint(x: 0, y: chartTop), CGPoint(x: size.width, y: chartTop), CGPoint(x: 0, y: chartBottom), CGPoint(x: size.width, y: chartBottom)]
+        let farthestCorner = corners.map { hypot($0.x - observer.x, $0.y - observer.y) }.max() ?? 0
+        let reach = (farthestCorner / reachStep).rounded(.up) * reachStep
+
+        let key = PeakSelection.Key(mountains: mountains, pxPerKm: pxPerKm, observerAltitudeM: altitudeM,
+            textScale: textScale, maxPeaks: maxPeaks, reach: reach, width: size.width, chartHeight: chartBottom - chartTop)
+        let selection = peakSelection
+        if selection.key != key {
+            let viewArea = Double(size.width * (chartBottom - chartTop))
+            let candidates = PeakLayout.priorityOrder(mountains, observerAltitudeM: altitudeM, keptIds: selection.selectedIds)
+                .lazy
+                .filter { CGFloat($0.distanceKm) * pxPerKm <= reach }
+                .map { m -> SelectedPeak in
+                    let icon = PeakIcon.of(m.mountain.elevationClass)
+                    let label = measuredText(ctx, m.mountain.name, size: styles.label, color: .black)
+                    let labelHalf = label.size.width / 2
+                    let box = ScreenBox(
+                        left: Double(min(-icon.halfWidth, -labelHalf)),
+                        top: Double(-icon.height),
+                        right: Double(max(icon.halfWidth, labelHalf)),
+                        bottom: Double(gap + label.size.height)
+                    )
+                    return SelectedPeak(mountain: m, box: box)
+                }
+            // 列は遅延評価なので、上限に達したら残りの山名は測らない。
+            selection.selected = PeakLayout.selectAround(
+                candidates,
+                limit: PeakLayout.aroundLimit(maxPeaks: maxPeaks, reach: Double(reach), viewArea: viewArea),
+                position: { DialGeometry.project(distanceKm: $0.mountain.distanceKm * Double(pxPerKm), bearingDeg: $0.mountain.bearingDeg, headingDeg: 0) },
+                box: { $0.box },
+                keptBefore: { selection.selectedIds.contains($0.mountain.mountain.osmId) }
             )
-            guard !placed.contains(where: { $0.box.intersects(box) }) else { continue }
-            placed.append(PlacedPeak(mountain: m, position: p, box: box))
-            drawPeakIcon(ctx, at: p, icon: icon)
-            ctx.draw(label.text, at: CGPoint(x: p.x - labelHalf, y: p.y + gap), anchor: .topLeading)
+            selection.selectedIds = Set(selection.selected.map { $0.mountain.mountain.osmId })
+            selection.key = key
         }
-        return placed
+
+        let visible: [(SelectedPeak, CGPoint)] = selection.selected.compactMap { s -> (SelectedPeak, CGPoint)? in
+            let o = DialGeometry.project(distanceKm: s.mountain.distanceKm, bearingDeg: s.mountain.bearingDeg, headingDeg: headingDeg)
+            let p = CGPoint(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
+            guard p.x >= 0, p.x <= size.width, p.y - PeakIcon.maxHeight >= chartTop, p.y < chartBottom else { return nil }
+            return (s, p)
+        }
+        let drawn = PeakLayout.capVisible(visible, limit: maxPeaks) { selection.drawnIds.contains($0.0.mountain.mountain.osmId) }
+        selection.drawnIds = Set(drawn.map { $0.0.mountain.mountain.osmId })
+
+        return drawn.map { item -> PlacedPeak in
+            let (s, p) = item
+            let label = measuredText(ctx, s.mountain.mountain.name, size: styles.label, color: .black)
+            drawPeakIcon(ctx, at: p, icon: PeakIcon.of(s.mountain.mountain.elevationClass))
+            ctx.draw(label.text, at: CGPoint(x: p.x - label.size.width / 2, y: p.y + gap), anchor: .topLeading)
+            return PlacedPeak(mountain: s.mountain, position: p, box: ScreenBox(
+                left: Double(p.x) + s.box.left, top: Double(p.y) + s.box.top,
+                right: Double(p.x) + s.box.right, bottom: Double(p.y) + s.box.bottom))
+        }
     }
 
     private func drawPeakIcon(_ ctx: GraphicsContext, at p: CGPoint, icon: PeakIcon) {
@@ -475,6 +511,35 @@ private struct MeasuredText {
 private func measuredText(_ ctx: GraphicsContext, _ string: String, size: CGFloat, color: Color) -> MeasuredText {
     let text = ctx.resolve(Text(string).font(.system(size: size, weight: .bold)).foregroundColor(color))
     return MeasuredText(text: text, size: text.measure(in: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)))
+}
+
+/// 選んだ山の 1 件。範囲は山の位置を原点にしたアイコンと山名の範囲。
+private struct SelectedPeak {
+    let mountain: NearbyMountain
+    let box: ScreenBox
+}
+
+/// 選び直すかどうかを決める、現在地から画面の角までの距離の刻み。地図を少し動かしただけでは選び直さない。
+private let reachStep: CGFloat = 64
+
+/// 方位盤に出す山の選択。向きによらずに周り全体から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
+/// 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
+private final class PeakSelection {
+    struct Key: Equatable {
+        let mountains: [NearbyMountain]
+        let pxPerKm: CGFloat
+        let observerAltitudeM: Double?
+        let textScale: Double
+        let maxPeaks: Int
+        let reach: CGFloat
+        let width: CGFloat
+        let chartHeight: CGFloat
+    }
+
+    var key: Key?
+    var selected: [SelectedPeak] = []
+    var selectedIds: Set<Int64> = []
+    var drawnIds: Set<Int64> = []
 }
 
 private struct PlacedPeak {

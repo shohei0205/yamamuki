@@ -14,7 +14,6 @@ import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.OverpassException
-import io.github.shohei0205.yamamuki.core.displayPriority
 import io.github.shohei0205.yamamuki.core.meetsMinElevation
 import io.github.shohei0205.yamamuki.core.seenFrom
 import io.github.shohei0205.yamamuki.core.summitAt
@@ -50,7 +49,7 @@ data class DialUiState(
     /** 右下のボタンで現在地へ戻っている途中。[exploring] は戻り終わるまで true のまま。 */
     val returning: Boolean = false,
     val lockedHeading: Double? = null,
-    /** 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。 */
+    /** 現在地から見た山。最低標高で絞り込んだもの。表示する山の選び方と順は方位盤で決める。現在地が変わるたびに計算し直す。 */
     val mountains: List<NearbyMountain> = emptyList(),
     /**
      * 現在地がほぼ山頂([io.github.shohei0205.yamamuki.core.SUMMIT_RADIUS_KM] 以内)のとき、その山。
@@ -386,8 +385,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val minElevation = settings.minElevationM
         return copy(
             mountains = all
-                .filter { it.mountain.osmId != summit?.mountain?.osmId && it.mountain.meetsMinElevation(minElevation) }
-                .sortedWith(displayPriority),
+                .filter { it.mountain.osmId != summit?.mountain?.osmId && it.mountain.meetsMinElevation(minElevation) },
             summit = summit,
         )
     }
