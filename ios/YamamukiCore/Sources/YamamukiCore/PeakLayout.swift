@@ -71,8 +71,9 @@ public enum PeakLayout {
         keptBefore: (S.Element) -> Bool = { _ in false }
     ) -> [S.Element] {
         var placed: [(item: S.Element, at: PlanOffset, box: ScreenBox, kept: Bool)] = []
+        guard limit > 0 else { return [] }
+        // for-in は次の項目を取り出してから本体に入るので、上限の確認は置いた直後にする。
         for item in items {
-            if placed.count >= limit { break }
             let at = position(item)
             let b = box(item)
             let kept = keptBefore(item)
@@ -80,7 +81,10 @@ public enum PeakLayout {
                 let ratio = kept && p.kept ? keptClearanceRatio : 1
                 return hypot(at.x - p.at.x, at.y - p.at.y) < clearance(b, p.box) * ratio
             }
-            if clear { placed.append((item: item, at: at, box: b, kept: kept)) }
+            if clear {
+                placed.append((item: item, at: at, box: b, kept: kept))
+                if placed.count >= limit { break }
+            }
         }
         return placed.map(\.item)
     }
