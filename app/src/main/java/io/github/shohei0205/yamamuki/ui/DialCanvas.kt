@@ -95,8 +95,8 @@ private class DialTextStyles(scale: Float) {
 /**
  * 方位盤。現在地(画面下部の双眼鏡)から向いている方向を上にとり、山をアイコンと山名で描く。
  * アイコンの色と形は標高の区分([ElevationClass])で変える。
- * 表示する山は、現在地から見上げる角度(仰角)の大きい順に、地図をどの向きに回しても重ならないものを選ぶ([PeakLayout])。
- * 選び直すのは山の一覧・表示範囲・文字の大きさなどが変わったときだけで、向きを変えただけでは山が入れ替わらない。
+ * 表示する山は、現在地から見上げる角度(仰角)の大きい順に選び、すぐそばの山どうしは標高の高いほうを残す([PeakLayout])。
+ * 画面に描くときは前回描いた山を先に置くので、向きを変えても、描いている山は実際に重なるまで消えない。
  * 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。
  * 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
  * 現在地がほぼ山頂([summit] が非 null)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
@@ -303,7 +303,7 @@ private class SelectedPeak(
 )
 
 /**
- * 方位盤に出す山の選択。向きによらずに周り全体から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
+ * 方位盤に出す山の候補。向きによらずに周り全体から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
  * 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
  */
 private class PeakSelection {
@@ -315,6 +315,9 @@ private class PeakSelection {
 
 /** 選び直すかどうかを決める、現在地から画面の角までの距離の刻み。地図を少し動かしただけでは選び直さない。 */
 private val REACH_STEP = 64.dp
+
+/** 新しく画面に出す山に求める、ほかの山との余白。境目で出たり消えたりしないようにする。 */
+private val NEW_PEAK_MARGIN = 4.dp
 
 private fun DrawScope.drawPeaks(
     observer: Offset,
@@ -362,6 +365,8 @@ private fun DrawScope.drawPeaks(
             limit = PeakLayout.aroundLimit(maxPeaks, reachPx.toDouble(), viewArea),
             position = { DialGeometry.project(it.mountain.distanceKm * pxPerKm, it.mountain.bearingDeg, 0.0) },
             box = { it.box },
+            neighbors = { a, b -> PeakLayout.areNeighbors(a.mountain, b.mountain) },
+            higher = { a, b -> PeakLayout.isHigher(a.mountain, b.mountain) },
             keptBefore = { it.mountain.mountain.osmId in selection.selectedIds },
         )
         selection.selectedIds = selection.selected.mapTo(HashSet()) { it.mountain.mountain.osmId }
@@ -374,10 +379,16 @@ private fun DrawScope.drawPeaks(
             s to Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
         }
         .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < chartBottom }
-    val placed = PeakLayout.capVisible(visible, maxPeaks) { (s, _) -> s.mountain.mountain.osmId in selection.drawnIds }
         .map { (s, p) ->
             PlacedPeak(s.mountain, p, s.label, Box(p.x + s.box.left, p.y + s.box.top, p.x + s.box.right, p.y + s.box.bottom))
         }
+    val placed = PeakLayout.placeVisible(
+        visible,
+        limit = maxPeaks,
+        box = { it.box },
+        drawnBefore = { it.mountain.mountain.osmId in selection.drawnIds },
+        margin = NEW_PEAK_MARGIN.toPx(),
+    )
     selection.drawnIds = placed.mapTo(HashSet()) { it.mountain.mountain.osmId }
 
     for (peak in placed) {

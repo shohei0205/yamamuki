@@ -112,31 +112,56 @@ final class PeakLayoutTests: XCTestCase {
         XCTAssertEqual(PeakLayout.clearance(label, narrow), hypot(35, 30), accuracy: 1e-9)
     }
 
-    func testSelectAroundDropsPeaksThatOverlapAtSomeHeading() {
-        let positions = ["A": PlanOffset(x: 0, y: 0), "B": PlanOffset(x: 25, y: 0), "C": PlanOffset(x: 0, y: 30)]
-        // B は今の向きでは A と重ならないが、45° 回すと重なるので捨てる。
-        XCTAssertEqual(PeakLayout.selectAround(["A", "B", "C"], position: { positions[$0]! }, box: { _ in square }), ["A", "C"])
-        XCTAssertEqual(PeakLayout.selectAround(["A", "B", "C"], limit: 1, position: { positions[$0]! }, box: { _ in square }), ["A"])
+    /// 名前の 1 文字目が同じ山を同じ山塊とし、名前の数字を標高とみなす。
+    private func selectAround(_ items: [String], _ positions: [String: PlanOffset], kept: Set<String> = []) -> [String] {
+        PeakLayout.selectAround(items, position: { positions[$0]! }, box: { _ in square },
+            neighbors: { $0.first == $1.first }, higher: { Int($0.dropFirst())! > Int($1.dropFirst())! },
+            keptBefore: { kept.contains($0) })
+    }
+
+    func testSelectAroundKeepsMainPeakOfNeighbors() {
+        // A2 は今の向きでは A1 と重ならないが、45° 回すと重なる。同じ山塊なので標高の高い A2 だけを残す。
+        let positions = ["A1": PlanOffset(x: 0, y: 0), "A2": PlanOffset(x: 25, y: 0), "A3": PlanOffset(x: 0, y: 100)]
+        XCTAssertEqual(selectAround(["A1", "A2", "A3"], positions), ["A2", "A3"])
+        XCTAssertEqual(selectAround(["A2", "A1", "A3"], positions), ["A2", "A3"])
+    }
+
+    func testSelectAroundKeepsPeaksOfOtherMassifs() {
+        // 別の山塊の山は、重なりうる位置でもここでは省かない(描くときに今の向きで判定する)。
+        let positions = ["A1": PlanOffset(x: 0, y: 0), "B1": PlanOffset(x: 5, y: 0)]
+        XCTAssertEqual(selectAround(["A1", "B1"], positions), ["A1", "B1"])
     }
 
     func testSelectAroundKeepsPreviouslySelectedPairs() {
-        let positions = ["A": PlanOffset(x: 0, y: 0), "B": PlanOffset(x: 27, y: 0)]
-        func select(_ kept: Set<String>) -> [String] {
-            PeakLayout.selectAround(["A", "B"], position: { positions[$0]! }, box: { _ in square }, keptBefore: { kept.contains($0) })
-        }
-        XCTAssertEqual(select([]), ["A"])
+        let positions = ["A2": PlanOffset(x: 0, y: 0), "A1": PlanOffset(x: 27, y: 0)]
+        XCTAssertEqual(selectAround(["A2", "A1"], positions), ["A2"])
         // どちらも前回選んでいたら、少し近づいても両方残す。
-        XCTAssertEqual(select(["A", "B"]), ["A", "B"])
-        XCTAssertEqual(select(["A"]), ["A"])
+        XCTAssertEqual(selectAround(["A2", "A1"], positions, kept: ["A2", "A1"]), ["A2", "A1"])
+        XCTAssertEqual(selectAround(["A2", "A1"], positions, kept: ["A2"]), ["A2"])
     }
 
     func testSelectAroundStopsPullingItemsAtLimit() {
         var pulled: [Int] = []
         let items = (0..<10).lazy.map { i -> Int in pulled.append(i); return i }
-        let placed = PeakLayout.selectAround(items, limit: 2, position: { PlanOffset(x: Double($0) * 100, y: 0) }, box: { _ in square })
+        let placed = PeakLayout.selectAround(items, limit: 2, position: { PlanOffset(x: Double($0) * 100, y: 0) }, box: { _ in square },
+            neighbors: { _, _ in true }, higher: { _, _ in false })
         XCTAssertEqual(placed, [0, 1])
         // 上限に達したあとの項目は取り出さない(山名の計測を省くため)。
         XCTAssertEqual(pulled, [0, 1])
+    }
+
+    func testNeighborsAndHeight() {
+        func at(_ name: String, _ lat: Double, _ ele: Double?) -> NearbyMountain {
+            NearbyMountain(mountain: Mountain(osmId: Int64(name.hashValue), name: name, latitude: lat, longitude: 137, elevationM: ele), distanceKm: 5, bearingDeg: 0)
+        }
+        let oku = at("奥穂高岳", 36.2894, 3190)
+        let jandarme = at("ジャンダルム", 36.2862, 3163)
+        let far = at("遠い山", 36.40, 3000)
+        XCTAssertTrue(PeakLayout.areNeighbors(oku, jandarme))
+        XCTAssertFalse(PeakLayout.areNeighbors(oku, far))
+        XCTAssertTrue(PeakLayout.isHigher(oku, jandarme))
+        XCTAssertFalse(PeakLayout.isHigher(jandarme, oku))
+        XCTAssertTrue(PeakLayout.isHigher(jandarme, at("不明", 36.2862, nil)))
     }
 
     func testAroundLimitScalesWithArea() {
@@ -145,11 +170,27 @@ final class PeakLayoutTests: XCTestCase {
         XCTAssertEqual(PeakLayout.aroundLimit(maxPeaks: 40, reach: 10, viewArea: 10000), 40)
     }
 
-    func testCapVisibleKeepsDrawnPeaks() {
-        XCTAssertEqual(PeakLayout.capVisible(["A", "B", "C"], limit: 2) { _ in false }, ["A", "B"])
-        // 前回描いた C は、優先度の高い B が入ってきても残る。順は優先順のまま。
-        XCTAssertEqual(PeakLayout.capVisible(["A", "B", "C"], limit: 2) { $0 != "B" }, ["A", "C"])
-        XCTAssertEqual(PeakLayout.capVisible(["A", "B", "C"], limit: 5) { _ in false }, ["A", "B", "C"])
+    private func boxAt(_ x: Double) -> ScreenBox { ScreenBox(left: x, top: 0, right: x + 10, bottom: 10) }
+
+    func testPlaceVisibleDropsOverlapsAtCurrentHeading() {
+        let boxes = ["A": boxAt(0), "B": boxAt(5), "C": boxAt(20)]
+        XCTAssertEqual(PeakLayout.placeVisible(["A", "B", "C"], limit: 10, box: { boxes[$0]! }, drawnBefore: { _ in false }), ["A", "C"])
+        XCTAssertEqual(PeakLayout.placeVisible(["A", "B", "C"], limit: 1, box: { boxes[$0]! }, drawnBefore: { _ in false }), ["A"])
+    }
+
+    func testPlaceVisibleKeepsDrawnPeaks() {
+        let boxes = ["A": boxAt(0), "B": boxAt(5), "C": boxAt(40)]
+        // 前回描いた B は、優先度の高い A が入ってきても残る。順は優先順のまま。
+        XCTAssertEqual(PeakLayout.placeVisible(["A", "B", "C"], limit: 10, box: { boxes[$0]! }, drawnBefore: { $0 != "A" }), ["B", "C"])
+        // 上限に達しているときも、前回描いた山を先に残す。
+        XCTAssertEqual(PeakLayout.placeVisible(["A", "C"], limit: 1, box: { boxes[$0]! }, drawnBefore: { $0 == "C" }), ["C"])
+    }
+
+    func testPlaceVisibleNeedsMarginForNewPeaks() {
+        let boxes = ["A": boxAt(0), "B": boxAt(12)]
+        // 2pt しか離れていない B は、新しく出すときは余白 4pt に足りないので出さないが、描いているなら残す。
+        XCTAssertEqual(PeakLayout.placeVisible(["A", "B"], limit: 10, box: { boxes[$0]! }, drawnBefore: { $0 == "A" }, margin: 4), ["A"])
+        XCTAssertEqual(PeakLayout.placeVisible(["A", "B"], limit: 10, box: { boxes[$0]! }, drawnBefore: { _ in true }, margin: 4), ["A", "B"])
     }
 
     func testElevationClass() {

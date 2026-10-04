@@ -44,8 +44,8 @@ private let outlineWidth: CGFloat = 1.5
 
 /// 方位盤。現在地(画面下部の双眼鏡)から向いている方向を上にとり、山をアイコンと山名で描く。
 /// アイコンの色と形は標高の区分([ElevationClass])で変える。
-/// 表示する山は、現在地から見上げる角度(仰角)の大きい順に、地図をどの向きに回しても重ならないものを選ぶ([PeakLayout])。
-/// 選び直すのは山の一覧・表示範囲・文字の大きさなどが変わったときだけで、向きを変えただけでは山が入れ替わらない。
+/// 表示する山は、現在地から見上げる角度(仰角)の大きい順に選び、すぐそばの山どうしは標高の高いほうを残す([PeakLayout])。
+/// 画面に描くときは前回描いた山を先に置くので、向きを変えても、描いている山は実際に重なるまで消えない。
 /// 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。
 /// 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
 /// 現在地がほぼ山頂([summit] が非 nil)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
@@ -237,30 +237,38 @@ struct DialCanvasView: View, Animatable {
                 limit: PeakLayout.aroundLimit(maxPeaks: maxPeaks, reach: Double(reach), viewArea: viewArea),
                 position: { DialGeometry.project(distanceKm: $0.mountain.distanceKm * Double(pxPerKm), bearingDeg: $0.mountain.bearingDeg, headingDeg: 0) },
                 box: { $0.box },
+                neighbors: { PeakLayout.areNeighbors($0.mountain, $1.mountain) },
+                higher: { PeakLayout.isHigher($0.mountain, $1.mountain) },
                 keptBefore: { selection.selectedIds.contains($0.mountain.mountain.osmId) }
             )
             selection.selectedIds = Set(selection.selected.map { $0.mountain.mountain.osmId })
             selection.key = key
         }
 
-        let visible: [(SelectedPeak, CGPoint)] = selection.selected.compactMap { s -> (SelectedPeak, CGPoint)? in
+        let visible: [PlacedPeak] = selection.selected.compactMap { s -> PlacedPeak? in
             let o = DialGeometry.project(distanceKm: s.mountain.distanceKm, bearingDeg: s.mountain.bearingDeg, headingDeg: headingDeg)
             let p = CGPoint(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
             guard p.x >= 0, p.x <= size.width, p.y - PeakIcon.maxHeight >= chartTop, p.y < chartBottom else { return nil }
-            return (s, p)
-        }
-        let drawn = PeakLayout.capVisible(visible, limit: maxPeaks) { selection.drawnIds.contains($0.0.mountain.mountain.osmId) }
-        selection.drawnIds = Set(drawn.map { $0.0.mountain.mountain.osmId })
-
-        return drawn.map { item -> PlacedPeak in
-            let (s, p) = item
-            let label = measuredText(ctx, s.mountain.mountain.name, size: styles.label, color: .black)
-            drawPeakIcon(ctx, at: p, icon: PeakIcon.of(s.mountain.mountain.elevationClass))
-            ctx.draw(label.text, at: CGPoint(x: p.x - label.size.width / 2, y: p.y + gap), anchor: .topLeading)
             return PlacedPeak(mountain: s.mountain, position: p, box: ScreenBox(
                 left: Double(p.x) + s.box.left, top: Double(p.y) + s.box.top,
                 right: Double(p.x) + s.box.right, bottom: Double(p.y) + s.box.bottom))
         }
+        let placed = PeakLayout.placeVisible(
+            visible,
+            limit: maxPeaks,
+            box: { $0.box },
+            drawnBefore: { selection.drawnIds.contains($0.mountain.mountain.osmId) },
+            margin: newPeakMargin
+        )
+        selection.drawnIds = Set(placed.map { $0.mountain.mountain.osmId })
+
+        for peak in placed {
+            let p = peak.position
+            let label = measuredText(ctx, peak.mountain.mountain.name, size: styles.label, color: .black)
+            drawPeakIcon(ctx, at: p, icon: PeakIcon.of(peak.mountain.mountain.elevationClass))
+            ctx.draw(label.text, at: CGPoint(x: p.x - label.size.width / 2, y: p.y + gap), anchor: .topLeading)
+        }
+        return placed
     }
 
     private func drawPeakIcon(_ ctx: GraphicsContext, at p: CGPoint, icon: PeakIcon) {
@@ -522,7 +530,10 @@ private struct SelectedPeak {
 /// 選び直すかどうかを決める、現在地から画面の角までの距離の刻み。地図を少し動かしただけでは選び直さない。
 private let reachStep: CGFloat = 64
 
-/// 方位盤に出す山の選択。向きによらずに周り全体から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
+/// 新しく画面に出す山に求める、ほかの山との余白(pt)。境目で出たり消えたりしないようにする。
+private let newPeakMargin = 4.0
+
+/// 方位盤に出す山の候補。向きによらずに周り全体から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
 /// 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
 private final class PeakSelection {
     struct Key: Equatable {
