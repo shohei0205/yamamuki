@@ -99,12 +99,18 @@ interface MountainDao {
     }
 }
 
-@Database(entities = [MountainEntity::class, FetchedTileEntity::class], version = 1)
+/**
+ * 山データのキャッシュ。版([VERSION])を上げるときは、同じ PR で古い版からの移行も入れる(MountainMigrations.kt)。
+ */
+@Database(entities = [MountainEntity::class, FetchedTileEntity::class], version = MountainDatabase.VERSION)
 abstract class MountainDatabase : RoomDatabase() {
     abstract fun mountainDao(): MountainDao
 
     companion object {
         const val FILE_NAME = "mountains.db"
+
+        /** DB の版。テーブルや列を変えたら上げる。書き出したスキーマは app/schemas/ に版ごとに残す。 */
+        const val VERSION = 1
 
         /**
          * 端末の DB がこのアプリより新しい版のとき(新しい版の開発版を入れたあとで古い版に戻したとき)は、
@@ -112,6 +118,7 @@ abstract class MountainDatabase : RoomDatabase() {
          */
         fun create(context: Context, onCacheReset: () -> Unit): MountainDatabase =
             Room.databaseBuilder(context, MountainDatabase::class.java, FILE_NAME)
+                .addMigrations(*MOUNTAIN_MIGRATIONS)
                 .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onDestructiveMigration(db: SupportSQLiteDatabase) = onCacheReset()
