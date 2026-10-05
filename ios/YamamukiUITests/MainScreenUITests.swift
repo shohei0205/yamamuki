@@ -1,7 +1,7 @@
 import XCTest
 
 /// 方位盤の画面を実際に起動して操作する UI テスト。実機でもシミュレータでも動く。
-/// 実機で動かすと、端末に入っている山むきの設定(通信の同意など)をそのまま使い、初回の確認には「はい」で答える。
+/// 実機で動かすと、端末に入っている山むきの設定をそのまま使い、位置情報の許可には「使用中は許可」で答える。
 final class MainScreenUITests: XCTestCase {
     private let app = XCUIApplication()
     private let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -14,7 +14,6 @@ final class MainScreenUITests: XCTestCase {
 
     func testMainScreenShowsButtons() {
         XCTAssertTrue(app.buttons["設定"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["山データの事前ダウンロード"].exists)
         XCTAssertTrue(app.staticTexts["© OpenStreetMap contributors"].exists)
         attachScreenshot("方位盤")
     }
@@ -23,8 +22,21 @@ final class MainScreenUITests: XCTestCase {
         openSheet(button: "設定", title: "設定")
     }
 
-    func testAreaDownloadOpensAndCloses() {
-        openSheet(button: "山データの事前ダウンロード", title: "事前ダウンロード")
+    /// 山データは設定画面から取得する(事前ダウンロードのボタンは Features.areaDownload で隠している)。
+    func testSettingsShowsPeakDataButton() {
+        let opener = app.buttons["設定"]
+        XCTAssertTrue(opener.waitForExistence(timeout: 10))
+        dismissFetchErrorIfShown()
+        opener.tap()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        // 設定の一覧は画面に入った行だけが作られるので、見つかるまで上へめくる。
+        let update = app.buttons.matching(NSPredicate(format: "label == '山データを取得' OR label == '最新の山データを確認'")).firstMatch
+        for _ in 0..<4 where !update.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(update.exists)
+        attachScreenshot("設定の山データ")
+        app.navigationBars["設定"].buttons["閉じる"].tap()
     }
 
     /// 左下のボタンでシートを開き、画面を撮ってから「閉じる」で閉じる。
@@ -42,11 +54,12 @@ final class MainScreenUITests: XCTestCase {
         XCTAssertTrue(waitForDisappearance(of: bar))
     }
 
-    /// 初回起動の確認に答える。通信の同意と位置情報の許可は、どちらも 1 度答えると出なくなる。
+    /// 初回起動の確認に答える。山データの取得と位置情報の許可は 1 度答えると出なくなる。
+    /// 山データの取得には「あとで」で答え、テストのたびに通信しないようにする。
     private func answerFirstLaunchPrompts() {
-        let consent = app.alerts["山データの取得"]
-        if consent.waitForExistence(timeout: 3) {
-            consent.buttons["はい"].tap()
+        let peakData = app.alerts["山データの取得"]
+        if peakData.waitForExistence(timeout: 2) {
+            peakData.buttons["あとで"].tap()
         }
         let allow = app.buttons["許可する"]
         if allow.waitForExistence(timeout: 2) {

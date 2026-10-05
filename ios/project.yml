@@ -30,6 +30,10 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+      # 山データの manifest は、Debug は開発版(peaks-dev/)、Release は正式版(peaks/)を読む(DialModel.peakDataDev)。
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PEAK_DATA_DEV"
   # 画面を実際に操作する UI テスト(XCUITest)。実機でもシミュレータでも動く。
   YamamukiUITests:
     type: bundle.ui-testing

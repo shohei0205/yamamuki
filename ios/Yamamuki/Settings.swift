@@ -5,8 +5,6 @@ import YamamukiCore
 struct Settings: Codable, Equatable {
     /// この標高(m)以上の山だけ方位盤に出す。0 なら絞り込まない。
     var minElevationM = 0
-    /// 自動では山データを取得せず、方位盤の左下の更新ボタンを押したときだけ取得する。
-    var manualFetch = false
     /// 方位盤を表示している間は画面を消さない。
     var keepScreenOn = false
     /// 方位盤に一度に出す山の上限。
@@ -15,16 +13,11 @@ struct Settings: Codable, Equatable {
     var textScale = 1.0
     /// 起動時の表示範囲(現在地から画面上端までの距離)。
     var initialRangeKm = Int(DialGeometry.defaultRangeKm)
-    /// 取得した山データを取り直さずに使う日数。
-    var cacheMaxAgeDays = 30
-    /// 初回起動時の「山データを自動で取得してよいか」に答えた。答えるまでは通信しない。
-    var networkConsentAsked = false
-
-    var cacheMaxAge: TimeInterval { TimeInterval(cacheMaxAgeDays) * 24 * 60 * 60 }
+    /// 初回起動時の「山データを取得しますか」に答えた。答えるまでは位置情報の許可を求めない(ダイアログを重ねない)。
+    var peakDataAsked = false
 
     static let textScales = [0.85, 1.0, 1.2, 1.4]
     static let initialRangesKm = [5, 10, 15, 20, 30, 50]
-    static let cacheMaxAgeDaysOptions = [7, 30, 90, 180, 365]
     static let maxPeaksRange = 10...100
 
     init() {}
@@ -34,13 +27,11 @@ struct Settings: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Settings()
         minElevationM = try c.decodeIfPresent(Int.self, forKey: .minElevationM) ?? d.minElevationM
-        manualFetch = try c.decodeIfPresent(Bool.self, forKey: .manualFetch) ?? d.manualFetch
         keepScreenOn = try c.decodeIfPresent(Bool.self, forKey: .keepScreenOn) ?? d.keepScreenOn
         maxPeaks = try c.decodeIfPresent(Int.self, forKey: .maxPeaks) ?? d.maxPeaks
         textScale = try c.decodeIfPresent(Double.self, forKey: .textScale) ?? d.textScale
         initialRangeKm = try c.decodeIfPresent(Int.self, forKey: .initialRangeKm) ?? d.initialRangeKm
-        cacheMaxAgeDays = try c.decodeIfPresent(Int.self, forKey: .cacheMaxAgeDays) ?? d.cacheMaxAgeDays
-        networkConsentAsked = try c.decodeIfPresent(Bool.self, forKey: .networkConsentAsked) ?? d.networkConsentAsked
+        peakDataAsked = try c.decodeIfPresent(Bool.self, forKey: .peakDataAsked) ?? d.peakDataAsked
     }
 }
 

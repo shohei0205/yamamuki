@@ -47,7 +47,7 @@ struct DialView: View {
                 .animation(modeAnimation, value: manualChrome)
                 .animation(modeAnimation, value: model.exploring)
 
-                if model.settings.networkConsentAsked && !model.hasLocationPermission {
+                if model.settings.peakDataAsked && !model.hasLocationPermission {
                     PermissionRequest(denied: model.authorization == .denied || model.authorization == .restricted) {
                         model.requestLocationPermission()
                     }
@@ -57,17 +57,10 @@ struct DialView: View {
                         StatusLine(
                             // 方位が無効なあいだは方位の値が届かないので、値の有無にかかわらず出す。
                             message: model.headingAccuracyLow ? "コンパス補正中。8の字に動かしてください" : nil,
-                            actionLabel: nil,
-                            onAction: {},
                             // 距離の円が文字の後ろを通っても読めるよう、方位の札と同じ淡い白の札にする。
                             labeled: true
                         )
-                        StatusLine(
-                            message: statusMessage,
-                            // 手動取得モードでは左下の更新ボタンで取り直すので、ここには出さない。
-                            actionLabel: model.offline && model.isConnected && !model.loading && !model.settings.manualFetch ? "再取得" : nil,
-                            onAction: model.retry
-                        )
+                        StatusLine(message: statusMessage)
                         Spacer()
                     }
                     .padding(.top, CGFloat(DialGeometry.chartTop))
@@ -101,7 +94,12 @@ struct DialView: View {
                 VStack {
                     Spacer()
                     HStack(alignment: .bottom) {
-                        bottomButtons
+                        // 右下のモード切替ボタンと同じ高さにそろえるため、下に出典の文字 1 行分の高さをあける。
+                        VStack(alignment: .leading, spacing: 12) {
+                            bottomButtons
+                            Text("©").font(.caption2).hidden()
+                        }
+                        .padding(.leading, 8)
                         Spacer()
                         VStack(alignment: .trailing, spacing: 12) {
                             Button {
@@ -143,16 +141,14 @@ struct DialView: View {
         .onReceive(model.$settings.map(\.keepScreenOn).removeDuplicates()) { on in
             UIApplication.shared.isIdleTimerDisabled = on
         }
-        .alert("山データの取得", isPresented: .constant(!model.settings.networkConsentAsked)) {
-            Button("はい") { model.answerNetworkConsent(allow: true) }
-            Button("いいえ") { model.answerNetworkConsent(allow: false) }
+        .alert("山データの取得", isPresented: .constant(!model.settings.peakDataAsked)) {
+            Button("あとで") { model.answerPeakDataPrompt(allow: false) }
+            Button("取得する") { model.answerPeakDataPrompt(allow: true) }
         } message: {
             Text(
-                "周辺の山の名前・位置・標高を OpenStreetMap（Overpass API）から取得します。" +
-                    "問い合わせには現在地周辺の範囲が含まれます。" +
-                    "通信量は 1 回あたり数十 KB 程度で、取得したデータは端末に保存して使い回します。\n\n" +
-                    "自動で取得してよいですか？\n" +
-                    "「いいえ」なら、画面左下の更新ボタンを押したときだけ通信します。設定はあとから変更できます。"
+                "全国の山の名前・位置・標高（OpenStreetMap のデータ、約 0.5 MB）を取得します。" +
+                    "取得したデータは端末に保存するので、圏外でも使えます。\n\n" +
+                    "今すぐ取得しますか？「あとで」を選んだときは、設定画面から取得できます。"
             )
         }
         .fetchErrorAlert(model)
@@ -175,7 +171,6 @@ struct DialView: View {
         }
     }
 
-    /// 左下: 設定、事前ダウンロード、手動取得モードなら山データの取得。屋外で押しやすいよう大きめにする。
     /// 手動位置モードの表示(上部の目盛りを隠し、向きの表示とコンパスを出す)。現在地へ戻り始めたらすぐ戻す。
     private var manualChrome: Bool { model.exploring && !model.returning }
 
@@ -195,8 +190,9 @@ struct DialView: View {
             .background(Capsule().fill(Color.white.opacity(0.5)))
     }
 
+    /// 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目にする。
     private var bottomButtons: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             RoundButton(label: "設定") {
                 Image(systemName: "gearshape.fill")
             } action: {
@@ -204,18 +200,6 @@ struct DialView: View {
             }
             if Features.areaDownload {
                 AreaDownloadButton(download: model.areaDownload) { showDownload = true }
-            }
-            if model.hasLocationPermission && model.settings.manualFetch {
-                RoundButton(label: "山データを取得") {
-                    if model.loading {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                } action: {
-                    model.fetchManually()
-                }
-                .disabled(model.location == nil || model.loading)
             }
         }
     }
@@ -248,14 +232,11 @@ struct DialView: View {
     private var statusMessage: String? {
         if model.location == nil { return "現在地を取得しています…" }
         if model.heading == nil { return "方位センサーの値を待っています…" }
-        if model.loading { return "山データを取得中…" }
+        if model.peakDataUpdating { return "山データを取得中…" }
+        if model.loading { return "山データを読み込み中…" }
         // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。欠けているのはたいてい取得半径の外縁なので、周辺に保存済みの山があれば「周辺の一部」と言う。
         let missing = model.mountains.isEmpty && model.summit == nil ? "この付近の山データがありません" : "周辺の一部の山データがありません"
-        if !model.isConnected && model.incomplete { return "圏外のため、\(missing)" }
-        if !model.isConnected { return "圏外: 保存済みのデータで表示中" }
-        if model.offline && model.incomplete { return "通信できず、\(missing)" }
-        if model.offline { return "オフライン: 保存済みのデータで表示中" }
-        if model.settings.manualFetch && model.incomplete { return "\(missing)。左下の更新ボタンで取得できます" }
+        if model.incomplete { return model.peakData == nil ? "\(missing)。設定画面から取得できます" : missing }
         return nil
     }
 }
@@ -286,6 +267,7 @@ private extension View {
     }
 }
 
+/// 方位盤の下の角に置く丸いボタン。右下のモード切替ボタンと同じく、白地に影を付けて地図の上でも見分けやすくする。
 private struct RoundButton<Content: View>: View {
     let label: String
     @ViewBuilder let content: () -> Content
@@ -294,11 +276,13 @@ private struct RoundButton<Content: View>: View {
     var body: some View {
         Button(action: action) {
             content()
-                .font(.system(size: 24))
-                .frame(width: 52, height: 52)
-                .background(Circle().fill(Color.white.opacity(0.7)))
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(Color.gray)
+                .frame(width: 56, height: 56)
+                .background(Circle().fill(Color.white))
+                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
         }
-        .tint(.black)
+        .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
 }
@@ -327,13 +311,11 @@ private struct AreaDownloadButton: View {
 
 private struct StatusLine: View {
     let message: String?
-    let actionLabel: String?
-    let onAction: () -> Void
     var labeled = false
 
     var body: some View {
         if let message {
-            HStack {
+            Group {
                 if labeled {
                     Text(message).font(.footnote).foregroundStyle(.black)
                         .padding(.horizontal, 12)
@@ -341,9 +323,6 @@ private struct StatusLine: View {
                         .background(Capsule().fill(Color.white.opacity(0.5)))
                 } else {
                     Text(message).font(.footnote).foregroundStyle(.black)
-                }
-                if let actionLabel {
-                    Button(actionLabel, action: onAction).font(.footnote.bold())
                 }
             }
             .padding(.horizontal, 12)

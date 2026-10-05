@@ -39,14 +39,17 @@ android {
     }
 
     buildTypes {
+        // 山データの manifest は、配布版は正式版(peaks/)、開発版は開発版(peaks-dev/)を読む(core の PeakData.manifestUrl)。
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
+            buildConfigField("boolean", "PEAK_DATA_DEV", "false")
         }
         // 配布版と同じ端末に入れられるよう、開発版は別のアプリにする(名前は src/debug の strings.xml)。
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            buildConfigField("boolean", "PEAK_DATA_DEV", "true")
         }
     }
 
@@ -57,6 +60,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

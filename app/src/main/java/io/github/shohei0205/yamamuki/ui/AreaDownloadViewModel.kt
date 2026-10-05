@@ -92,7 +92,7 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
                 val count = repository.downloadTiles(
                     prefecture.tiles,
                     forceRefresh = refresh,
-                    maxAgeMillis = app.settings.settings.value.cacheMaxAgeMillis,
+                    maxAgeMillis = MAX_AGE_MILLIS,
                 ) { progress ->
                     if (id != generation) return@downloadTiles
                     _state.update { it.copy(running = RunningDownload(prefecture, progress)) }
@@ -164,5 +164,8 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
 
     private companion object {
         const val TAG = "AreaDownloadViewModel"
+
+        /** 取得済みのタイルを取り直さずに使う期間(30 日)。設定の「取得したデータを使う期間」をなくしたので固定にした。 */
+        const val MAX_AGE_MILLIS = 30L * 24 * 60 * 60 * 1000
     }
 }
