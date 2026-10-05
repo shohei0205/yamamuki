@@ -109,7 +109,7 @@ abstract class MountainDatabase : RoomDatabase() {
     companion object {
         const val FILE_NAME = "mountains.db"
 
-        /** DB の版。テーブルや列を変えたら上げる。書き出したスキーマは app/schemas/ に版ごとに残す。 */
+        /** DB の版。テーブルや列を変えたら上げる。書き出したスキーマは android/app/schemas/ に版ごとに残す。 */
         const val VERSION = 1
 
         /**

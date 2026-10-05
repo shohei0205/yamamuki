@@ -4,7 +4,7 @@
 
 ## 対象
 
-- [ ] Android (app/, core/)
+- [ ] Android (android/)
 - [ ] iOS (ios/)
 - [ ] その他 (CI, ドキュメントなど)
 

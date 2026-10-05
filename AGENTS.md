@@ -11,9 +11,10 @@
 
 | ディレクトリ | 中身 |
 |---|---|
-| `core/` | Android に依存しないロジック（Kotlin）。単体テストあり |
-| `app/` | Android アプリ（画面、Room のキャッシュ、設定） |
-| `ios/YamamukiCore/` | `core/` を Swift に移植したパッケージ。単体テストあり |
+| `android/` | Android 版の Gradle プロジェクト。Android Studio ではこのフォルダを開く |
+| `android/core/` | Android に依存しないロジック（Kotlin）。単体テストあり |
+| `android/app/` | Android アプリ（画面、Room のキャッシュ、設定） |
+| `ios/YamamukiCore/` | `android/core/` を Swift に移植したパッケージ。単体テストあり |
 | `ios/Yamamuki/` | iOS アプリ（画面、位置と方位の取得、設定） |
 | `ios/YamamukiUITests/` | iOS アプリの画面を操作する UI テスト（XCUITest） |
 | `ios/project.yml` | XcodeGen の設定。`ios/Yamamuki.xcodeproj` はここから生成する |
@@ -23,7 +24,7 @@
 - ユーザーとのやり取り、コミットメッセージ、PR のタイトルと説明、コードのコメント、画面の文言は日本語で書く。
 - 文体は決めない。簡潔で分かりやすく書き、専門用語より普段の言葉を選ぶ。
 - コミットと PR のタイトルは、何が変わるかを一文で書く（例:「双眼鏡をタップすると現在地の緯度経度と標高を表示する」）。
-- PR の説明や README などの文章と、アプリの画面に出す文言（Android は `app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/` の Swift のコード内の文字列）を、自然で読みやすい表現に推敲するときは、スキル `yomiyasu`（`.agents/skills/yomiyasu/SKILL.md`）を使う。ただし、次の点はこのリポジトリの書き方を優先する。
+- PR の説明や README などの文章と、アプリの画面に出す文言（Android は `android/app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/` の Swift のコード内の文字列）を、自然で読みやすい表現に推敲するときは、スキル `yomiyasu`（`.agents/skills/yomiyasu/SKILL.md`）を使う。ただし、次の点はこのリポジトリの書き方を優先する。
   - 英単語や数字の前後の半角空白（「OpenStreetMap の」「7 日間」など）は消さない。
   - コミットの本文、README、AGENTS.md の箇条書きは地の文に書き換えない。PR テンプレートの見出しも変えない。
   - 画面の文言は、画面に収まる短さを保ち、ボタンや見出しの短い語を文に書き換えない。Android と iOS で同じ文言にそろえる。
@@ -91,8 +92,8 @@ feat: 山データを都道府県単位で事前ダウンロードできるよ�
 - 設定の「キャッシュを消去」では、保存済みの地域を消さない。
 
 検証:
-- 成功: ./gradlew -p core test
-- 成功: ./gradlew :app:assembleDebug
+- 成功: ./gradlew -p core test（android/ で実行）
+- 成功: ./gradlew :app:assembleDebug（android/ で実行）
 - 環境上実行できず: swift test（Swift の無い環境のため、PR の CI で確認する）
 - 未実施: 実機での動作確認
 
@@ -102,7 +103,7 @@ Co-authored-by: Codex GPT-6
 ## Android と iOS をそろえる
 
 - 機能の追加や不具合の修正は、特に指示がなければ Android と iOS の両方に同じ動作で入れる。片方だけにするときは PR の説明にそう書く。
-- `core/`（Kotlin）と `ios/YamamukiCore/`（Swift）は同じロジックの移植。片方を変えたらもう片方も同じに変え、テストも両方に足す。
+- `android/core/`（Kotlin）と `ios/YamamukiCore/`（Swift）は同じロジックの移植。片方を変えたらもう片方も同じに変え、テストも両方に足す。
 - 両 OS の違いは端末の機能による差だけにする。違いを増やしたら README の「Android 版と iOS 版の違い」を更新する。
 
 ## DB の版と移行
@@ -113,8 +114,8 @@ Android 版の山データの DB（Room）は、配布したあとも端末に�
   - テーブルや列を足すだけなら、`@Database` の `autoMigrations` に `AutoMigration(from, to)` を足す。
   - Room が自動で作れない移行（列の名前を変える・消すなど）は、`MountainMigrations.kt` に `Migration(from, to)` を足す。
 - 事前ダウンロードした山データ（`mountains` と `fetched_tiles`）は移行で消さない。DB をまるごと作り直す `fallbackToDestructiveMigration()` は使わない（作り直すのは、古い版のアプリで新しい版の DB を開いたときだけ）。取り直せるテーブルだけは、移行の中で作り直してよい。
-- ビルドで書き出したスキーマ（`app/schemas/` の版ごとの JSON）をコミットし、既にある版の JSON は書き換えない。
-- 移行は、`app/schemas/` のすべての版から今の版へ移して山データが残るかを、単体テスト（`MountainDatabaseMigrationTest`）で確かめる。新しい版で初期値の無い必須の列を足したら、テストの見本の行にも値を足す。
+- ビルドで書き出したスキーマ（`android/app/schemas/` の版ごとの JSON）をコミットし、既にある版の JSON は書き換えない。
+- 移行は、`android/app/schemas/` のすべての版から今の版へ移して山データが残るかを、単体テスト（`MountainDatabaseMigrationTest`）で確かめる。新しい版で初期値の無い必須の列を足したら、テストの見本の行にも値を足す。
 - iOS 版のキャッシュはタイルごとの JSON で、読めないファイルは取得していないものとして取り直す。形式を変えるときは、項目を省略可能にして古いファイルも読めるようにする。
 
 ## 変更の確かめ方
@@ -125,10 +126,10 @@ Android 版の山データの DB（Room）は、配布したあとも端末に�
 # すべて: 改行コードと BOM の確認
 .github/scripts/check-text-format.sh
 
-# Android: core の単体テスト、アプリのビルドと単体テスト、DB のスキーマの確認
-./gradlew -p core test
-./gradlew :app:assembleDebug
-./gradlew :app:testDebugUnitTest
+# Android: core の単体テスト、アプリのビルドと単体テスト、DB のスキーマの確認（Gradle は android/ で動かす）
+(cd android && ./gradlew -p core test)
+(cd android && ./gradlew :app:assembleDebug)
+(cd android && ./gradlew :app:testDebugUnitTest)
 git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
 
 # iOS: core の単体テスト（Mac または Swift の入った環境）
@@ -209,7 +210,7 @@ AI ツールが起こしやすい失敗を防ぐための指示。人の作業�
 
 ## やってはいけないこと
 
-- 生成物や手元の設定をコミットしない（`ios/Yamamuki.xcodeproj/`、`local.properties`、`build/` など。`.gitignore` を参照）。
+- 生成物や手元の設定をコミットしない（`ios/Yamamuki.xcodeproj/`、`android/local.properties`、`build/` など。`.gitignore` を参照）。
 - 署名鍵（`*.jks`、`*.keystore`、`*-release.properties`）や API キーなどの秘密情報をコミットしない。
 - アプリの版（Android の `versionCode` / `versionName`、iOS の `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`）は、ユーザーの指示があるときだけ上げる。上げるときは両 OS をそろえる。
 - 依存ライブラリの更新は、機能の変更と同じ PR に混ぜない。
