@@ -23,6 +23,11 @@
 - ユーザーとのやり取り、コミットメッセージ、PR のタイトルと説明、コードのコメント、画面の文言は日本語で書く。
 - 文体は決めない。簡潔で分かりやすく書き、専門用語より普段の言葉を選ぶ。
 - コミットと PR のタイトルは、何が変わるかを一文で書く（例:「双眼鏡をタップすると現在地の緯度経度と標高を表示する」）。
+- PR の説明や README などの文章と、アプリの画面に出す文言（Android は `app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/` の Swift のコード内の文字列）を、自然で読みやすい表現に推敲するときは、スキル `yomiyasu`（`.agents/skills/yomiyasu/SKILL.md`）を使う。ただし、次の点はこのリポジトリの書き方を優先する。
+  - 英単語や数字の前後の半角空白（「OpenStreetMap の」「7 日間」など）は消さない。
+  - コミットの本文、README、AGENTS.md の箇条書きは地の文に書き換えない。PR テンプレートの見出しも変えない。
+  - 画面の文言は、画面に収まる短さを保ち、ボタンや見出しの短い語を文に書き換えない。Android と iOS で同じ文言にそろえる。
+  - 付属の `yomiyasu_lint.py` の指摘のうち、半角空白（`unnatural_halfwidth_space`）と箇条書きの比率（`excess_list`）は直さない。
 
 ## コミットメッセージ
 
@@ -100,6 +105,18 @@ Co-authored-by: Codex GPT-6
 - `core/`（Kotlin）と `ios/YamamukiCore/`（Swift）は同じロジックの移植。片方を変えたらもう片方も同じに変え、テストも両方に足す。
 - 両 OS の違いは端末の機能による差だけにする。違いを増やしたら README の「Android 版と iOS 版の違い」を更新する。
 
+## DB の版と移行
+
+Android 版の山データの DB（Room）は、配布したあとも端末に残る。アップデートで版が変わったときに読めないと、起動直後に落ちる。
+
+- テーブルや列を変えたら、DB の版（`MountainDatabase.VERSION`）を上げ、同じ PR で古い版からの移行を入れる。
+  - テーブルや列を足すだけなら、`@Database` の `autoMigrations` に `AutoMigration(from, to)` を足す。
+  - Room が自動で作れない移行（列の名前を変える・消すなど）は、`MountainMigrations.kt` に `Migration(from, to)` を足す。
+- 事前ダウンロードした山データ（`mountains` と `fetched_tiles`）は移行で消さない。DB をまるごと作り直す `fallbackToDestructiveMigration()` は使わない（作り直すのは、古い版のアプリで新しい版の DB を開いたときだけ）。取り直せるテーブルだけは、移行の中で作り直してよい。
+- ビルドで書き出したスキーマ（`app/schemas/` の版ごとの JSON）をコミットし、既にある版の JSON は書き換えない。
+- 移行は、`app/schemas/` のすべての版から今の版へ移して山データが残るかを、単体テスト（`MountainDatabaseMigrationTest`）で確かめる。新しい版で初期値の無い必須の列を足したら、テストの見本の行にも値を足す。
+- iOS 版のキャッシュはタイルごとの JSON で、読めないファイルは取得していないものとして取り直す。形式を変えるときは、項目を省略可能にして古いファイルも読めるようにする。
+
 ## 変更の確かめ方
 
 コミットの前に、変えた部分に応じて次を通す。CI（`.github/workflows/`）でも同じものを動かしている。
@@ -108,9 +125,11 @@ Co-authored-by: Codex GPT-6
 # すべて: 改行コードと BOM の確認
 .github/scripts/check-text-format.sh
 
-# Android: core の単体テストとアプリのビルド
+# Android: core の単体テスト、アプリのビルドと単体テスト、DB のスキーマの確認
 ./gradlew -p core test
 ./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
+git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
 
 # iOS: core の単体テスト（Mac または Swift の入った環境）
 (cd ios/YamamukiCore && swift test)
@@ -121,6 +140,7 @@ Co-authored-by: Codex GPT-6
 ```
 
 - iOS の画面を変えたら、手元で UI テストも動かす（手順は README の「iOS 版」）。CI では UI テストのビルドだけを確かめ、実行はしない。
+- CI の「Build」（Android）は、アプリの単体テストと DB のスキーマの確認（スキーマのコミット漏れと、既にある版のスキーマの書き換え）も行う。
 - CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
 - ロジックを変えたら単体テストを足す。テストを消したり飛ばしたりして通すことはしない。

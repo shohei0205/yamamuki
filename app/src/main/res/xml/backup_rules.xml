@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 以前の自動バックアップの対象。設定は残し、山データのキャッシュとそれに対応する
+  事前ダウンロードの記録は外す(取り直せるうえ、古い版の DB が戻ると起動できなくなるため)。
+  Android 11 以前は機種変更での移行にもこの規則が使われる。
+-->
+<full-backup-content>
+    <exclude domain="database" path="mountains.db" />
+    <exclude domain="database" path="mountains.db-wal" />
+    <exclude domain="database" path="mountains.db-shm" />
+    <exclude domain="database" path="mountains.db-journal" />
+    <exclude domain="sharedpref" path="saved_areas.xml" />
+    <exclude domain="sharedpref" path="area_download_pending.xml" />
+</full-backup-content>

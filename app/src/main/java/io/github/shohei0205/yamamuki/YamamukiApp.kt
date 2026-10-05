@@ -19,7 +19,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 
 class YamamukiApp : Application() {
 
-    private val database: MountainDatabase by lazy { MountainDatabase.create(this) }
+    private val database: MountainDatabase by lazy {
+        // キャッシュを作り直したら山データが無くなるので、事前ダウンロード済みの地域の記録も消す。
+        MountainDatabase.create(this, onCacheReset = { savedAreas.clear() })
+    }
 
     val cacheManager: CacheManager by lazy { CacheManager(this, database) }
 
