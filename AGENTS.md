@@ -7,7 +7,7 @@
 
 - スマホを向けた方向に見える山を山名付きで表示する Android / iOS アプリ「山むき」。
 - Android 版は Kotlin + Jetpack Compose、iOS 版は Swift + SwiftUI（XcodeGen。対応する iOS の版は `ios/project.yml` の `deploymentTarget` を見る）。
-- 山データは OpenStreetMap の Overpass API から取得し、端末内にキャッシュしてオフラインでも使う。
+- 山データは OpenStreetMap のデータから作った全国の山頂データを yamamuki-data（GitHub Pages と Releases）から取得し、端末内にキャッシュしてオフラインでも使う。Overpass API から取得するコードは残っているが使っていない。
 
 | ディレクトリ | 中身 |
 |---|---|

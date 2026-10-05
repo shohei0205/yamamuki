@@ -8,18 +8,21 @@ import io.github.shohei0205.yamamuki.YamamukiApp
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.GeoMath
 import io.github.shohei0205.yamamuki.core.Heading
+import io.github.shohei0205.yamamuki.core.InstalledPeakData
 import io.github.shohei0205.yamamuki.core.MapCenter
 import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
-import io.github.shohei0205.yamamuki.core.OverpassException
+import io.github.shohei0205.yamamuki.core.PeakDataException
+import io.github.shohei0205.yamamuki.core.PeakDataUpdater
 import io.github.shohei0205.yamamuki.core.meetsMinElevation
 import io.github.shohei0205.yamamuki.core.seenFrom
 import io.github.shohei0205.yamamuki.core.summitAt
 import io.github.shohei0205.yamamuki.data.CacheInfo
 import io.github.shohei0205.yamamuki.sensor.connectivityUpdates
 import io.github.shohei0205.yamamuki.settings.Settings
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,12 +61,17 @@ data class DialUiState(
     val summit: NearbyMountain? = null,
     /** 現在地から画面上端までの距離。 */
     val rangeKm: Double = DialGeometry.DEFAULT_RANGE_KM,
+    /** 保存済みのデータから山を読み込んでいる。 */
     val loading: Boolean = false,
-    /** 通信に失敗した、または圏外で取得を控えたため、キャッシュだけで表示している。 */
-    val offline: Boolean = false,
-    /** 端末が通信できる状態か。圏外や機内モードでは false になり、取得を控えて保存済みのデータで表示する。 */
+    /** 端末が通信できる状態か。圏外や機内モードでは false になり、山データの取得を試さない。 */
     val connected: Boolean = true,
-    /** 通信に失敗したときに画面中央で知らせる文言。閉じるまで保つ。 */
+    /** 取り込み済みの全国の山データ。まだ取得していなければ null。 */
+    val peakData: InstalledPeakData? = null,
+    /** 全国の山データを取得している。 */
+    val peakDataUpdating: Boolean = false,
+    /** 設定画面に出す、山データの取得の結果(「山データは最新です」など)。 */
+    val peakDataNotice: String? = null,
+    /** 山データの取得に失敗したときに画面中央で知らせる文言。閉じるまで保つ。 */
     val fetchErrorMessage: String? = null,
     /** 範囲内に一度も取得できていない地域がある。 */
     val incomplete: Boolean = false,
@@ -72,7 +80,7 @@ data class DialUiState(
     val cacheInfo: CacheInfo? = null,
 )
 
-/** 現在地と表示範囲に応じて山データを取得し、方位盤に出す山の一覧を保つ。 */
+/** 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ。 */
 class DialViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as YamamukiApp
     private val repository = app.mountainRepository
@@ -80,7 +88,9 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     private val cacheManager = app.cacheManager
 
     private val _state = MutableStateFlow(
-        appSettings.settings.value.let { DialUiState(settings = it, rangeKm = it.initialRangeKm.toDouble()) },
+        appSettings.settings.value.let {
+            DialUiState(settings = it, rangeKm = it.initialRangeKm.toDouble(), peakData = app.peakDataStore.load())
+        },
     )
     val state: StateFlow<DialUiState> = _state.asStateFlow()
     private var northUpJob: Job? = null
@@ -92,24 +102,15 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     private var fetchedRadiusKm = 0.0
     private var fetchJob: Job? = null
 
-    /** 圏外のため取得を控えた。値は手動の取得だったか。つながったらその続きを取得する。 */
-    private var skippedWhileDisconnected: Boolean? = null
-
     init {
         viewModelScope.launch { connectivityUpdates(application).collect(::onConnectivity) }
-        // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す(通信はしない)。
+        // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
         viewModelScope.launch { app.cacheChanges.collect { reloadFromCache() } }
     }
 
     private fun onConnectivity(connected: Boolean) {
         if (connected == _state.value.connected) return
         _state.update { it.copy(connected = connected) }
-        // 圏外で控えていた取得を、つながったところで行う。
-        val manual = skippedWhileDisconnected
-        if (connected && manual != null) {
-            skippedWhileDisconnected = null
-            fetch(manual = manual)
-        }
     }
 
     fun onLocation(newPoint: GeoPoint) {
@@ -260,7 +261,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     /** 通信エラーの知らせから取り直す。利用者が求めたので通信する。 */
     fun retryAfterFetchError() {
         dismissFetchError()
-        fetch(manual = true)
+        updatePeakData()
     }
 
     fun updateSettings(transform: (Settings) -> Settings) {
@@ -286,13 +287,19 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** キャッシュを消して、現在地周辺を読み直す(通信はしない)。事前ダウンロードした地域は残す。 */
+    /**
+     * 保存している山データを消して、現在地周辺を読み直す(通信はしない)。事前ダウンロードした地域は残す。
+     * 全国の山データも消えるので、取り込み済みの記録も消し、設定画面から取り直せるようにする。
+     */
     fun clearCache() {
         fetchJob?.cancel()
         viewModelScope.launch {
             cacheManager.clear(keep = app.savedAreas.tiles())
+            app.peakDataStore.clear()
             peaks = emptyList()
-            _state.update { it.copy(mountains = emptyList(), summit = null, cacheInfo = cacheManager.info()) }
+            _state.update {
+                it.copy(mountains = emptyList(), summit = null, cacheInfo = cacheManager.info(), peakData = null, peakDataNotice = null)
+            }
             fetch()
         }
     }
@@ -311,59 +318,64 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 今の表示範囲の山を読み込む。通信するのは利用者が取得を求めたとき([manual])だけで、
-     * それ以外は保存済みのデータだけで表示する。
+     * 今の表示範囲の山を、保存済みのデータから読み込む。方位盤からは通信しない
+     * (山データは初回の問い合わせか設定画面で、yamamuki-data から全国分をまとめて取得する)。
      */
-    private fun fetch(forceRefresh: Boolean = false, manual: Boolean = false) {
+    private fun fetch() {
         val here = _state.value.location ?: return
         val radius = DialGeometry.fetchRadiusKm(_state.value.rangeKm)
-        val settings = _state.value.settings
-        // 山データの取得先を移す準備中のため、方位盤からは自動では通信しない(山データは事前ダウンロードで取得する)。
-        val wantsNetwork = manual
-        // 圏外と分かっていれば通信を試さない(失敗を待たず、エラーの知らせも出さない)。
-        val connected = _state.value.connected
-        val allowNetwork = wantsNetwork && connected
         fetchedCenter = here
         fetchedRadiusKm = radius
         fetchJob?.cancel()
         fetchJob = viewModelScope.launch {
             _state.update { it.copy(loading = true) }
-            // 手動移動中の連続した取得要求をまとめる。
-            if (_state.value.exploring && !manual && !forceRefresh) delay(250)
-            val result = repository.mountainsAround(
-                here.latitude,
-                here.longitude,
-                radius,
-                forceRefresh = forceRefresh,
-                allowNetwork = allowNetwork,
-                maxAgeMillis = settings.cacheMaxAgeMillis,
-            )
-            // Log.w(tag, msg, tr) は UnknownHostException を含むと何も出さないので文字列にして渡す。
-            result.error?.let { Log.w(TAG, "山データの取得に失敗\n${it.stackTraceToString()}") }
+            // 手動移動中の連続した読み込みをまとめる。
+            if (_state.value.exploring) delay(250)
+            val result = repository.mountainsAround(here.latitude, here.longitude, radius, allowNetwork = false)
             peaks = result.mountains.map { it.mountain }
-            val skippedOffline = wantsNetwork && !connected && result.networkSkipped
-            if (skippedOffline) {
-                skippedWhileDisconnected = manual
-            } else if (allowNetwork) {
-                skippedWhileDisconnected = null
-            }
-            val hasCache = peaks.isNotEmpty()
-            val error = result.error
-            _state.update {
-                it.withPeaksAt(it.gpsLocation ?: here).copy(
-                    loading = false,
-                    offline = error != null || skippedOffline,
-                    incomplete = result.incomplete,
-                    fetchErrorMessage = when {
-                        error != null -> errorNotice(error, hasCache)
-                        // 自分で取得を押したときだけ、圏外で取得できなかったことを知らせる。
-                        skippedOffline && manual -> offlineNotice(hasCache)
-                        skippedOffline -> it.fetchErrorMessage
-                        else -> null
-                    },
-                )
+            _state.update { it.withPeaksAt(it.gpsLocation ?: here).copy(loading = false, incomplete = result.incomplete) }
+        }
+    }
+
+    /**
+     * 全国の山データの最新版を確かめ、新しければ取得して取り込む。初回の問い合わせと設定画面のボタンから呼ぶ。
+     * 圏外と分かっていれば通信を試さずに知らせる。失敗しても、取り込み済みのデータはそのまま残る。
+     */
+    fun updatePeakData() {
+        if (_state.value.peakDataUpdating) return
+        if (!_state.value.connected) {
+            _state.update { it.copy(fetchErrorMessage = offlineNotice(peaks.isNotEmpty()), peakDataNotice = null) }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(peakDataUpdating = true, peakDataNotice = null) }
+            try {
+                val result = app.peakDataUpdater.update(_state.value.peakData)
+                app.peakDataStore.save(result.installed)
+                val updated = result is PeakDataUpdater.Result.Updated
+                _state.update {
+                    it.copy(peakData = result.installed, peakDataNotice = if (updated) "山データを取得しました" else "山データは最新です")
+                }
+                if (updated) {
+                    reloadFromCache()
+                    refreshCacheInfo()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Log.w(tag, msg, tr) は UnknownHostException を含むと何も出さないので文字列にして渡す。
+                Log.w(TAG, "山データの取得に失敗\n${e.stackTraceToString()}")
+                _state.update { it.copy(fetchErrorMessage = errorNotice(e, peaks.isNotEmpty())) }
+            } finally {
+                _state.update { it.copy(peakDataUpdating = false) }
             }
         }
+    }
+
+    /** 初回起動時の「山データを取得しますか」への答え。いいえなら、あとで設定画面から取得できる。 */
+    fun answerPeakDataPrompt(allow: Boolean) {
+        updateSettings { it.copy(peakDataAsked = true) }
+        if (allow) updatePeakData()
     }
 
     /** [p] から見た山の一覧と、山頂にいるならその山を入れた状態。 */
@@ -382,7 +394,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         /** 通信エラーの知らせの文言。端末がつながっていないのか、サーバー側の問題かで案内を変える。 */
         fun errorNotice(error: Throwable, hasCache: Boolean): String {
             if (isOffline(error)) return offlineNotice(hasCache)
-            return withCacheNote("山データのサーバーが混み合っているか、応答がありません。しばらくしてから再取得してください。", hasCache)
+            if (error is PeakDataException) return withCacheNote("山データを取り込めませんでした。\n${error.message}", hasCache)
+            return withCacheNote("山データのサーバーから応答がありません。しばらくしてから再取得してください。", hasCache)
         }
 
         fun offlineNotice(hasCache: Boolean): String =
@@ -391,17 +404,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         private fun withCacheNote(cause: String, hasCache: Boolean): String =
             if (hasCache) "$cause\n\n保存済みのデータで表示しています。" else cause
 
-        /** 端末が通信できない状態で失敗したか。Overpass はエンドポイントごとの失敗を原因と suppressed にまとめるので、すべてを見る。 */
+        /** 端末が通信できない状態で失敗したか。HTTP クライアントが包んだ例外も、原因をたどって見る。 */
         fun isOffline(error: Throwable): Boolean = when (error) {
             is UnknownHostException, is ConnectException, is NoRouteToHostException -> true
-            is OverpassException -> {
-                val causes = listOfNotNull(error.cause) + error.suppressed
-                causes.isNotEmpty() && causes.all(::isOffline)
-            }
-            else -> false
+            else -> error.cause?.let(::isOffline) ?: false
         }
 
-        /** これ以上移動したら取り直す。取得済みの地域ならキャッシュから読むだけで通信しない。 */
+        /** これ以上移動したら、保存済みのデータを読み直す。 */
         const val REFETCH_DISTANCE_KM = 1.0
 
         const val TAG = "DialViewModel"

@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -137,8 +138,10 @@ fun DialScreen(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { granted -> hasPermission = granted.values.any { it } }
 
-    LaunchedEffect(Unit) {
-        if (!hasPermission) permissionLauncher.launch(LOCATION_PERMISSIONS)
+    // 初回は「山データを取得しますか」を先に聞き、答えてから位置情報の許可を求める(ダイアログを重ねない)。
+    val peakDataAsked = state.settings.peakDataAsked
+    LaunchedEffect(peakDataAsked) {
+        if (peakDataAsked && !hasPermission) permissionLauncher.launch(LOCATION_PERMISSIONS)
     }
     LaunchedEffect(hasPermission) {
         if (!hasPermission) return@LaunchedEffect
@@ -371,6 +374,10 @@ fun DialScreen(
                 settings = state.settings,
                 cacheInfo = state.cacheInfo,
                 onSettingsChange = viewModel::updateSettings,
+                peakData = state.peakData,
+                peakDataUpdating = state.peakDataUpdating,
+                peakDataNotice = state.peakDataNotice,
+                onUpdatePeakData = viewModel::updatePeakData,
                 onOpen = viewModel::refreshCacheInfo,
                 onClearCache = viewModel::clearCache,
                 onClose = { showSettings = false },
@@ -395,6 +402,10 @@ fun DialScreen(
     DisposableEffect(view, keepScreenOn) {
         view.keepScreenOn = keepScreenOn
         onDispose { view.keepScreenOn = false }
+    }
+
+    if (!peakDataAsked) {
+        PeakDataPrompt(onAnswer = viewModel::answerPeakDataPrompt)
     }
 
     // 通信の失敗は、方位を待つ表示などに隠れて気づけないことがないよう、画面中央で知らせる。
@@ -424,6 +435,25 @@ fun DialScreen(
     if (showObserver && location != null && !overlay) {
         ObserverDetailDialog(location, onDismiss = { showObserver = false })
     }
+}
+
+/** 初回起動時に、全国の山データを取得するかを聞く。どちらかを選ぶまで閉じない。 */
+@Composable
+private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
+    AlertDialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        title = { Text("山データの取得") },
+        text = {
+            Text(
+                "全国の山の名前・位置・標高（OpenStreetMap のデータ、約 0.5 MB）を取得します。" +
+                    "取得したデータは端末に保存するので、圏外でも使えます。\n\n" +
+                    "今すぐ取得しますか？「あとで」を選んだときは、設定画面から取得できます。",
+            )
+        },
+        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text("取得する") } },
+        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text("あとで") } },
+    )
 }
 
 /** 山データの取得に失敗したことを知らせ、再取得できるようにする。 */
@@ -514,12 +544,9 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
     return when {
         state.location == null -> "現在地を取得しています…"
         !headingAvailable -> "方位センサーの値を待っています…"
-        state.loading -> "山データを取得中…"
-        !state.connected && state.incomplete -> "圏外のため、$missing"
-        !state.connected -> "圏外: 保存済みのデータで表示中"
-        state.offline && state.incomplete -> "通信できず、$missing"
-        state.offline -> "オフライン: 保存済みのデータで表示中"
-        state.incomplete && Features.AREA_DOWNLOAD -> "$missing。事前ダウンロードで取得できます"
+        state.peakDataUpdating -> "山データを取得中…"
+        state.loading -> "山データを読み込み中…"
+        state.incomplete && state.peakData == null -> "$missing。設定画面から取得できます"
         state.incomplete -> missing
         else -> null
     }

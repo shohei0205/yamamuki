@@ -57,21 +57,13 @@ struct SettingsView: View {
                     ) { v in model.updateSettings { $0.keepScreenOn = v } }
                 }
 
-                Section("通信とキャッシュ") {
-                    Choice(
-                        title: "取得したデータを使う期間",
-                        options: Settings.cacheMaxAgeDaysOptions,
-                        selected: settings.cacheMaxAgeDays,
-                        // 5 つ並ぶと「180日」が収まらないので、長い期間は「半年」「1年」と書く。
-                        label: { days in
-                            switch days {
-                            case 180: return "半年"
-                            case 365: return "1年"
-                            default: return "\(days)日"
-                            }
-                        },
-                        description: "この期間を過ぎた地域は取り直します。山データはめったに変わらないので、長くすると通信が減ります。"
-                    ) { v in model.updateSettings { $0.cacheMaxAgeDays = v } }
+                Section("山データ") {
+                    PeakDataSection(
+                        data: model.peakData,
+                        updating: model.peakDataUpdating,
+                        notice: model.peakDataNotice,
+                        onUpdate: model.updatePeakData
+                    )
                     CacheSection(info: model.cacheInfo, onClear: model.clearCache)
                 }
 
@@ -189,6 +181,48 @@ private struct SwitchRow: View {
     }
 }
 
+/// 全国の山データの取り込み状況と、取得(最新版の確認)のボタン。
+private struct PeakDataSection: View {
+    let data: InstalledPeakData?
+    let updating: Bool
+    let notice: String?
+    let onUpdate: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("全国の山データ")
+            if let data {
+                // 元データの日時は UTC なので、日付だけを出す。
+                Text("山 \(groupedInteger(data.mountainCount)) 件・元データ \(String(data.sourceTimestamp.prefix(10)).replacingOccurrences(of: "-", with: "/"))・取得日 \(installedDate(data.installedAt))")
+                    .font(.subheadline)
+            } else {
+                Text("まだ取得していません。").font(.subheadline)
+            }
+            if let notice { Text(notice).font(.subheadline).foregroundStyle(Color.accentColor) }
+            Text("yamamuki-data（GitHub）から約 0.5 MB を取得し、端末に保存します。新しい版がなければ、確認だけで終わります。")
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+        Button(action: onUpdate) {
+            HStack(spacing: 8) {
+                if updating {
+                    ProgressView()
+                    Text("取得中…")
+                } else {
+                    Text(data == nil ? "山データを取得" : "最新の山データを確認")
+                }
+            }
+        }
+        .disabled(updating)
+    }
+
+    private func installedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "yyyy/MM/dd"
+        return formatter.string(from: date)
+    }
+}
+
 private struct CacheSection: View {
     let info: CacheInfo?
     let onClear: () -> Void
@@ -203,7 +237,7 @@ private struct CacheSection: View {
             } else {
                 Text("読み込み中…").font(.subheadline)
             }
-            Text("消去すると現在地の周辺を取り直すので、通信が発生します。").font(.footnote).foregroundStyle(.secondary)
+            Text("消去すると、取得した全国の山データも消えます。上のボタンでもう一度取得できます。").font(.footnote).foregroundStyle(.secondary)
         }
         Button("キャッシュを消去", role: .destructive) { confirming = true }
             .disabled(info == nil || info?.tileCount == 0)
@@ -213,8 +247,8 @@ private struct CacheSection: View {
             } message: {
                 Text(
                     Features.areaDownload
-                        ? "保存している山データを消去し、現在地の周辺を取り直します。事前ダウンロードした地域は残ります。"
-                        : "保存している山データをすべて消去し、現在地の周辺を取り直します。"
+                        ? "保存している山データを消去します。事前ダウンロードした地域は残ります。"
+                        : "保存している山データをすべて消去します。山データは設定画面からもう一度取得できます。"
                 )
             }
     }

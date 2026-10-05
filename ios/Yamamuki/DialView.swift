@@ -47,11 +47,11 @@ struct DialView: View {
                 .animation(modeAnimation, value: manualChrome)
                 .animation(modeAnimation, value: model.exploring)
 
-                if !model.hasLocationPermission {
+                if model.settings.peakDataAsked && !model.hasLocationPermission {
                     PermissionRequest(denied: model.authorization == .denied || model.authorization == .restricted) {
                         model.requestLocationPermission()
                     }
-                } else {
+                } else if model.hasLocationPermission {
                     VStack {
                         // 方位センサーの精度が低いと、方位が数十度ずれたまま別の山の名前を出してしまうので、上部で知らせる。
                         StatusLine(
@@ -136,6 +136,16 @@ struct DialView: View {
         .onReceive(model.$settings.map(\.keepScreenOn).removeDuplicates()) { on in
             UIApplication.shared.isIdleTimerDisabled = on
         }
+        .alert("山データの取得", isPresented: .constant(!model.settings.peakDataAsked)) {
+            Button("あとで") { model.answerPeakDataPrompt(allow: false) }
+            Button("取得する") { model.answerPeakDataPrompt(allow: true) }
+        } message: {
+            Text(
+                "全国の山の名前・位置・標高（OpenStreetMap のデータ、約 0.5 MB）を取得します。" +
+                    "取得したデータは端末に保存するので、圏外でも使えます。\n\n" +
+                    "今すぐ取得しますか？「あとで」を選んだときは、設定画面から取得できます。"
+            )
+        }
         .fetchErrorAlert(model)
         // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
         .sheet(isPresented: $showSettings) {
@@ -217,14 +227,11 @@ struct DialView: View {
     private var statusMessage: String? {
         if model.location == nil { return "現在地を取得しています…" }
         if model.heading == nil { return "方位センサーの値を待っています…" }
-        if model.loading { return "山データを取得中…" }
+        if model.peakDataUpdating { return "山データを取得中…" }
+        if model.loading { return "山データを読み込み中…" }
         // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。欠けているのはたいてい取得半径の外縁なので、周辺に保存済みの山があれば「周辺の一部」と言う。
         let missing = model.mountains.isEmpty && model.summit == nil ? "この付近の山データがありません" : "周辺の一部の山データがありません"
-        if !model.isConnected && model.incomplete { return "圏外のため、\(missing)" }
-        if !model.isConnected { return "圏外: 保存済みのデータで表示中" }
-        if model.offline && model.incomplete { return "通信できず、\(missing)" }
-        if model.offline { return "オフライン: 保存済みのデータで表示中" }
-        if model.incomplete { return Features.areaDownload ? "\(missing)。事前ダウンロードで取得できます" : missing }
+        if model.incomplete { return model.peakData == nil ? "\(missing)。設定画面から取得できます" : missing }
         return nil
     }
 }

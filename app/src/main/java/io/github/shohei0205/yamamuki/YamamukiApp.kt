@@ -1,10 +1,13 @@
 package io.github.shohei0205.yamamuki
 
 import android.app.Application
+import io.github.shohei0205.yamamuki.core.HttpPeakDataSource
 import io.github.shohei0205.yamamuki.core.MountainRepository
 import io.github.shohei0205.yamamuki.core.OverpassClient
+import io.github.shohei0205.yamamuki.core.PeakDataUpdater
 import io.github.shohei0205.yamamuki.data.CacheManager
 import io.github.shohei0205.yamamuki.data.MountainDatabase
+import io.github.shohei0205.yamamuki.data.PeakDataStore
 import io.github.shohei0205.yamamuki.data.RoomMountainCache
 import io.github.shohei0205.yamamuki.data.SavedAreas
 import io.github.shohei0205.yamamuki.settings.AppSettings
@@ -26,8 +29,10 @@ class YamamukiApp : Application() {
     /** 方位盤の外(事前ダウンロード)でキャッシュを書き換えたときに流す。方位盤はキャッシュを読み直す。 */
     val cacheChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-    val mountainRepository: MountainRepository by lazy {
-        val http = HttpClient(OkHttp) {
+    val peakDataStore: PeakDataStore by lazy { PeakDataStore(this) }
+
+    private val http: HttpClient by lazy {
+        HttpClient(OkHttp) {
             // Overpass は集計が終わるまで応答を返さず 20 秒以上かかることがある。
             // socketTimeout を指定しないと OkHttp 既定の 10 秒で読み込みが打ち切られる。
             install(HttpTimeout) {
@@ -36,9 +41,20 @@ class YamamukiApp : Application() {
                 socketTimeoutMillis = 75_000
             }
         }
-        MountainRepository(
-            remote = OverpassClient(http, userAgent = "yamamuki-android/0.1 (+https://github.com/shohei0205/yamamuki)"),
-            cache = RoomMountainCache(database.mountainDao()),
-        )
+    }
+
+    private val cache: RoomMountainCache by lazy { RoomMountainCache(database.mountainDao()) }
+
+    val mountainRepository: MountainRepository by lazy {
+        MountainRepository(remote = OverpassClient(http, userAgent = USER_AGENT), cache = cache)
+    }
+
+    /** yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。 */
+    val peakDataUpdater: PeakDataUpdater by lazy {
+        PeakDataUpdater(HttpPeakDataSource(http, userAgent = USER_AGENT), cache)
+    }
+
+    private companion object {
+        const val USER_AGENT = "yamamuki-android/0.1 (+https://github.com/shohei0205/yamamuki)"
     }
 }

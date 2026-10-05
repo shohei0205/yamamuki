@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -36,9 +39,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.Features
+import io.github.shohei0205.yamamuki.core.InstalledPeakData
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.data.CacheInfo
 import io.github.shohei0205.yamamuki.settings.Settings
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -54,6 +60,10 @@ fun SettingsScreen(
     settings: Settings,
     cacheInfo: CacheInfo?,
     onSettingsChange: ((Settings) -> Settings) -> Unit,
+    peakData: InstalledPeakData?,
+    peakDataUpdating: Boolean,
+    peakDataNotice: String?,
+    onUpdatePeakData: () -> Unit,
     onOpen: () -> Unit,
     onClearCache: () -> Unit,
     onClose: () -> Unit,
@@ -121,22 +131,8 @@ fun SettingsScreen(
             )
 
             HorizontalDivider()
-            SectionTitle("通信とキャッシュ")
-            Choice(
-                title = "取得したデータを使う期間",
-                options = Settings.CACHE_MAX_AGE_DAYS,
-                selected = settings.cacheMaxAgeDays,
-                // 5 つ並ぶと「180日」が収まらないので、長い期間は「半年」「1年」と書く。
-                label = {
-                    when (it) {
-                        180 -> "半年"
-                        365 -> "1年"
-                        else -> "${it}日"
-                    }
-                },
-                description = "この期間を過ぎた地域は取り直します。山データはめったに変わらないので、長くすると通信が減ります。",
-                onSelect = { v -> onSettingsChange { it.copy(cacheMaxAgeDays = v) } },
-            )
+            SectionTitle("山データ")
+            PeakDataSection(peakData, peakDataUpdating, peakDataNotice, onUpdatePeakData)
             CacheSection(cacheInfo, onClearCache)
 
             HorizontalDivider()
@@ -242,6 +238,40 @@ private fun SwitchRow(title: String, description: String, checked: Boolean, onCh
     }
 }
 
+/** 全国の山データの取り込み状況と、取得(最新版の確認)のボタン。 */
+@Composable
+private fun PeakDataSection(data: InstalledPeakData?, updating: Boolean, notice: String?, onUpdate: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("全国の山データ", style = MaterialTheme.typography.bodyLarge)
+        Text(
+            if (data == null) {
+                "まだ取得していません。"
+            } else {
+                // 元データの日時は UTC なので、日付だけを出す。
+                String.format(Locale.US, "山 %,d 件・元データ %s・取得日 %s", data.mountainCount,
+                    data.sourceTimestamp.take(10).replace('-', '/'),
+                    SimpleDateFormat("yyyy/MM/dd", Locale.JAPAN).format(Date(data.installedAtMillis)))
+            },
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (notice != null) Text(notice, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        Text(
+            "yamamuki-data（GitHub）から約 0.5 MB を取得し、端末に保存します。新しい版がなければ、確認だけで終わります。",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.padding(top = 4.dp))
+        Button(onClick = onUpdate, enabled = !updating, modifier = Modifier.fillMaxWidth()) {
+            if (updating) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.padding(start = 8.dp))
+                Text("取得中…")
+            } else {
+                Text(if (data == null) "山データを取得" else "最新の山データを確認")
+            }
+        }
+    }
+}
+
 @Composable
 private fun CacheSection(info: CacheInfo?, onClear: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
@@ -257,7 +287,7 @@ private fun CacheSection(info: CacheInfo?, onClear: () -> Unit) {
             )
         }
         Text(
-            "消去すると現在地の周辺を取り直すので、通信が発生します。",
+            "消去すると、取得した全国の山データも消えます。上のボタンでもう一度取得できます。",
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.padding(top = 4.dp))
@@ -275,9 +305,9 @@ private fun CacheSection(info: CacheInfo?, onClear: () -> Unit) {
             text = {
                 Text(
                     if (Features.AREA_DOWNLOAD) {
-                        "保存している山データを消去し、現在地の周辺を取り直します。事前ダウンロードした地域は残ります。"
+                        "保存している山データを消去します。事前ダウンロードした地域は残ります。"
                     } else {
-                        "保存している山データをすべて消去し、現在地の周辺を取り直します。"
+                        "保存している山データをすべて消去します。山データは設定画面からもう一度取得できます。"
                     },
                 )
             },
