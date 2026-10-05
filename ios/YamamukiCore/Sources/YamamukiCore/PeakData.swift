@@ -229,8 +229,16 @@ public enum PeakData {
         )).filter { withMountains.contains($0) || !isForeign($0) }
     }
 
+    /// 方位盤で、取得していなくても欠けたものとして数えないタイル。現在地が日本側なら、`foreignAreas` のタイルは
+    /// 配信データに無いのが当たり前なので数えない(国境の近くで「一部の山データがありません」が出続けないように)。
+    /// 現在地が `foreignAreas` の中なら、どのタイルも数えて「データがありません」と知らせる。
+    public static func ignoresMissing(latitude: Double, longitude: Double) -> @Sendable (Tile) -> Bool {
+        if isForeign(Tile.of(latitude, longitude)) { return { _ in false } }
+        return { PeakData.isForeign($0) }
+    }
+
     /// タイルの中心が `foreignAreas` に入るか。
-    private static func isForeign(_ tile: Tile) -> Bool {
+    public static func isForeign(_ tile: Tile) -> Bool {
         let b = tile.bounds
         let lat = (b.south + b.north) / 2
         let lon = (b.west + b.east) / 2

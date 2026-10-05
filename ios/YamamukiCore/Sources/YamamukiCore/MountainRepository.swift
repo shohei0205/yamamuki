@@ -79,13 +79,15 @@ public final class MountainRepository: Sendable {
     /// - Parameters:
     ///   - allowNetwork: false ならキャッシュだけで返す(手動取得モードや、初回の同意前)。
     ///   - maxAge: これより古いタイルは取り直す。nil なら初期化時の値。
+    ///   - ignoreMissing: true を返すタイルは、取得していなくても欠けたものとして数えない(日本の外の陸地など)。
     public func mountainsAround(
         latitude: Double,
         longitude: Double,
         radiusKm: Double,
         forceRefresh: Bool = false,
         allowNetwork: Bool = true,
-        maxAge: TimeInterval? = nil
+        maxAge: TimeInterval? = nil,
+        ignoreMissing: (Tile) -> Bool = { _ in false }
     ) async throws -> MountainQueryResult {
         let maxAge = maxAge ?? self.maxAge
         let box = BoundingBox.around(latitude, longitude, radiusKm: radiusKm)
@@ -98,7 +100,7 @@ public final class MountainRepository: Sendable {
         }
 
         var error: Error?
-        var missing = tiles.filter { fetched[$0] == nil }
+        var missing = tiles.filter { fetched[$0] == nil && !ignoreMissing($0) }
         let networkSkipped = !toFetch.isEmpty && !allowNetwork
         if !toFetch.isEmpty && allowNetwork {
             do {

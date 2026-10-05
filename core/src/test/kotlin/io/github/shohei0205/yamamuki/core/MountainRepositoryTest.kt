@@ -128,4 +128,28 @@ class MountainRepositoryTest {
         repo.mountainsAround(here.first, here.second, 50.0)
         assertEquals(2, remote.calls.size)
     }
+
+    @Test
+    fun foreignTilesAreNotMissingNearTheBorder() = runTest {
+        // 全国の山データを取り込んだ状態。対馬の山だけを持ち、朝鮮半島のタイルは取得済みにならない。
+        val tsushima = Mountain(4, "白嶽", 34.42, 129.31, 519.0)
+        val cache = InMemoryMountainCache()
+        cache.replaceTiles(PeakData.tilesOf(listOf(tsushima)), listOf(tsushima), now)
+        val repo = repo(FakeRemote(emptyList()), cache)
+
+        // 対馬から 50km の範囲には釜山の周りも入る。外国のタイルは欠けたものとして数えない。
+        val fromTsushima = repo.mountainsAround(
+            34.4, 129.3, 50.0, allowNetwork = false,
+            ignoreMissing = PeakData.ignoresMissing(34.4, 129.3),
+        )
+        assertFalse(fromTsushima.incomplete)
+        assertTrue(repo.mountainsAround(34.4, 129.3, 50.0, allowNetwork = false).incomplete)
+
+        // 釜山にいるときは「データがありません」と知らせる。
+        val fromBusan = repo.mountainsAround(
+            35.1, 129.05, 20.0, allowNetwork = false,
+            ignoreMissing = PeakData.ignoresMissing(35.1, 129.05),
+        )
+        assertTrue(fromBusan.incomplete)
+    }
 }

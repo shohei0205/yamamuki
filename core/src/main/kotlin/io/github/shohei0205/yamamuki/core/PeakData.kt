@@ -181,8 +181,16 @@ object PeakData {
         ).filter { tile -> tile in withMountains || !isForeign(tile) }
     }
 
+    /**
+     * 方位盤で、取得していなくても欠けたものとして数えないタイル。現在地が日本側なら、[FOREIGN_AREAS] のタイルは
+     * 配信データに無いのが当たり前なので数えない(国境の近くで「一部の山データがありません」が出続けないように)。
+     * 現在地が [FOREIGN_AREAS] の中なら、どのタイルも数えて「データがありません」と知らせる。
+     */
+    fun ignoresMissing(latitude: Double, longitude: Double): (Tile) -> Boolean =
+        if (isForeign(Tile.of(latitude, longitude))) { _ -> false } else ::isForeign
+
     /** タイルの中心が [FOREIGN_AREAS] に入るか。 */
-    private fun isForeign(tile: Tile): Boolean {
+    fun isForeign(tile: Tile): Boolean {
         val b = tile.bounds
         val lat = (b.south + b.north) / 2
         val lon = (b.west + b.east) / 2

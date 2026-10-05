@@ -330,7 +330,8 @@ final class DialModel: ObservableObject {
             guard let self else { return }
             do {
                 let result = try await repository.mountainsAround(
-                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false
+                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false,
+                    ignoreMissing: PeakData.ignoresMissing(latitude: here.latitude, longitude: here.longitude)
                 )
                 peaks = result.mountains.map(\.mountain)
                 updatePeaks(at: gpsLocation ?? here)
@@ -356,7 +357,8 @@ final class DialModel: ObservableObject {
                 // 手動移動中の連続した読み込みをまとめる。
                 if exploring { try await Task.sleep(nanoseconds: 250_000_000) }
                 let result = try await repository.mountainsAround(
-                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false
+                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false,
+                    ignoreMissing: PeakData.ignoresMissing(latitude: here.latitude, longitude: here.longitude)
                 )
                 // 新しい読み込みに置き換わっていたら、古い結果で上書きしない。
                 guard !Task.isCancelled else { return }

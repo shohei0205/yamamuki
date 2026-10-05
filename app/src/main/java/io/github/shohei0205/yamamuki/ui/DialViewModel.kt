@@ -14,6 +14,7 @@ import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
+import io.github.shohei0205.yamamuki.core.PeakData
 import io.github.shohei0205.yamamuki.core.PeakDataException
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
 import io.github.shohei0205.yamamuki.core.meetsMinElevation
@@ -312,7 +313,10 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val here = _state.value.location ?: return
         val radius = DialGeometry.fetchRadiusKm(_state.value.rangeKm)
         viewModelScope.launch {
-            val result = repository.mountainsAround(here.latitude, here.longitude, radius, allowNetwork = false)
+            val result = repository.mountainsAround(
+                here.latitude, here.longitude, radius, allowNetwork = false,
+                ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
+            )
             peaks = result.mountains.map { it.mountain }
             _state.update { it.withPeaksAt(it.gpsLocation ?: here).copy(incomplete = result.incomplete) }
         }
@@ -332,7 +336,10 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(loading = true) }
             // 手動移動中の連続した読み込みをまとめる。
             if (_state.value.exploring) delay(250)
-            val result = repository.mountainsAround(here.latitude, here.longitude, radius, allowNetwork = false)
+            val result = repository.mountainsAround(
+                here.latitude, here.longitude, radius, allowNetwork = false,
+                ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
+            )
             peaks = result.mountains.map { it.mountain }
             _state.update { it.withPeaksAt(it.gpsLocation ?: here).copy(loading = false, incomplete = result.incomplete) }
         }

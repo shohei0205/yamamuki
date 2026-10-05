@@ -72,6 +72,8 @@ class MountainRepository(
         allowNetwork: Boolean = true,
         /** これより古いタイルは取り直す。 */
         maxAgeMillis: Long = this.maxAgeMillis,
+        /** true を返すタイルは、取得していなくても欠けたものとして数えない(日本の外の陸地など)。 */
+        ignoreMissing: (Tile) -> Boolean = { false },
     ): MountainQueryResult {
         val box = BoundingBox.around(latitude, longitude, radiusKm)
         val tiles = Tile.covering(box)
@@ -83,7 +85,7 @@ class MountainRepository(
         }
 
         var error: Throwable? = null
-        var missing = tiles.filter { it !in fetched }
+        var missing = tiles.filter { it !in fetched && !ignoreMissing(it) }
         val networkSkipped = toFetch.isNotEmpty() && !allowNetwork
         if (toFetch.isNotEmpty() && allowNetwork) {
             try {
