@@ -23,3 +23,16 @@ jobs:
         run: ./gradlew -p core test
       - name: アプリのビルド
         run: ./gradlew :app:assembleDebug
+      - name: アプリの単体テスト(DB の移行など)
+        run: ./gradlew :app:testDebugUnitTest
+      # ビルドで書き出した DB のスキーマを、PR では向き先のブランチとも比べる。
+      - name: DB のスキーマの確認
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            git fetch --depth=1 origin "$BASE_REF"
+            .github/scripts/check-room-schemas.sh FETCH_HEAD
+          else
+            .github/scripts/check-room-schemas.sh
+          fi
