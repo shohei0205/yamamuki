@@ -143,16 +143,34 @@ object PeakData {
 
     /**
      * 配信データが対象にする範囲。日本の端の島(沖ノ鳥島・南鳥島・与那国島・択捉島)まで入る矩形。
-     * この範囲のタイルはすべて取り込んだデータで置き換えるので、新しい版で消えた山や、以前 Overpass で取った山は残らない。
+     * この範囲のタイル([FOREIGN_AREAS] を除く)はすべて取り込んだデータで置き換えるので、新しい版で消えた山や、以前 Overpass で取った山は残らない。
      */
     val COVERAGE = BoundingBox(south = 20.0, west = 122.0, north = 46.0, east = 154.0)
 
     /**
-     * 取り込むタイル。[COVERAGE] と山のある範囲を合わせた矩形のタイルをすべて取得済みにする。
+     * [COVERAGE] のうち日本の外の陸地(配信データに山が無い所)。ここのタイルは取得済みにしないので、
+     * 「データがありません」と知らせる。0.5° のタイルの境目にそろえ、日本の島(対馬・宗谷岬・択捉島など)のタイルは含めない。
+     */
+    val FOREIGN_AREAS = listOf(
+        BoundingBox(south = 34.0, west = 122.0, north = 43.0, east = 129.0), // 朝鮮半島・中国の遼東半島と山東半島
+        BoundingBox(south = 35.0, west = 129.0, north = 43.0, east = 130.0), // 朝鮮半島の東岸(釜山から北)
+        BoundingBox(south = 33.0, west = 125.0, north = 34.0, east = 127.0), // 済州島と朝鮮半島の南西の島
+        BoundingBox(south = 37.0, west = 130.5, north = 38.0, east = 131.0), // 鬱陵島
+        BoundingBox(south = 29.0, west = 122.0, north = 31.5, east = 123.0), // 中国の舟山群島
+        BoundingBox(south = 42.0, west = 129.0, north = 46.0, east = 139.0), // ロシアの沿海地方
+        BoundingBox(south = 45.5, west = 142.0, north = 46.0, east = 144.0), // サハリンの南端
+        BoundingBox(south = 45.5, west = 149.0, north = 46.0, east = 154.0), // 得撫島から北の千島列島
+        BoundingBox(south = 20.0, west = 144.5, north = 21.0, east = 146.0), // 北マリアナ諸島の北端
+    )
+
+    /**
+     * 取り込むタイル。[COVERAGE] と山のある範囲を合わせた矩形のタイルを、[FOREIGN_AREAS] を除いてすべて取得済みにする。
      * 山が 0 件の海のタイルも含めないと、海に近い場所で「一部の山データがありません」と出てしまう。
+     * 山のあるタイルは、[FOREIGN_AREAS] の中でも含める。
      */
     fun tilesOf(mountains: List<Mountain>): List<Tile> {
         if (mountains.isEmpty()) return emptyList()
+        val withMountains = mountains.mapTo(HashSet()) { Tile.of(it.latitude, it.longitude) }
         return Tile.covering(
             BoundingBox(
                 south = minOf(COVERAGE.south, mountains.minOf { it.latitude }),
@@ -160,7 +178,15 @@ object PeakData {
                 north = maxOf(COVERAGE.north, mountains.maxOf { it.latitude }),
                 east = maxOf(COVERAGE.east, mountains.maxOf { it.longitude }),
             ),
-        )
+        ).filter { tile -> tile in withMountains || !isForeign(tile) }
+    }
+
+    /** タイルの中心が [FOREIGN_AREAS] に入るか。 */
+    private fun isForeign(tile: Tile): Boolean {
+        val b = tile.bounds
+        val lat = (b.south + b.north) / 2
+        val lon = (b.west + b.east) / 2
+        return FOREIGN_AREAS.any { it.contains(lat, lon) }
     }
 }
 

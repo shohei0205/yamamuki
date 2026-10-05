@@ -87,6 +87,9 @@ struct SavedAreaStore {
 /// 山データの事前ダウンロード(Android 版の AreaDownloadViewModel に相当)。
 /// 画面を閉じてもダウンロードは続くよう、方位盤の DialModel が持つ。同時に進めるのは 1 地域だけ。
 final class AreaDownloadModel: ObservableObject {
+    /// 取得済みのタイルを取り直さずに使う期間(30 日)。設定の「取得したデータを使う期間」をなくしたので固定にした。
+    static let maxAge: TimeInterval = 30 * 24 * 60 * 60
+
     @Published private(set) var savedAreas: [SavedArea]
     @Published private(set) var running: RunningDownload?
     @Published private(set) var notice: DownloadNotice?

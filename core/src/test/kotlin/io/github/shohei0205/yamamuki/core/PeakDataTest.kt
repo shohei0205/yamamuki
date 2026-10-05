@@ -93,12 +93,25 @@ class PeakDataTest {
     @Test
     fun tilesCoverSeaBetweenMountains() {
         val tiles = PeakData.tilesOf(PeakData.parseMountains(gzip))
-        // 北緯 20〜46°・東経 122〜154° の矩形。山のない海のタイルも含む(Tile.covering は北端・東端のタイルも含む)。
-        assertEquals(53 * 65, tiles.size)
+        // 北緯 20〜46°・東経 122〜154° の矩形。山のない海のタイルも含む。
         assertTrue(Tile.of(40.0, 141.0) in tiles)
         assertTrue(Tile.of(20.1, 153.9) in tiles)
+        // 日本の外の陸地は含めない(「データがありません」と知らせるため)。
+        assertTrue(Tile.of(35.1, 129.05) !in tiles, "釜山")
+        assertTrue(Tile.of(33.4, 126.5) !in tiles, "済州島")
+        assertTrue(Tile.of(37.5, 127.0) !in tiles, "ソウル")
+        assertTrue(Tile.of(43.1, 131.9) !in tiles, "ウラジオストク")
+        assertTrue(Tile.of(45.8, 142.5) !in tiles, "サハリンの南端")
+        // 境目の近くにある日本の島や岬のタイルは含める。
+        assertTrue(Tile.of(34.4, 129.3) in tiles, "対馬")
+        assertTrue(Tile.of(45.52, 141.94) in tiles, "宗谷岬")
+        assertTrue(Tile.of(42.15, 139.45) in tiles, "奥尻島")
+        assertTrue(Tile.of(45.3, 148.5) in tiles, "択捉島")
+        assertTrue(Tile.of(32.7, 128.8) in tiles, "五島列島")
         // 範囲の外にある山も、その山のタイルまで広げて取り込む。
         assertTrue(Tile.of(50.2, 160.3) in PeakData.tilesOf(listOf(Mountain(1, "外", 50.2, 160.3, null))))
+        // 日本の外の陸地でも、山のあるタイルは含める。
+        assertTrue(Tile.of(35.1, 129.05) in PeakData.tilesOf(listOf(Mountain(1, "外", 35.1, 129.05, null))))
     }
 
     private class FakeSource(var manifestBody: String, var data: ByteArray, var etag: String? = "\"e1\"") : PeakDataSource {

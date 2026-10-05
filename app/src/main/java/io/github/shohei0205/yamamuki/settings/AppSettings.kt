@@ -18,17 +18,12 @@ data class Settings(
     val textScale: Float = 1.0f,
     /** 起動時の表示範囲(現在地から画面上端までの距離)。 */
     val initialRangeKm: Int = DialGeometry.DEFAULT_RANGE_KM.toInt(),
-    /** 取得した山データを取り直さずに使う日数。 */
-    val cacheMaxAgeDays: Int = 30,
     /** 初回起動時の「山データを取得しますか」に答えた。答えるまでは位置情報の許可を求めない(ダイアログを重ねない)。 */
     val peakDataAsked: Boolean = false,
 ) {
-    val cacheMaxAgeMillis: Long get() = cacheMaxAgeDays * 24L * 60 * 60 * 1000
-
     companion object {
         val TEXT_SCALES = listOf(0.85f, 1.0f, 1.2f, 1.4f)
         val INITIAL_RANGES_KM = listOf(5, 10, 15, 20, 30, 50)
-        val CACHE_MAX_AGE_DAYS = listOf(7, 30, 90, 180, 365)
         val MAX_PEAKS_RANGE = 10..100
     }
 }
@@ -49,7 +44,6 @@ class AppSettings(context: Context) {
             .putInt(KEY_MAX_PEAKS, next.maxPeaks)
             .putFloat(KEY_TEXT_SCALE, next.textScale)
             .putInt(KEY_INITIAL_RANGE, next.initialRangeKm)
-            .putInt(KEY_CACHE_MAX_AGE, next.cacheMaxAgeDays)
             .putBoolean(KEY_PEAK_DATA_ASKED, next.peakDataAsked)
             .apply()
     }
@@ -62,7 +56,6 @@ class AppSettings(context: Context) {
             maxPeaks = prefs.getInt(KEY_MAX_PEAKS, d.maxPeaks),
             textScale = prefs.getFloat(KEY_TEXT_SCALE, d.textScale),
             initialRangeKm = prefs.getInt(KEY_INITIAL_RANGE, d.initialRangeKm),
-            cacheMaxAgeDays = prefs.getInt(KEY_CACHE_MAX_AGE, d.cacheMaxAgeDays),
             peakDataAsked = prefs.getBoolean(KEY_PEAK_DATA_ASKED, d.peakDataAsked),
         )
     }
@@ -73,7 +66,6 @@ class AppSettings(context: Context) {
         const val KEY_MAX_PEAKS = "max_peaks"
         const val KEY_TEXT_SCALE = "text_scale"
         const val KEY_INITIAL_RANGE = "initial_range_km"
-        const val KEY_CACHE_MAX_AGE = "cache_max_age_days"
         const val KEY_PEAK_DATA_ASKED = "peak_data_asked"
     }
 }

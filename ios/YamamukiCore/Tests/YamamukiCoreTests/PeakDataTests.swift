@@ -112,13 +112,27 @@ final class PeakDataTests: XCTestCase {
 
     func testTilesCoverSeaBetweenMountains() throws {
         let tiles = PeakData.tiles(of: try PeakData.parseMountains(gzip))
-        // 北緯 20〜46°・東経 122〜154° の矩形。山のない海のタイルも含む(Tile.covering は北端・東端のタイルも含む)。
-        XCTAssertEqual(tiles.count, 53 * 65)
+        // 北緯 20〜46°・東経 122〜154° の矩形。山のない海のタイルも含む。
         XCTAssertTrue(tiles.contains(Tile.of(40.0, 141.0)))
         XCTAssertTrue(tiles.contains(Tile.of(20.1, 153.9)))
+        // 日本の外の陸地は含めない(「データがありません」と知らせるため)。
+        XCTAssertFalse(tiles.contains(Tile.of(35.1, 129.05)), "釜山")
+        XCTAssertFalse(tiles.contains(Tile.of(33.4, 126.5)), "済州島")
+        XCTAssertFalse(tiles.contains(Tile.of(37.5, 127.0)), "ソウル")
+        XCTAssertFalse(tiles.contains(Tile.of(43.1, 131.9)), "ウラジオストク")
+        XCTAssertFalse(tiles.contains(Tile.of(45.8, 142.5)), "サハリンの南端")
+        // 境目の近くにある日本の島や岬のタイルは含める。
+        XCTAssertTrue(tiles.contains(Tile.of(34.4, 129.3)), "対馬")
+        XCTAssertTrue(tiles.contains(Tile.of(45.52, 141.94)), "宗谷岬")
+        XCTAssertTrue(tiles.contains(Tile.of(42.15, 139.45)), "奥尻島")
+        XCTAssertTrue(tiles.contains(Tile.of(45.3, 148.5)), "択捉島")
+        XCTAssertTrue(tiles.contains(Tile.of(32.7, 128.8)), "五島列島")
         // 範囲の外にある山も、その山のタイルまで広げて取り込む。
         let outside = Mountain(osmId: 1, name: "外", latitude: 50.2, longitude: 160.3, elevationM: nil)
         XCTAssertTrue(PeakData.tiles(of: [outside]).contains(Tile.of(50.2, 160.3)))
+        // 日本の外の陸地でも、山のあるタイルは含める。
+        let busan = Mountain(osmId: 1, name: "外", latitude: 35.1, longitude: 129.05, elevationM: nil)
+        XCTAssertTrue(PeakData.tiles(of: [busan]).contains(Tile.of(35.1, 129.05)))
     }
 
     func testImportsIntoCacheAndSkipsWhenUnchanged() async throws {

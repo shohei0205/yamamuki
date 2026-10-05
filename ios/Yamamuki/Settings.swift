@@ -13,17 +13,11 @@ struct Settings: Codable, Equatable {
     var textScale = 1.0
     /// 起動時の表示範囲(現在地から画面上端までの距離)。
     var initialRangeKm = Int(DialGeometry.defaultRangeKm)
-    /// 取得した山データを取り直さずに使う日数。
-    var cacheMaxAgeDays = 30
-
     /// 初回起動時の「山データを取得しますか」に答えた。答えるまでは位置情報の許可を求めない(ダイアログを重ねない)。
     var peakDataAsked = false
 
-    var cacheMaxAge: TimeInterval { TimeInterval(cacheMaxAgeDays) * 24 * 60 * 60 }
-
     static let textScales = [0.85, 1.0, 1.2, 1.4]
     static let initialRangesKm = [5, 10, 15, 20, 30, 50]
-    static let cacheMaxAgeDaysOptions = [7, 30, 90, 180, 365]
     static let maxPeaksRange = 10...100
 
     init() {}
@@ -37,7 +31,6 @@ struct Settings: Codable, Equatable {
         maxPeaks = try c.decodeIfPresent(Int.self, forKey: .maxPeaks) ?? d.maxPeaks
         textScale = try c.decodeIfPresent(Double.self, forKey: .textScale) ?? d.textScale
         initialRangeKm = try c.decodeIfPresent(Int.self, forKey: .initialRangeKm) ?? d.initialRangeKm
-        cacheMaxAgeDays = try c.decodeIfPresent(Int.self, forKey: .cacheMaxAgeDays) ?? d.cacheMaxAgeDays
         peakDataAsked = try c.decodeIfPresent(Bool.self, forKey: .peakDataAsked) ?? d.peakDataAsked
     }
 }

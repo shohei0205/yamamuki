@@ -53,7 +53,7 @@ struct AreaDownloadView: View {
                         Text(notice.message).font(.subheadline)
                         if let resume = notice.resume {
                             Button("続きから再開") {
-                                download.start(resume, refresh: notice.resumeRefresh, maxAge: model.settings.cacheMaxAge)
+                                download.start(resume, refresh: notice.resumeRefresh, maxAge: AreaDownloadModel.maxAge)
                             }
                             .disabled(!canStart)
                         }
@@ -119,7 +119,7 @@ struct AreaDownloadView: View {
             presenting: confirming
         ) { c in
             Button(c.refresh ? "取り直す" : "ダウンロード") {
-                download.start(c.prefecture, refresh: c.refresh, maxAge: model.settings.cacheMaxAge)
+                download.start(c.prefecture, refresh: c.refresh, maxAge: AreaDownloadModel.maxAge)
             }
             Button("キャンセル", role: .cancel) {}
         } message: { c in

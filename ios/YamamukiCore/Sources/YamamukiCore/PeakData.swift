@@ -83,8 +83,22 @@ public enum PeakData {
     public static let maxSizeBytes = 20_000_000
 
     /// 配信データが対象にする範囲。日本の端の島(沖ノ鳥島・南鳥島・与那国島・択捉島)まで入る矩形。
-    /// この範囲のタイルはすべて取り込んだデータで置き換えるので、新しい版で消えた山や、以前 Overpass で取った山は残らない。
+    /// この範囲のタイル(`foreignAreas` を除く)はすべて取り込んだデータで置き換えるので、新しい版で消えた山や、以前 Overpass で取った山は残らない。
     public static let coverage = BoundingBox(south: 20.0, west: 122.0, north: 46.0, east: 154.0)
+
+    /// `coverage` のうち日本の外の陸地(配信データに山が無い所)。ここのタイルは取得済みにしないので、
+    /// 「データがありません」と知らせる。0.5° のタイルの境目にそろえ、日本の島(対馬・宗谷岬・択捉島など)のタイルは含めない。
+    public static let foreignAreas = [
+        BoundingBox(south: 34.0, west: 122.0, north: 43.0, east: 129.0), // 朝鮮半島・中国の遼東半島と山東半島
+        BoundingBox(south: 35.0, west: 129.0, north: 43.0, east: 130.0), // 朝鮮半島の東岸(釜山から北)
+        BoundingBox(south: 33.0, west: 125.0, north: 34.0, east: 127.0), // 済州島と朝鮮半島の南西の島
+        BoundingBox(south: 37.0, west: 130.5, north: 38.0, east: 131.0), // 鬱陵島
+        BoundingBox(south: 29.0, west: 122.0, north: 31.5, east: 123.0), // 中国の舟山群島
+        BoundingBox(south: 42.0, west: 129.0, north: 46.0, east: 139.0), // ロシアの沿海地方
+        BoundingBox(south: 45.5, west: 142.0, north: 46.0, east: 144.0), // サハリンの南端
+        BoundingBox(south: 45.5, west: 149.0, north: 46.0, east: 154.0), // 得撫島から北の千島列島
+        BoundingBox(south: 20.0, west: 144.5, north: 21.0, east: 146.0), // 北マリアナ諸島の北端
+    ]
 
     public static func parseManifest(_ body: Data) throws -> PeakManifest {
         guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
@@ -201,16 +215,26 @@ public enum PeakData {
         #endif
     }
 
-    /// 取り込むタイル。`coverage` と山のある範囲を合わせた矩形のタイルをすべて取得済みにする。
+    /// 取り込むタイル。`coverage` と山のある範囲を合わせた矩形のタイルを、`foreignAreas` を除いてすべて取得済みにする。
     /// 山が 0 件の海のタイルも含めないと、海に近い場所で「一部の山データがありません」と出てしまう。
+    /// 山のあるタイルは、`foreignAreas` の中でも含める。
     public static func tiles(of mountains: [Mountain]) -> [Tile] {
         guard !mountains.isEmpty else { return [] }
+        let withMountains = Set(mountains.map { Tile.of($0.latitude, $0.longitude) })
         return Tile.covering(BoundingBox(
             south: min(coverage.south, mountains.map(\.latitude).min()!),
             west: min(coverage.west, mountains.map(\.longitude).min()!),
             north: max(coverage.north, mountains.map(\.latitude).max()!),
             east: max(coverage.east, mountains.map(\.longitude).max()!)
-        ))
+        )).filter { withMountains.contains($0) || !isForeign($0) }
+    }
+
+    /// タイルの中心が `foreignAreas` に入るか。
+    private static func isForeign(_ tile: Tile) -> Bool {
+        let b = tile.bounds
+        let lat = (b.south + b.north) / 2
+        let lon = (b.west + b.east) / 2
+        return foreignAreas.contains { $0.contains(lat, lon) }
     }
 }
 
