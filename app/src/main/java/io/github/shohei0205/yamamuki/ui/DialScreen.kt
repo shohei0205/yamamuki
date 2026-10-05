@@ -13,6 +13,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -25,6 +28,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -187,12 +191,19 @@ fun DialScreen(
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showDownload by rememberSaveable { mutableStateOf(false) }
     var showObserver by remember { mutableStateOf(false) }
+    // 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
+    var groupIds by remember { mutableStateOf<List<Long>?>(null) }
+    val group = groupIds?.mapNotNull { id -> state.mountains.firstOrNull { it.mountain.osmId == id } }?.takeIf { it.isNotEmpty() }
     val selected = state.mountains.firstOrNull { it.mountain.osmId == selectedId }
         ?: state.summit?.takeIf { it.mountain.osmId == selectedId }
     // 取り直しで一覧から消えたら選択も解く。残しておくと、その山が一覧に戻ったときにダイアログが勝手に開く。
     val selectionLost = selectedId != null && selected == null
     LaunchedEffect(selectionLost) {
         if (selectionLost) selectedId = null
+    }
+    val groupLost = groupIds != null && group == null
+    LaunchedEffect(groupLost) {
+        if (groupLost) groupIds = null
     }
 
     Box(
@@ -256,6 +267,7 @@ fun DialScreen(
             rangeKm = state.rangeKm,
             modifier = Modifier.fillMaxSize(),
             onMountainTap = { selectedId = it.mountain.osmId },
+            onGroupTap = { peaks -> groupIds = peaks.map { it.mountain.osmId } },
             onObserverTap = { showObserver = true },
             summit = state.summit,
             altitudeM = location?.mslAltitudeM,
@@ -425,6 +437,15 @@ fun DialScreen(
     val overlay = showSettings || showDownload
     if (selected != null && !overlay) {
         MountainDetailDialog(selected, onDismiss = { selectedId = null })
+    } else if (group != null && !overlay) {
+        PeakGroupDialog(
+            group,
+            onSelect = {
+                groupIds = null
+                selectedId = it.mountain.osmId
+            },
+            onDismiss = { groupIds = null },
+        )
     }
 
     // 現在地を取れる前は出す値がないので開かない。開いている間も歩けば値が更新される。
@@ -479,6 +500,34 @@ private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) 
                 DetailRow("標高", m.elevationText())
                 DetailRow("緯度経度", m.coordinateText())
                 DetailRow("現在地からの距離", distanceText(nearby.distanceKm))
+            }
+        },
+    )
+}
+
+/** 重なる山をまとめた代表の山をタップしたときの一覧。山を選ぶと、その山の詳細を開く。 */
+@Composable
+private fun PeakGroupDialog(peaks: List<NearbyMountain>, onSelect: (NearbyMountain) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
+        title = { Text("この付近の山") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                for (nearby in peaks) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(nearby) }
+                            .padding(vertical = 8.dp),
+                    ) {
+                        Text(nearby.mountain.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "${nearby.mountain.elevationText()}・${distanceText(nearby.distanceKm)}",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
             }
         },
     )

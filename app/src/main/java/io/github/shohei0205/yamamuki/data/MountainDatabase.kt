@@ -13,6 +13,7 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(
     tableName = "mountains",
@@ -111,9 +112,17 @@ abstract class MountainDatabase : RoomDatabase() {
         /** DB の版。テーブルや列を変えたら上げる。書き出したスキーマは app/schemas/ に版ごとに残す。 */
         const val VERSION = 1
 
-        fun create(context: Context): MountainDatabase =
+        /**
+         * 端末の DB がこのアプリより新しい版のとき(新しい版の開発版を入れたあとで古い版に戻したとき)は、
+         * 落ちずに山データのキャッシュを作り直す。中身は取り直せるので、そのときは [onCacheReset] を呼ぶ。
+         */
+        fun create(context: Context, onCacheReset: () -> Unit): MountainDatabase =
             Room.databaseBuilder(context, MountainDatabase::class.java, FILE_NAME)
                 .addMigrations(*MOUNTAIN_MIGRATIONS)
+                .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
+                .addCallback(object : RoomDatabase.Callback() {
+                    override fun onDestructiveMigration(db: SupportSQLiteDatabase) = onCacheReset()
+                })
                 .build()
     }
 }

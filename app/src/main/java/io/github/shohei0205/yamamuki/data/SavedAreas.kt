@@ -37,6 +37,13 @@ class SavedAreas(context: Context) {
         _areas.value = load()
     }
 
+    /** 保存済みの地域と途中で終わった地域の記録をすべて消す。山データのキャッシュが作り直されたときに使う。 */
+    fun clear() {
+        prefs.edit().clear().apply()
+        pendingPrefs.edit().clear().apply()
+        _areas.value = emptyList()
+    }
+
     /**
      * 途中で終わったダウンロード(アプリを閉じた・失敗した・中断した)。次に開いたときに続きから再開できるよう覚えておく。
      * 値は都道府県と、取り直し(更新)だったか。
