@@ -12,9 +12,10 @@
 
 ## 構成
 
-- `core/` Android に依存しないデータ取得ロジック（配布データの取得・検証・取り込み、距離と方位の計算、キャッシュ方針。使っていない Overpass API の問い合わせ・解析も残している）。単体でテストできる。
-- `app/` Android アプリ。Room によるキャッシュ実装、設定、画面。
-- `ios/YamamukiCore/` iOS に依存しないロジックの Swift パッケージ。`core/` を Swift に移植したもので、単体でテストできる。キャッシュはタイルごとの JSON ファイル（`FileMountainCache`）に保存する。
+- `android/` Android 版の Gradle プロジェクト。Android Studio ではこのフォルダを開く。
+- `android/core/` Android に依存しないデータ取得ロジック（配布データの取得・検証・取り込み、距離と方位の計算、キャッシュ方針。使っていない Overpass API の問い合わせ・解析も残している）。単体でテストできる。
+- `android/app/` Android アプリ。Room によるキャッシュ実装、設定、画面。
+- `ios/YamamukiCore/` iOS に依存しないロジックの Swift パッケージ。`android/core/` を Swift に移植したもので、単体でテストできる。キャッシュはタイルごとの JSON ファイル（`FileMountainCache`）に保存する。
 - `ios/Yamamuki/` iOS アプリ。方位盤の描画（`DialCanvasView`）、画面（`DialView`）、設定（`SettingsView`）、現在地と方位の取得（`LocationService`）。
 - `ios/YamamukiUITests/` iOS アプリの UI テスト（XCUITest）。アプリを起動して方位盤と設定の画面を開き、画面を撮る。
 - `ios/project.yml` Xcode プロジェクトの設定（[XcodeGen](https://github.com/yonaskolb/XcodeGen) 用）。`ios/Yamamuki.xcodeproj` はここから生成し、git には入れない。
@@ -31,7 +32,7 @@
 | Gradle | 8.14.3（`gradlew` が自動でダウンロードする） |
 | 実行する端末 | Android 8.0 (API 26) 以上。現在地の標高表示は Android 14 以上 |
 
-- Android SDK の場所は、環境変数 `ANDROID_HOME` か、リポジトリ直下の `local.properties`（git 管理外）で指定する。
+- Android SDK の場所は、環境変数 `ANDROID_HOME` か、`android/local.properties`（git 管理外）で指定する。
   ```properties
   sdk.dir=C\:\\Users\\<ユーザー名>\\AppData\\Local\\Android\\Sdk
   ```
@@ -53,11 +54,15 @@
 
 ### Android 版
 
+Gradle のコマンドは `android/` で実行する。
+
 ```bash
+cd android
+
 # core の単体テスト
 ./gradlew -p core test
 
-# デバッグ用 APK のビルド（app/build/outputs/apk/debug/app-debug.apk）
+# デバッグ用 APK のビルド（android/app/build/outputs/apk/debug/app-debug.apk）
 ./gradlew :app:assembleDebug
 
 # アプリの単体テスト（DB の移行など。Robolectric で動かす）
@@ -149,13 +154,13 @@ open Yamamuki.xcodeproj
 - 取得先の manifest はビルドの種類で変わる。正式版の manifest はまだ公開されていないので、今は配布用のビルドでは取得できない。
   - 開発用(Android の debug、iOS の Debug): `https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json`(開発版)
   - 配布用(Android の release、iOS の Release): `https://shohei0205.github.io/yamamuki-data/peaks/manifest.json`(正式版。仮)
-  - 切り替えは Android が `app/build.gradle.kts` の `PEAK_DATA_DEV`、iOS が `ios/project.yml` の Debug の `SWIFT_ACTIVE_COMPILATION_CONDITIONS`(`PEAK_DATA_DEV`)。URL は core の `PeakData` にある。
+  - 切り替えは Android が `android/app/build.gradle.kts` の `PEAK_DATA_DEV`、iOS が `ios/project.yml` の Debug の `SWIFT_ACTIVE_COMPILATION_CONDITIONS`(`PEAK_DATA_DEV`)。URL は core の `PeakData` にある。
 - manifest は前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「再取得」で取り直せる)。
 - 対応する manifest の形式は schemaVersion 4。知らない版のときは取り込まず、アプリの更新を促す。
-- 取り込みと取り込み済みの版の記録は `core/.../PeakData.kt` と `ios/YamamukiCore/.../PeakData.swift` にある。
+- 取り込みと取り込み済みの版の記録は `android/core/.../PeakData.kt` と `ios/YamamukiCore/.../PeakData.swift` にある。
 - OpenStreetMap の Overpass API から取得していたころに分かったことは [docs/peak-data-notes.md](docs/peak-data-notes.md) にまとめた。
 
-以前の都道府県単位の事前ダウンロード(Overpass から取得)は、`Features.AREA_DOWNLOAD`(Android、`app/.../Features.kt`)と `Features.areaDownload`(iOS、`ios/Yamamuki/Features.swift`)を false にして隠している。コードは残してある。
+以前の都道府県単位の事前ダウンロード(Overpass から取得)は、`Features.AREA_DOWNLOAD`(Android、`android/app/.../Features.kt`)と `Features.areaDownload`(iOS、`ios/Yamamuki/Features.swift`)を false にして隠している。コードは残してある。
 
 ## 設定
 

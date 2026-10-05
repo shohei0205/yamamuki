@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Room が書き出した DB のスキーマ(app/schemas/)を確かめる。:app をビルドしたあとに動かす。
+# Room が書き出した DB のスキーマ(android/app/schemas/)を確かめる。:app をビルドしたあとに動かす。
 #   1. ビルドで書き出したスキーマがコミット済みのものと同じか(テーブルを変えたのにスキーマを入れ忘れていないか)
 #   2. 比べる元(引数。PR の向き先のブランチ)から、既にある版のスキーマを書き換えたり消したりしていないか
 #      (テーブルを変えたのに DB の版を上げ忘れていないか)
 set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
 
-dir=app/schemas
+dir=android/app/schemas
 status=0
 
 changed=$(git status --porcelain -- "$dir")

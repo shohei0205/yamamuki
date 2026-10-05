@@ -20,10 +20,13 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v6
       - name: core のテスト
+        working-directory: android
         run: ./gradlew -p core test
       - name: アプリのビルド
+        working-directory: android
         run: ./gradlew :app:assembleDebug
       - name: アプリの単体テスト(DB の移行など)
+        working-directory: android
         run: ./gradlew :app:testDebugUnitTest
       # ビルドで書き出した DB のスキーマを、PR では向き先のブランチとも比べる。
       - name: DB のスキーマの確認
