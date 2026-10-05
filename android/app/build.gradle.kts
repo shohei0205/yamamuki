@@ -20,17 +20,18 @@ android {
 
     // 配布版の署名鍵。キーストアとパスワードはリポジトリに入れず、PC 内の properties ファイルから読む
     // (既定は ~/.android/yamamuki-release.properties。環境変数 YAMAMUKI_SIGNING_PROPERTIES で変えられる)。
-    // ファイルが無ければ署名せずにビルドする。
-    val signingProps = (System.getenv("YAMAMUKI_SIGNING_PROPERTIES")
+    // ファイルが無ければ署名せずにビルドする。storeFile を相対パスで書いたときは、properties ファイルのある
+    // フォルダから探す(リポジトリの中でフォルダを動かしても、鍵の場所がずれないように)。
+    val signingPropsFile = (System.getenv("YAMAMUKI_SIGNING_PROPERTIES")
         ?: "${System.getProperty("user.home")}/.android/yamamuki-release.properties")
         .let(::file)
         .takeIf { it.exists() }
-        ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
+    val signingProps = signingPropsFile?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 
     signingConfigs {
-        if (signingProps != null) {
+        if (signingPropsFile != null && signingProps != null) {
             create("release") {
-                storeFile = file(signingProps.getProperty("storeFile"))
+                storeFile = signingPropsFile.parentFile.resolve(signingProps.getProperty("storeFile"))
                 storePassword = signingProps.getProperty("storePassword")
                 keyAlias = signingProps.getProperty("keyAlias")
                 keyPassword = signingProps.getProperty("keyPassword")

@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 /**
- * app/schemas/ に残した過去の版のスキーマから DB を作り、今のアプリの DB として開けるかを確かめる。
+ * android/app/schemas/ に残した過去の版のスキーマから DB を作り、今のアプリの DB として開けるかを確かめる。
  * 版を上げたのに移行を入れ忘れると、Room が開くときに落ちるのでテストも失敗する。
  */
 @RunWith(RobolectricTestRunner::class)
@@ -29,7 +29,7 @@ class MountainDatabaseMigrationTest {
     @Test
     fun currentVersionSchemaIsExported() {
         assertTrue(
-            "今の版(${MountainDatabase.VERSION})のスキーマが app/schemas/ にない",
+            "今の版(${MountainDatabase.VERSION})のスキーマが android/app/schemas/ にない",
             File(schemaDir, "${MountainDatabase.VERSION}.json").exists(),
         )
     }
@@ -39,7 +39,7 @@ class MountainDatabaseMigrationTest {
         val versions = schemaDir.listFiles().orEmpty()
             .mapNotNull { it.name.removeSuffix(".json").toIntOrNull() }
             .sorted()
-        assertTrue("app/schemas/ にスキーマがない", versions.isNotEmpty())
+        assertTrue("android/app/schemas/ にスキーマがない", versions.isNotEmpty())
 
         for (version in versions) {
             val name = "from-$version.db"
