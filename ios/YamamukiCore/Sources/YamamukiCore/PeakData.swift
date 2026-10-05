@@ -66,9 +66,15 @@ public protocol PeakDataSource: Sendable {
 }
 
 public enum PeakData {
-    /// 最新版の manifest の URL。正式版(peaks/manifest.json)は開発版で動作を確かめてから切り替える(#41・#42)。
+    /// 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)はこれを読む。
     /// 開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
-    public static let manifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json")!
+    public static let devManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json")!
+
+    /// 正式版の最新版の manifest の URL(仮。yamamuki-data ではまだ公開していない)。配布用のビルド(Release)はこれを読む。
+    public static let stableManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/peaks/manifest.json")!
+
+    /// ビルドの種類に合う manifest の URL。
+    public static func manifestUrl(dev: Bool) -> URL { dev ? devManifestUrl : stableManifestUrl }
 
     /// 読める manifest の形式の版。版 4 で downloadUrl が入った。山ごとの項目は版 2 から変わっていない。
     public static let supportedSchemaVersion = 4
@@ -273,7 +279,7 @@ public struct HTTPPeakDataSource: PeakDataSource {
     private let manifestUrl: URL
     private let userAgent: String
 
-    public init(session: URLSession = .shared, manifestUrl: URL = PeakData.manifestUrl, userAgent: String = "yamamuki-ios") {
+    public init(session: URLSession = .shared, manifestUrl: URL, userAgent: String = "yamamuki-ios") {
         self.session = session
         self.manifestUrl = manifestUrl
         self.userAgent = userAgent

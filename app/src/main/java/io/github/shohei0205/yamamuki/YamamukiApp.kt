@@ -4,6 +4,7 @@ import android.app.Application
 import io.github.shohei0205.yamamuki.core.HttpPeakDataSource
 import io.github.shohei0205.yamamuki.core.MountainRepository
 import io.github.shohei0205.yamamuki.core.OverpassClient
+import io.github.shohei0205.yamamuki.core.PeakData
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
 import io.github.shohei0205.yamamuki.data.CacheManager
 import io.github.shohei0205.yamamuki.data.MountainDatabase
@@ -49,9 +50,10 @@ class YamamukiApp : Application() {
         MountainRepository(remote = OverpassClient(http, userAgent = USER_AGENT), cache = cache)
     }
 
-    /** yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。 */
+    /** yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。開発版のビルドは開発版の manifest を読む。 */
     val peakDataUpdater: PeakDataUpdater by lazy {
-        PeakDataUpdater(HttpPeakDataSource(http, userAgent = USER_AGENT), cache)
+        val manifestUrl = PeakData.manifestUrl(dev = BuildConfig.PEAK_DATA_DEV)
+        PeakDataUpdater(HttpPeakDataSource(http, manifestUrl, userAgent = USER_AGENT), cache)
     }
 
     private companion object {

@@ -177,14 +177,14 @@ class PeakDataTest {
         val engine = MockEngine { request ->
             seen += request.headers[HttpHeaders.IfNoneMatch]
             when {
-                request.url.toString() == PeakData.MANIFEST_URL && request.headers[HttpHeaders.IfNoneMatch] == "\"e1\"" ->
+                request.url.toString() == PeakData.DEV_MANIFEST_URL && request.headers[HttpHeaders.IfNoneMatch] == "\"e1\"" ->
                     respond("", HttpStatusCode.NotModified)
-                request.url.toString() == PeakData.MANIFEST_URL ->
+                request.url.toString() == PeakData.DEV_MANIFEST_URL ->
                     respond(manifest(), headers = headersOf(HttpHeaders.ETag, "\"e1\""))
                 else -> respond(gzip)
             }
         }
-        val source = HttpPeakDataSource(HttpClient(engine))
+        val source = HttpPeakDataSource(HttpClient(engine), PeakData.DEV_MANIFEST_URL)
 
         val fetched = source.fetchManifest(null)
         assertIs<ManifestResponse.Fetched>(fetched)
@@ -192,6 +192,12 @@ class PeakDataTest {
         assertIs<ManifestResponse.NotModified>(source.fetchManifest("\"e1\""))
         assertEquals(listOf(null, "\"e1\""), seen)
         assertTrue(source.fetchData("https://example.com/japan-mountains.json.gz").contentEquals(gzip))
+    }
+
+    @Test
+    fun manifestUrlFollowsBuildType() {
+        assertEquals("https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json", PeakData.manifestUrl(dev = true))
+        assertEquals("https://shohei0205.github.io/yamamuki-data/peaks/manifest.json", PeakData.manifestUrl(dev = false))
     }
 
     @Test

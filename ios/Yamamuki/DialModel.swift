@@ -80,13 +80,23 @@ final class DialModel: ObservableObject {
     /// これ以上移動したら、保存済みのデータを読み直す。
     private static let refetchDistanceKm = 1.0
 
+    /// 開発版の山データ(peaks-dev/)を読むか。Debug のビルドだけ project.yml で PEAK_DATA_DEV を付ける。
+    #if PEAK_DATA_DEV
+    private static let peakDataDev = true
+    #else
+    private static let peakDataDev = false
+    #endif
+
     init() {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("mountains", isDirectory: true)
         cache = FileMountainCache(directory: directory)
         let userAgent = "yamamuki-ios/0.1 (+https://github.com/shohei0205/yamamuki)"
         repository = MountainRepository(remote: OverpassClient(userAgent: userAgent), cache: cache)
-        peakDataUpdater = PeakDataUpdater(source: HTTPPeakDataSource(userAgent: userAgent), cache: cache)
+        peakDataUpdater = PeakDataUpdater(
+            source: HTTPPeakDataSource(manifestUrl: PeakData.manifestUrl(dev: Self.peakDataDev), userAgent: userAgent),
+            cache: cache
+        )
         peakData = peakDataStore.load()
         areaDownload = AreaDownloadModel(repository: repository, cache: cache)
         let saved = SettingsStore().load()

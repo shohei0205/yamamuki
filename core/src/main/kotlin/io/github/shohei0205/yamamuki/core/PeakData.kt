@@ -63,10 +63,16 @@ interface PeakDataSource {
 
 object PeakData {
     /**
-     * 最新版の manifest の URL。正式版(peaks/manifest.json)は開発版で動作を確かめてから切り替える(#41・#42)。
+     * 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)はこれを読む。
      * 開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
      */
-    const val MANIFEST_URL = "https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json"
+    const val DEV_MANIFEST_URL = "https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json"
+
+    /** 正式版の最新版の manifest の URL(仮。yamamuki-data ではまだ公開していない)。配布用のビルド(release)はこれを読む。 */
+    const val STABLE_MANIFEST_URL = "https://shohei0205.github.io/yamamuki-data/peaks/manifest.json"
+
+    /** ビルドの種類に合う manifest の URL。 */
+    fun manifestUrl(dev: Boolean): String = if (dev) DEV_MANIFEST_URL else STABLE_MANIFEST_URL
 
     /** 読める manifest の形式の版。版 4 で downloadUrl が入った。山ごとの項目は版 2 から変わっていない。 */
     const val SUPPORTED_SCHEMA_VERSION = 4
@@ -207,7 +213,7 @@ class PeakDataUpdater(
 /** HTTP で配信データを取得する。 */
 class HttpPeakDataSource(
     private val httpClient: HttpClient,
-    private val manifestUrl: String = PeakData.MANIFEST_URL,
+    private val manifestUrl: String,
     private val userAgent: String = "yamamuki-android",
 ) : PeakDataSource {
     override suspend fun fetchManifest(etag: String?): ManifestResponse {

@@ -73,6 +73,11 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(m.sourceTimestamp, "2026-09-30T20:21:22Z")
     }
 
+    func testManifestUrlFollowsBuildType() {
+        XCTAssertEqual(PeakData.manifestUrl(dev: true).absoluteString, "https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json")
+        XCTAssertEqual(PeakData.manifestUrl(dev: false).absoluteString, "https://shohei0205.github.io/yamamuki-data/peaks/manifest.json")
+    }
+
     func testRejectsUnknownSchemaVersion() {
         XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 5))) { error in
             XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)

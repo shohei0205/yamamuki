@@ -142,7 +142,10 @@ open Yamamuki.xcodeproj
 
 - 初回起動時に「山データの取得」を聞く。「取得する」を選ぶとすぐに取得し、「あとで」を選んだときは設定画面の「山データ」から取得できる。位置情報の許可はこのあとに聞く。
 - 設定画面の「山データを取得」(取得済みなら「最新の山データを確認」)で取り直せる。新しい版がなければ確認だけで終わる。
-- 取得先は yamamuki-data の開発版の manifest(`https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json`)。正式版の URL は、開発版で動作を確かめてから切り替える。
+- 取得先の manifest はビルドの種類で変わる。正式版の manifest はまだ公開されていないので、今は配布用のビルドでは取得できない。
+  - 開発用(Android の debug、iOS の Debug): `https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json`(開発版)
+  - 配布用(Android の release、iOS の Release): `https://shohei0205.github.io/yamamuki-data/peaks/manifest.json`(正式版。仮)
+  - 切り替えは Android が `app/build.gradle.kts` の `PEAK_DATA_DEV`、iOS が `ios/project.yml` の Debug の `SWIFT_ACTIVE_COMPILATION_CONDITIONS`(`PEAK_DATA_DEV`)。URL は core の `PeakData` にある。
 - manifest は前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「再取得」で取り直せる)。
 - 対応する manifest の形式は schemaVersion 4。知らない版のときは取り込まず、アプリの更新を促す。
 - 取り込みと取り込み済みの版の記録は `core/.../PeakData.kt` と `ios/YamamukiCore/.../PeakData.swift` にある。
