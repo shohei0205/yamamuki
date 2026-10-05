@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12 以降の自動バックアップの対象。backup_rules.xml と同じものを外す。
+  機種変更での端末間の移行では、事前ダウンロードした山データも引き継ぐので外さない。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="mountains.db" />
+        <exclude domain="database" path="mountains.db-wal" />
+        <exclude domain="database" path="mountains.db-shm" />
+        <exclude domain="database" path="mountains.db-journal" />
+        <exclude domain="sharedpref" path="saved_areas.xml" />
+        <exclude domain="sharedpref" path="area_download_pending.xml" />
+    </cloud-backup>
+</data-extraction-rules>
