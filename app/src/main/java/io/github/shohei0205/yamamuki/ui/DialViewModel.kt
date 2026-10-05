@@ -283,7 +283,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshCacheInfo() {
         viewModelScope.launch {
             val info = cacheManager.info()
-            _state.update { it.copy(cacheInfo = info) }
+            // DB を開いたときにキャッシュが作り直されていたら、取り込み済みの記録も消えているので読み直す。
+            _state.update { it.copy(cacheInfo = info, peakData = app.peakDataStore.load()) }
         }
     }
 
@@ -350,7 +351,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _state.update { it.copy(peakDataUpdating = true, peakDataNotice = null) }
             try {
-                val result = app.peakDataUpdater.update(_state.value.peakData)
+                // 画面の状態ではなく保存した記録を使う(キャッシュが作り直されて記録が消えていることがある)。
+                val result = app.peakDataUpdater.update(app.peakDataStore.load())
                 app.peakDataStore.save(result.installed)
                 val updated = result is PeakDataUpdater.Result.Updated
                 _state.update {
