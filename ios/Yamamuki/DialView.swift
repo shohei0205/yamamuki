@@ -94,7 +94,12 @@ struct DialView: View {
                 VStack {
                     Spacer()
                     HStack(alignment: .bottom) {
-                        bottomButtons
+                        // 右下のモード切替ボタンと同じ高さにそろえるため、下に出典の文字 1 行分の高さをあける。
+                        VStack(alignment: .leading, spacing: 12) {
+                            bottomButtons
+                            Text("©").font(.caption2).hidden()
+                        }
+                        .padding(.leading, 8)
                         Spacer()
                         VStack(alignment: .trailing, spacing: 12) {
                             Button {
@@ -185,9 +190,9 @@ struct DialView: View {
             .background(Capsule().fill(Color.white.opacity(0.5)))
     }
 
-    /// 左下: 設定と事前ダウンロード。屋外で押しやすいよう大きめにする。
+    /// 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目にする。
     private var bottomButtons: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             RoundButton(label: "設定") {
                 Image(systemName: "gearshape.fill")
             } action: {
@@ -262,6 +267,7 @@ private extension View {
     }
 }
 
+/// 方位盤の下の角に置く丸いボタン。右下のモード切替ボタンと同じく、白地に影を付けて地図の上でも見分けやすくする。
 private struct RoundButton<Content: View>: View {
     let label: String
     @ViewBuilder let content: () -> Content
@@ -270,11 +276,13 @@ private struct RoundButton<Content: View>: View {
     var body: some View {
         Button(action: action) {
             content()
-                .font(.system(size: 24))
-                .frame(width: 52, height: 52)
-                .background(Circle().fill(Color.white.opacity(0.7)))
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(Color.gray)
+                .frame(width: 56, height: 56)
+                .background(Circle().fill(Color.white))
+                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
         }
-        .tint(.black)
+        .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
 }

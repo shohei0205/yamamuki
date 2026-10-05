@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -335,16 +334,16 @@ fun DialScreen(
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
         )
 
-        // 左下: 設定と事前ダウンロード。屋外で押しやすいよう既定(40dp)より大きくする。
+        // 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目・同じ高さにそろえる。
         Row(
-            Modifier.align(Alignment.BottomStart).padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 36.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            FilledTonalIconButton(onClick = { showSettings = true }, modifier = Modifier.size(52.dp)) {
+            RoundMapButton(onClick = { showSettings = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "設定", Modifier.size(28.dp))
             }
             if (Features.AREA_DOWNLOAD) {
-                FilledTonalIconButton(onClick = { showDownload = true }, modifier = Modifier.size(52.dp)) {
+                RoundMapButton(onClick = { showDownload = true }) {
                     // ダウンロード中は画面を閉じていても進み具合が分かるよう、ボタンに出す。
                     val running = download.running
                     if (running != null && running.progress.doneTiles > 0) {
