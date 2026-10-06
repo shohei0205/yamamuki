@@ -129,7 +129,7 @@ fun DialCanvas(
     viewportLongitude: Double? = longitude,
     compassHeadingDeg: Double = headingDeg,
     headingUp: Boolean = true,
-    /** 上部の方位目盛りの引っ込み具合。0 で表示(ヘディングアップ)、1 で画面の上へ隠れる(手動位置モード)。 */
+    /** 上部の方位目盛りの引っ込み具合。0 で表示(ヘディングアップ)、1 でヘッダーの下端へ隠れる(手動位置モード)。 */
     tapeHidden: Float = 0f,
     /** 現在地から画面上部へ広がる視野の扇の濃さ(0〜1)。双眼鏡の短い視野は残りの (1 - 濃さ) で描く。 */
     viewFanAlpha: Float = 1f,
@@ -158,6 +158,7 @@ fun DialCanvas(
     }
     // 視野の扇だけを画面下端の余白まで描くので、全体では切り抜かず、扇以外を描く範囲で切り抜く。
     Canvas(modifier.then(tapModifier)) {
+        val headerHeight = DialGeometry.HEADER_HEIGHT_DP.dp.toPx()
         val tapeHeight = DialGeometry.TAPE_HEIGHT_DP.dp.toPx()
         val chartTop = DialGeometry.CHART_TOP_DP.dp.toPx()
         val origin = Offset(size.width / 2, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
@@ -168,7 +169,7 @@ fun DialCanvas(
         val observer = origin + Offset((offset.x * pxPerKm).toFloat(), (-offset.y * pxPerKm).toFloat())
         val observerRotation = Heading.delta(headingDeg, compassHeadingDeg).toFloat()
         if (viewFanAlpha > 0f) {
-            clipRect(top = tapeHeight, bottom = size.height + bottomBleed.toPx()) {
+            clipRect(top = headerHeight + tapeHeight, bottom = size.height + bottomBleed.toPx()) {
                 // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
                 drawViewFan(observer, viewFanAlpha)
             }
@@ -194,11 +195,16 @@ fun DialCanvas(
                 }
                 hitTargets.summit = null
             }
+            // 上部の青空と山並みは、地図の上に重ねる。手動位置モードで地図を動かしても、双眼鏡などがヘッダーに重ならない。
+            drawHeaderScenery(DialBeige)
             if (tapeHidden < 1f) {
+                // 目盛りはヘッダーの下に置き、手動位置モードではヘッダーの下端で切って、ヘッダーに重ねずに消す。
                 // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
-                translate(top = -tapeHidden * chartTop * 1.5f) {
-                    drawTape(headingDeg, tapeHeight, textMeasurer)
-                    drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles, texts)
+                clipRect(top = headerHeight) {
+                    translate(top = headerHeight - tapeHidden * (chartTop - headerHeight) * 1.5f) {
+                        drawTape(headingDeg, tapeHeight, textMeasurer)
+                        drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles, texts)
+                    }
                 }
             }
         }

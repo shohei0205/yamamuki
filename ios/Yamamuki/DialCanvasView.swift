@@ -66,7 +66,7 @@ struct DialCanvasView: View, Animatable {
     let viewportLocation: GeoPoint?
     let compassHeading: Double
     let headingUp: Bool
-    /// 上部の方位目盛りの引っ込み具合。0 で表示(ヘディングアップ)、1 で画面の上へ隠れる(手動位置モード)。
+    /// 上部の方位目盛りの引っ込み具合。0 で表示(ヘディングアップ)、1 でヘッダーの下端へ隠れる(手動位置モード)。
     var tapeHidden: Double
     /// 現在地から画面上部へ広がる視野の扇の濃さ(0〜1)。双眼鏡の短い視野は残りの (1 - 濃さ) で描く。
     var viewFanAlpha: Double
@@ -114,6 +114,7 @@ struct DialCanvasView: View, Animatable {
 
     private func draw(_ ctx: GraphicsContext, size: CGSize) {
         let styles = TextStyles(scale: textScale)
+        let headerHeight = CGFloat(DialGeometry.headerHeight)
         let tapeHeight = CGFloat(DialGeometry.tapeHeight)
         let chartTop = CGFloat(DialGeometry.chartTop)
         let origin = CGPoint(x: size.width / 2, y: size.height - originBottom)
@@ -128,7 +129,8 @@ struct DialCanvasView: View, Animatable {
         if viewFanAlpha > 0 {
             // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
             var fanContext = ctx
-            fanContext.clip(to: Path(CGRect(x: 0, y: tapeHeight, width: size.width, height: max(0, size.height + bottomBleed - tapeHeight))))
+            let fanTop = headerHeight + tapeHeight
+            fanContext.clip(to: Path(CGRect(x: 0, y: fanTop, width: size.width, height: max(0, size.height + bottomBleed - fanTop))))
             drawViewFan(fanContext, size: size, apex: observer)
         }
         var ctx = ctx
@@ -148,10 +150,14 @@ struct DialCanvasView: View, Animatable {
             hitTargets.observer = drawBinoculars(rotatedObserver(ctx, center: observer), center: observer)
             hitTargets.summit = nil
         }
+        // 上部の青空と山並みは、地図の上に重ねる。手動位置モードで地図を動かしても、双眼鏡などがヘッダーに重ならない。
+        drawHeaderScenery(ctx, width: size.width, ground: dialBeige)
         if tapeHidden < 1 {
+            // 目盛りはヘッダーの下に置き、手動位置モードではヘッダーの下端で切って、ヘッダーに重ねずに消す。
             // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
             var tapeContext = ctx
-            tapeContext.translateBy(x: 0, y: -CGFloat(tapeHidden) * chartTop * 1.5)
+            tapeContext.clip(to: Path(CGRect(x: 0, y: headerHeight, width: size.width, height: max(0, size.height - headerHeight))))
+            tapeContext.translateBy(x: 0, y: headerHeight - CGFloat(tapeHidden) * (chartTop - headerHeight) * 1.5)
             drawTape(tapeContext, size: size, tapeHeight: tapeHeight)
             drawReadout(tapeContext, size: size, tapeHeight: tapeHeight, styles: styles)
         }

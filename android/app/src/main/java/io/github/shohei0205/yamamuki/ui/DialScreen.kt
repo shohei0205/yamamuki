@@ -55,7 +55,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.SpanStyle
@@ -205,10 +207,13 @@ fun DialScreen(
         if (groupLost) groupIds = null
     }
 
+    val safeDrawing = WindowInsets.safeDrawing
     Box(
         Modifier
             .fillMaxSize()
             .background(DialBeige)
+            // ステータスバーの裏は、ヘッダーの空の上端と同じ色で塗り、空がつながって見えるようにする。
+            .drawBehind { drawRect(HeaderSkyTop, size = Size(size.width, safeDrawing.getTop(this).toFloat())) }
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .onSizeChanged {
                 canvasHeight = it.height / density.density.toDouble()
@@ -300,12 +305,12 @@ fun DialScreen(
             }
         }
 
-        // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。
+        // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。どちらもヘッダーの下に置く。
         AnimatedVisibility(
             visible = manualChrome,
             enter = slideInHorizontally(tween(MODE_ANIMATION_MS)) { -it } + fadeIn(tween(MODE_ANIMATION_MS)),
             exit = slideOutHorizontally(tween(MODE_ANIMATION_MS)) { -it } + fadeOut(tween(MODE_ANIMATION_MS)),
-            modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 8.dp),
+            modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = DialGeometry.HEADER_HEIGHT_DP.dp + 8.dp),
         ) {
             HeadingLabel(
                 headingDeg = compassHeading ?: heading,
@@ -317,7 +322,7 @@ fun DialScreen(
             visible = manualChrome,
             enter = slideInHorizontally(tween(MODE_ANIMATION_MS)) { it } + fadeIn(tween(MODE_ANIMATION_MS)),
             exit = slideOutHorizontally(tween(MODE_ANIMATION_MS)) { it } + fadeOut(tween(MODE_ANIMATION_MS)),
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp),
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = DialGeometry.HEADER_HEIGHT_DP.dp + 8.dp, end = 8.dp),
         ) {
             CompassIndicator(
                 heading = heading,
