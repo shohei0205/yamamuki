@@ -5,32 +5,39 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- 図形は 1024 四方(iOS の AppIcon と同じ座標)で描き、見える範囲(中央 72dp)に縮める。 -->
     <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.8"
-        android:scaleY="0.8">
+        android:scaleX="0.0703125"
+        android:scaleY="0.0703125"
+        android:translateX="18"
+        android:translateY="18">
         <!-- 方位目盛り -->
         <path
-            android:pathData="M34,26v4M40,26v3M46,26v4M62,26v4M68,26v3M74,26v4"
-            android:strokeColor="#FF000000"
-            android:strokeLineCap="round"
-            android:strokeWidth="1.2" />
-        <!-- 北を示す N -->
-        <path
-            android:pathData="M50.5,32V22.5L57.5,32V22.5"
+            android:pathData="M259.7,300 V250.7 M343.8,300 V221.7 M427.9,300 V250.7 M596.1,300 V250.7 M680.2,300 V221.7 M764.3,300 V250.7"
             android:strokeColor="#FF000000"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"
-            android:strokeWidth="2.4" />
-        <!-- 山(縁取りだけ) -->
+            android:strokeWidth="17" />
+        <!-- 北を示す N -->
         <path
-            android:pathData="M54,43L70,70H38Z"
+            android:pathData="M474,296 V166 L550,296 V166"
             android:strokeColor="#FF000000"
-            android:strokeWidth="2.3" />
-        <!-- 現在地 -->
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="30" />
+        <!-- 山 -->
         <path
             android:fillColor="#FF000000"
-            android:pathData="M54,81m-3.2,0a3.2,3.2 0 1,0 6.4,0a3.2,3.2 0 1,0 -6.4,0" />
+            android:pathData="M282,700 Q370.6,586.9 476.6,448.9 Q512,411.1 547.4,448.9 Q653.5,586.9 742,700Z" />
+        <!-- 現在地 -->
+        <path
+            android:pathData="M466,810 a46,46 0 1,0 92,0 a46,46 0 1,0 -92,0Z"
+            android:strokeColor="#FF000000"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="10" />
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M490,810 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0Z" />
     </group>
 </vector>
