@@ -4,7 +4,7 @@ import YamamukiCore
 /// 方位盤の地面のクリーム色。
 let dialGround = Color(hex: 0xFFF4D8)
 /// 距離の円の間の帯。現在地に近い帯から順に塗り、ここにない遠くの帯は地面の色のままにする。
-private let groundBands = [Color(hex: 0xFFE7B0), Color(hex: 0xFFF0C9), Color(hex: 0xFDEBC4)]
+private let groundBands = [Color(hex: 0xFFE7B0), Color(hex: 0xFFEDC2), Color(hex: 0xFFF1CF)]
 private let ringLine = Color(hex: 0xE8C98F)
 private let shadowColor = Color.black.opacity(0.2)
 private let northRed = Color(hex: 0xED1C24)
@@ -498,7 +498,7 @@ struct DialCanvasView: View, Animatable {
 
         drawViewCone(ctx, apex: CGPoint(x: center.x, y: center.y - 10))
         // 白い丸の上に置き、帯や円の上でも現在地が目立つようにする。
-        let disc = CGRect(x: center.x - 18, y: center.y - 1 - 18, width: 36, height: 36)
+        let disc = CGRect(x: center.x - 23, y: center.y - 1 - 23, width: 46, height: 46)
         ctx.fill(Path(ellipseIn: disc.offsetBy(dx: 0, dy: 1.5)), with: .color(shadowColor))
         ctx.fill(Path(ellipseIn: disc), with: .color(.white))
         body(.white, grow: 2)
@@ -510,7 +510,7 @@ struct DialCanvasView: View, Animatable {
             ctx.fill(Path(ellipseIn: CGRect(x: lens.x - 5.5, y: lens.y - 2.5, width: 11, height: 5)), with: .color(lensBlue))
             ctx.fill(Path(ellipseIn: CGRect(x: lens.x - 3.5, y: lens.y - 1.5, width: 3, height: 1.4)), with: .color(.white.opacity(0.8)))
         }
-        return CGRect(x: center.x - 20, y: center.y - 19, width: 40, height: 36)
+        return CGRect(x: center.x - 23, y: center.y - 24, width: 46, height: 46)
     }
 
     /// 画面上部の方位目盛り。向いている方位が中央に来る。上端は高さが決まっているので文字の倍率を掛けない。

@@ -63,7 +63,7 @@ import kotlin.math.roundToInt
 val DialGround = Color(0xFFFFF4D8)
 
 /** 距離の円の間の帯。現在地に近い帯から順に塗り、ここにない遠くの帯は地面の色のままにする。 */
-private val GroundBands = listOf(Color(0xFFFFE7B0), Color(0xFFFFF0C9), Color(0xFFFDEBC4))
+private val GroundBands = listOf(Color(0xFFFFE7B0), Color(0xFFFFEDC2), Color(0xFFFFF1CF))
 private val RingLine = Color(0xFFE8C98F)
 private val NorthRed = Color(0xFFED1C24)
 private val BinocularBody = Color(0xFF333333)
@@ -701,8 +701,8 @@ private fun DrawScope.drawBinoculars(center: Offset, coneAlpha: Float): Box {
     if (coneAlpha > 0f) drawViewCone(Offset(center.x, center.y - 10f * u), coneAlpha)
     // 白い丸の上に置き、帯や円の上でも現在地が目立つようにする。
     val disc = Offset(center.x, center.y - 1f * u)
-    drawCircle(ShadowColor, radius = 18f * u, center = disc + Offset(0f, 1.5f * u))
-    drawCircle(Color.White, radius = 18f * u, center = disc)
+    drawCircle(ShadowColor, radius = 23f * u, center = disc + Offset(0f, 1.5f * u))
+    drawCircle(Color.White, radius = 23f * u, center = disc)
     body(Color.White, grow = 2f)
     body(BinocularBody, grow = 0f)
     drawCircle(BinocularHinge, radius = 3f * u, center = Offset(center.x, center.y + 2.5f * u))
@@ -716,7 +716,7 @@ private fun DrawScope.drawBinoculars(center: Offset, coneAlpha: Float): Box {
             size = Size(3f * u, 1.4f * u),
         )
     }
-    return Box(left = center.x - 20f * u, top = center.y - 19f * u, right = center.x + 20f * u, bottom = center.y + 17f * u)
+    return Box(left = center.x - 23f * u, top = center.y - 24f * u, right = center.x + 23f * u, bottom = center.y + 22f * u)
 }
 
 /** 画面上部の方位目盛り。向いている方位が中央に来る。 */
