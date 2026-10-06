@@ -19,7 +19,7 @@ struct DialView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                dialBeige.ignoresSafeArea()
+                dialGround.ignoresSafeArea()
                 // ステータスバーの裏は、ヘッダーの空の上端と同じ色で塗り、空がつながって見えるようにする。
                 VStack(spacing: 0) {
                     headerSkyTop.frame(height: geometry.safeAreaInsets.top)
@@ -117,8 +117,7 @@ struct DialView: View {
                             } label: {
                                 Image(systemName: model.exploring ? "scope" : "location.north.fill")
                                     .font(.system(size: 26, weight: .medium))
-                                    .foregroundStyle(model.gpsLocation == nil ? Color.gray.opacity(0.4) :
-                                        (model.exploring ? Color.gray : Color(red: 0.102, green: 0.451, blue: 0.910)))
+                                    .foregroundStyle(model.gpsLocation == nil ? Color.gray.opacity(0.4) : modeButtonIconColor)
                                     .frame(width: 56, height: 56)
                                     .background(Circle().fill(Color.white))
                                     .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
@@ -196,7 +195,7 @@ struct DialView: View {
     /// 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目にする。
     private var bottomButtons: some View {
         HStack(spacing: 12) {
-            RoundButton(label: Strings.text("settings_title")) {
+            RoundButton(label: Strings.text("settings_title"), iconColor: settingsButtonIconColor) {
                 Image(systemName: "gearshape.fill")
             } action: {
                 showSettings = true
@@ -270,9 +269,18 @@ private extension View {
     }
 }
 
+/// 設定ボタンのアイコンの色(緑)。
+private let settingsButtonIconColor = Color(hex: 0x43A047)
+/// 事前ダウンロードのボタンのアイコンの色(橙)。
+private let downloadButtonIconColor = Color(hex: 0xFB8C00)
+/// モード切替ボタンのアイコンの色(青)。
+private let modeButtonIconColor = Color(hex: 0x1A73E8)
+
 /// 方位盤の下の角に置く丸いボタン。右下のモード切替ボタンと同じく、白地に影を付けて地図の上でも見分けやすくする。
+/// アイコンはボタンごとに色を変える([iconColor])。
 private struct RoundButton<Content: View>: View {
     let label: String
+    let iconColor: Color
     @ViewBuilder let content: () -> Content
     let action: () -> Void
 
@@ -280,7 +288,8 @@ private struct RoundButton<Content: View>: View {
         Button(action: action) {
             content()
                 .font(.system(size: 26, weight: .medium))
-                .foregroundStyle(Color.gray)
+                .foregroundStyle(iconColor)
+                .tint(iconColor)
                 .frame(width: 56, height: 56)
                 .background(Circle().fill(Color.white))
                 .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
@@ -296,7 +305,7 @@ private struct AreaDownloadButton: View {
     let action: () -> Void
 
     var body: some View {
-        RoundButton(label: Strings.text("dial_area_download")) {
+        RoundButton(label: Strings.text("dial_area_download"), iconColor: downloadButtonIconColor) {
             if let running = download.running, running.progress.doneTiles > 0 {
                 ProgressView(value: running.progress.fraction)
                     .progressViewStyle(.circular)
