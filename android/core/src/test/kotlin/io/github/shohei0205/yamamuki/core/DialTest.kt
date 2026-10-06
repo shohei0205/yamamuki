@@ -17,12 +17,13 @@ class HeadingTest {
     }
 
     @Test
-    fun directionNames() {
-        assertEquals("北", Heading.directionName(0.0))
-        assertEquals("北", Heading.directionName(355.0))
-        assertEquals("北北東", Heading.directionName(20.0))
-        assertEquals("南東", Heading.directionName(135.0))
-        assertEquals("西", Heading.directionName(-90.0))
+    fun directionIndexes() {
+        assertEquals(0, Heading.directionIndex(0.0))
+        assertEquals(0, Heading.directionIndex(355.0))
+        assertEquals(1, Heading.directionIndex(20.0))
+        assertEquals(6, Heading.directionIndex(135.0))
+        assertEquals(12, Heading.directionIndex(-90.0))
+        assertEquals(15, Heading.directionIndex(340.0))
     }
 
     @Test
@@ -253,11 +254,6 @@ class PeakLayoutTest {
         // 別の山塊の高い山は、重なっても優先しない(優先順で先に置いた山が残る)。
         val xs = mapOf("A1000" to 0f, "B3000" to 5f)
         assertEquals(listOf("A1000" to listOf("B3000")), place(listOf("A1000", "B3000"), xs))
-    }
-
-    @Test
-    fun othersTextCountsPeaks() {
-        assertEquals("ほか 3 山", othersText(3))
     }
 
     @Test

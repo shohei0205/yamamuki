@@ -35,6 +35,6 @@ struct CompassIndicator: View {
         }
         .frame(width: 56, height: 56)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(heading == nil ? "コンパス：方位を取得中" : "コンパス：赤い針が北")
+        .accessibilityLabel(Strings.text(heading == nil ? "compass_loading" : "compass_ready"))
     }
 }

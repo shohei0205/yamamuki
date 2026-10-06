@@ -1,6 +1,8 @@
 package io.github.shohei0205.yamamuki.settings
 
 import android.content.Context
+import androidx.annotation.StringRes
+import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,10 +36,10 @@ data class Settings(
  * 現在地と方位を測る頻度の段階。設定画面のスライダーで左(省電力)から右(高精度)へ並ぶ。
  * [locationIntervalMs] は位置の更新を頼む間隔、[headingPeriodMs] は方位センサーの値を受け取る間隔。
  */
-enum class SensorPrecision(val label: String, val locationIntervalMs: Long, val headingPeriodMs: Int) {
-    SAVER("省電力", 30_000L, 100),
-    STANDARD("標準", 10_000L, 60),
-    PRECISE("高精度", 5_000L, 20),
+enum class SensorPrecision(@StringRes val label: Int, val locationIntervalMs: Long, val headingPeriodMs: Int) {
+    SAVER(R.string.settings_sensor_precision_saver, 30_000L, 100),
+    STANDARD(R.string.settings_sensor_precision_standard, 10_000L, 60),
+    PRECISE(R.string.settings_sensor_precision_precise, 5_000L, 20),
 }
 
 /** [Settings] を端末内(SharedPreferences)に保存する。 */

@@ -56,7 +56,7 @@ struct DialView: View {
                         // 方位センサーの精度が低いと、方位が数十度ずれたまま別の山の名前を出してしまうので、上部で知らせる。
                         StatusLine(
                             // 方位が無効なあいだは方位の値が届かないので、値の有無にかかわらず出す。
-                            message: model.headingAccuracyLow ? "コンパス補正中。8の字に動かしてください" : nil,
+                            message: model.headingAccuracyLow ? Strings.text("dial_heading_accuracy_low") : nil,
                             // 距離の円が文字の後ろを通っても読めるよう、方位の札と同じ淡い白の札にする。
                             labeled: true
                         )
@@ -81,7 +81,7 @@ struct DialView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(model.location == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
-                            .accessibilityLabel("北を上にする")
+                            .accessibilityLabel(Strings.text("compass_face_north"))
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
                     }
@@ -119,11 +119,11 @@ struct DialView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(!model.hasLocationPermission || model.gpsLocation == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
-                            .accessibilityLabel(model.exploring ? "現在地に戻り、進行方向を上にする" : "今の向きのまま手動位置モードにする")
-                            .accessibilityValue(model.exploring ? "手動位置モード" : "ヘディングアップモード")
+                            .accessibilityLabel(Strings.text(model.exploring ? "map_mode_to_heading_up" : "map_mode_to_manual"))
+                            .accessibilityValue(Strings.text(model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
                             .padding(.trailing, 8)
 
-                            Text("© OpenStreetMap contributors")
+                            Text(Strings.text("osm_attribution"))
                                 .font(.caption2)
                                 .foregroundStyle(.black)
                         }
@@ -141,15 +141,11 @@ struct DialView: View {
         .onReceive(model.$settings.map(\.keepScreenOn).removeDuplicates()) { on in
             UIApplication.shared.isIdleTimerDisabled = on
         }
-        .alert("山データの取得", isPresented: .constant(!model.settings.peakDataAsked)) {
-            Button("あとで") { model.answerPeakDataPrompt(allow: false) }
-            Button("取得する") { model.answerPeakDataPrompt(allow: true) }
+        .alert(Strings.text("peak_data_prompt_title"), isPresented: .constant(!model.settings.peakDataAsked)) {
+            Button(Strings.text("peak_data_prompt_later")) { model.answerPeakDataPrompt(allow: false) }
+            Button(Strings.text("peak_data_prompt_fetch")) { model.answerPeakDataPrompt(allow: true) }
         } message: {
-            Text(
-                "全国の山の名前・位置・標高（OpenStreetMap のデータ、約 0.5 MB）を取得します。" +
-                    "取得したデータは端末に保存するので、圏外でも使えます。\n\n" +
-                    "今すぐ取得しますか？「あとで」を選んだときは、設定画面から取得できます。"
-            )
+            Text(Strings.text("peak_data_prompt_message"))
         }
         .fetchErrorAlert(model)
         // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
@@ -181,8 +177,9 @@ struct DialView: View {
     /// ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
     private var headingLabel: some View {
         let parts = model.heading.map { readoutParts(headingDeg: $0, altitudeM: model.gpsLocation?.mslAltitudeM) }
-        let text = parts.map { Text("向き \($0.direction)").foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle) }
-            ?? Text("方位を取得中").foregroundColor(tapeInk)
+        let text = parts.map {
+            Text(Strings.format("dial_heading", $0.direction)).foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle)
+        } ?? Text(Strings.text("dial_heading_loading")).foregroundColor(tapeInk)
         return text
             .font(.system(size: 15 * model.settings.textScale, weight: .bold))
             .padding(.horizontal, 12)
@@ -193,7 +190,7 @@ struct DialView: View {
     /// 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目にする。
     private var bottomButtons: some View {
         HStack(spacing: 12) {
-            RoundButton(label: "設定") {
+            RoundButton(label: Strings.text("settings_title")) {
                 Image(systemName: "gearshape.fill")
             } action: {
                 showSettings = true
@@ -230,13 +227,13 @@ struct DialView: View {
     }
 
     private var statusMessage: String? {
-        if model.location == nil { return "現在地を取得しています…" }
-        if model.heading == nil { return "方位センサーの値を待っています…" }
-        if model.peakDataUpdating { return "山データを取得中…" }
-        if model.loading { return "山データを読み込み中…" }
+        if model.location == nil { return Strings.text("dial_status_locating") }
+        if model.heading == nil { return Strings.text("dial_status_waiting_heading") }
+        if model.peakDataUpdating { return Strings.text("dial_status_fetching") }
+        if model.loading { return Strings.text("dial_status_loading") }
         // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。欠けているのはたいてい取得半径の外縁なので、周辺に保存済みの山があれば「周辺の一部」と言う。
-        let missing = model.mountains.isEmpty && model.summit == nil ? "この付近の山データがありません" : "周辺の一部の山データがありません"
-        if model.incomplete { return model.peakData == nil ? "\(missing)。設定画面から取得できます" : missing }
+        let missing = Strings.text(model.mountains.isEmpty && model.summit == nil ? "dial_status_no_data_here" : "dial_status_partial_data")
+        if model.incomplete { return model.peakData == nil ? Strings.format("dial_status_fetch_hint", missing) : missing }
         return nil
     }
 }
@@ -247,14 +244,14 @@ private struct FetchErrorAlert: ViewModifier {
 
     func body(content: Content) -> some View {
         content.alert(
-            "山データを取得できませんでした",
+            Strings.text("peak_data_error_title"),
             isPresented: Binding(
                 get: { model.fetchErrorMessage != nil },
                 set: { if !$0 { model.dismissFetchError() } }
             )
         ) {
-            Button("再取得") { model.retryAfterFetchError() }
-            Button("閉じる", role: .cancel) { model.dismissFetchError() }
+            Button(Strings.text("peak_data_error_retry")) { model.retryAfterFetchError() }
+            Button(Strings.text("common_close"), role: .cancel) { model.dismissFetchError() }
         } message: {
             Text(model.fetchErrorMessage ?? "")
         }
@@ -293,7 +290,7 @@ private struct AreaDownloadButton: View {
     let action: () -> Void
 
     var body: some View {
-        RoundButton(label: "山データの事前ダウンロード") {
+        RoundButton(label: Strings.text("dial_area_download")) {
             if let running = download.running, running.progress.doneTiles > 0 {
                 ProgressView(value: running.progress.fraction)
                     .progressViewStyle(.circular)
@@ -338,14 +335,10 @@ private struct PermissionRequest: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Text(
-                denied
-                    ? "周辺の山を表示するには、位置情報の許可が必要です。\n設定アプリで「位置情報」を「使用中のみ」にしてください。"
-                    : "周辺の山を表示するには、位置情報の許可が必要です。"
-            )
+            Text(Strings.text(denied ? "dial_permission_denied_message" : "dial_permission_message"))
             .multilineTextAlignment(.center)
             .foregroundStyle(.black)
-            Button(denied ? "設定を開く" : "許可する") {
+            Button(Strings.text(denied ? "dial_permission_open_settings" : "dial_permission_allow")) {
                 if denied {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                 } else {
@@ -369,11 +362,11 @@ private struct MountainDetailView: View {
             HStack {
                 Text(m.name).font(.title2.bold())
                 Spacer()
-                Button("閉じる") { dismiss() }
+                Button(Strings.text("common_close")) { dismiss() }
             }
-            DetailRow(label: "標高", value: m.elevationText)
-            DetailRow(label: "緯度経度", value: m.coordinateText)
-            DetailRow(label: "現在地からの距離", value: distanceText(nearby.distanceKm))
+            DetailRow(label: Strings.text("detail_elevation"), value: elevationLabel(m.elevationM))
+            DetailRow(label: Strings.text("detail_coordinate"), value: coordinateLabel(latitude: m.latitude, longitude: m.longitude))
+            DetailRow(label: Strings.text("detail_distance"), value: distanceText(nearby.distanceKm))
             Spacer()
         }
         .padding(24)
@@ -395,16 +388,16 @@ private struct PeakGroupView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(nearby.mountain.name).font(.body)
-                        Text("\(nearby.mountain.elevationText)・\(distanceText(nearby.distanceKm))")
+                        Text(Strings.format("detail_group_item", elevationLabel(nearby.mountain.elevationM), distanceText(nearby.distanceKm)))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
-            .navigationTitle("この付近の山")
+            .navigationTitle(Strings.text("detail_group_title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("閉じる") { dismiss() }
+                    Button(Strings.text("common_close")) { dismiss() }
                 }
             }
         }
@@ -421,13 +414,13 @@ private struct ObserverDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("現在地").font(.title2.bold())
+                Text(Strings.text("detail_observer_title")).font(.title2.bold())
                 Spacer()
-                Button("閉じる") { dismiss() }
+                Button(Strings.text("common_close")) { dismiss() }
             }
             if let here = model.gpsLocation {
-                DetailRow(label: "緯度経度", value: coordinateText(latitude: here.latitude, longitude: here.longitude))
-                DetailRow(label: "標高", value: elevationText(here.mslAltitudeM))
+                DetailRow(label: Strings.text("detail_coordinate"), value: coordinateLabel(latitude: here.latitude, longitude: here.longitude))
+                DetailRow(label: Strings.text("detail_elevation"), value: elevationLabel(here.mslAltitudeM))
             }
             Spacer()
         }

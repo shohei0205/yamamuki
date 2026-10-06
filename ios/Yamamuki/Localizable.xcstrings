@@ -1,0 +1,1503 @@
+{
+  "sourceLanguage": "ja",
+  "strings": {
+    "area_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中断"
+          }
+        }
+      }
+    },
+    "area_confirm_download_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@をダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "area_confirm_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$ld 区画の山データを OpenStreetMap（Overpass API）から取得します。サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは継続します。アプリを終了すると一時停止しますが、次に開いた時に再開できます。"
+          }
+        }
+      }
+    },
+    "area_confirm_refresh_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@を取り直しますか？"
+          }
+        }
+      }
+    },
+    "area_delete_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存した山データを端末から消します。ほかの保存済みの地域と重なる部分は残ります。"
+          }
+        }
+      }
+    },
+    "area_delete_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@を削除しますか？"
+          }
+        }
+      }
+    },
+    "area_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目的地周辺の山データを、電波の届く場所で事前に端末へ保存することができます。\n事前に保存した山データは、キャッシュを消去しても残ります。"
+          }
+        }
+      }
+    },
+    "area_download": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード"
+          }
+        }
+      }
+    },
+    "area_notice_canceled": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@のダウンロードを中断しました（%2$ld / %3$ld 区画まで保存済み）。"
+          }
+        }
+      }
+    },
+    "area_notice_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@のダウンロードが完了しました（山 %2$@ 件）。"
+          }
+        }
+      }
+    },
+    "area_notice_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@のダウンロード中に通信に失敗しました。サーバーが混み合っているか、電波が弱い可能性があります。"
+          }
+        }
+      }
+    },
+    "area_notice_failed_progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@のダウンロード中に通信に失敗しました（%2$ld / %3$ld 区画まで保存済み）。サーバーが混み合っているか、電波が弱い可能性があります。"
+          }
+        }
+      }
+    },
+    "area_notice_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@のダウンロードが途中で終わっています。「続きから再開」で残りを取得します。"
+          }
+        }
+      }
+    },
+    "area_offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圏外のため、今はダウンロードできません。電波の届く場所で開いてください。"
+          }
+        }
+      }
+    },
+    "area_refresh": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取り直す"
+          }
+        }
+      }
+    },
+    "area_resume": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "続きから再開"
+          }
+        }
+      }
+    },
+    "area_running": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@をダウンロード中（%2$ld / %3$ld 区画）"
+          }
+        }
+      }
+    },
+    "area_saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存済み"
+          }
+        }
+      }
+    },
+    "area_saved_summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 取得・山 %2$@ 件"
+          }
+        }
+      }
+    },
+    "area_section_saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存済みの地域"
+          }
+        }
+      }
+    },
+    "area_status_retrying": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通信に失敗したため、%1$ld 秒後に取り直します（%2$ld 回目）"
+          }
+        }
+      }
+    },
+    "area_status_waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーの応答を待っています（%1$ld 秒）"
+          }
+        }
+      }
+    },
+    "area_status_waiting_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーの応答を待っています（%1$ld 秒・取り直し %2$ld 回目）"
+          }
+        }
+      }
+    },
+    "area_tiles": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$ld 区画"
+          }
+        }
+      }
+    },
+    "area_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "事前ダウンロード"
+          }
+        }
+      }
+    },
+    "area_update": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
+          }
+        }
+      }
+    },
+    "common_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル"
+          }
+        }
+      }
+    },
+    "common_close": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閉じる"
+          }
+        }
+      }
+    },
+    "common_delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        }
+      }
+    },
+    "common_loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み込み中…"
+          }
+        }
+      }
+    },
+    "common_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不明"
+          }
+        }
+      }
+    },
+    "compass_face_north": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "北を上にする"
+          }
+        }
+      }
+    },
+    "compass_loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コンパス：方位を取得中"
+          }
+        }
+      }
+    },
+    "compass_ready": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コンパス：赤い針が北"
+          }
+        }
+      }
+    },
+    "detail_coordinate": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "緯度経度"
+          }
+        }
+      }
+    },
+    "detail_distance": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在地からの距離"
+          }
+        }
+      }
+    },
+    "detail_elevation": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標高"
+          }
+        }
+      }
+    },
+    "detail_group_item": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@・%2$@"
+          }
+        }
+      }
+    },
+    "detail_group_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この付近の山"
+          }
+        }
+      }
+    },
+    "detail_latitude_north": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "北緯 %1$@"
+          }
+        }
+      }
+    },
+    "detail_latitude_south": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "南緯 %1$@"
+          }
+        }
+      }
+    },
+    "detail_longitude_east": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "東経 %1$@"
+          }
+        }
+      }
+    },
+    "detail_longitude_west": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "西経 %1$@"
+          }
+        }
+      }
+    },
+    "detail_observer_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在地"
+          }
+        }
+      }
+    },
+    "dial_altitude": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "　標高 %1$@m"
+          }
+        }
+      }
+    },
+    "dial_area_download": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データの事前ダウンロード"
+          }
+        }
+      }
+    },
+    "dial_heading": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向き %1$@"
+          }
+        }
+      }
+    },
+    "dial_heading_accuracy_low": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コンパス補正中。8の字に動かしてください"
+          }
+        }
+      }
+    },
+    "dial_heading_loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方位を取得中"
+          }
+        }
+      }
+    },
+    "dial_others": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ほか %1$ld 山"
+          }
+        }
+      }
+    },
+    "dial_permission_allow": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "許可する"
+          }
+        }
+      }
+    },
+    "dial_permission_denied_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "周辺の山を表示するには、位置情報の許可が必要です。\n設定アプリで「位置情報」を「使用中のみ」にしてください。"
+          }
+        }
+      }
+    },
+    "dial_permission_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "周辺の山を表示するには、位置情報の許可が必要です。"
+          }
+        }
+      }
+    },
+    "dial_permission_open_settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定を開く"
+          }
+        }
+      }
+    },
+    "dial_status_fetch_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@。設定画面から取得できます"
+          }
+        }
+      }
+    },
+    "dial_status_fetching": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データを取得中…"
+          }
+        }
+      }
+    },
+    "dial_status_loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データを読み込み中…"
+          }
+        }
+      }
+    },
+    "dial_status_locating": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在地を取得しています…"
+          }
+        }
+      }
+    },
+    "dial_status_no_data_here": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この付近の山データがありません"
+          }
+        }
+      }
+    },
+    "dial_status_partial_data": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "周辺の一部の山データがありません"
+          }
+        }
+      }
+    },
+    "dial_status_waiting_heading": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方位センサーの値を待っています…"
+          }
+        }
+      }
+    },
+    "direction_e": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "東"
+          }
+        }
+      }
+    },
+    "direction_ene": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "東北東"
+          }
+        }
+      }
+    },
+    "direction_ese": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "東南東"
+          }
+        }
+      }
+    },
+    "direction_n": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "北"
+          }
+        }
+      }
+    },
+    "direction_ne": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "北東"
+          }
+        }
+      }
+    },
+    "direction_nne": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "北北東"
+          }
+        }
+      }
+    },
+    "direction_nnw": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "北北西"
+          }
+        }
+      }
+    },
+    "direction_nw": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "北西"
+          }
+        }
+      }
+    },
+    "direction_s": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "南"
+          }
+        }
+      }
+    },
+    "direction_se": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "南東"
+          }
+        }
+      }
+    },
+    "direction_sse": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "南南東"
+          }
+        }
+      }
+    },
+    "direction_ssw": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "南南西"
+          }
+        }
+      }
+    },
+    "direction_sw": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "南西"
+          }
+        }
+      }
+    },
+    "direction_w": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "西"
+          }
+        }
+      }
+    },
+    "direction_wnw": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "西北西"
+          }
+        }
+      }
+    },
+    "direction_wsw": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "西南西"
+          }
+        }
+      }
+    },
+    "map_mode_heading_up": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ヘディングアップモード"
+          }
+        }
+      }
+    },
+    "map_mode_manual": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手動位置モード"
+          }
+        }
+      }
+    },
+    "map_mode_to_heading_up": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在地に戻り、進行方向を上にする"
+          }
+        }
+      }
+    },
+    "map_mode_to_manual": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今の向きのまま手動位置モードにする"
+          }
+        }
+      }
+    },
+    "osm_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "© OpenStreetMap contributors"
+          }
+        }
+      },
+      "shouldTranslate": false
+    },
+    "peak_data_error_invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データを取り込めませんでした。\n%1$@"
+          }
+        }
+      }
+    },
+    "peak_data_error_no_response": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データのサーバーから応答がありません。しばらくしてから再取得してください。"
+          }
+        }
+      }
+    },
+    "peak_data_error_offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インターネットに接続されていません。電波の届く場所で再取得してください。"
+          }
+        }
+      }
+    },
+    "peak_data_error_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再取得"
+          }
+        }
+      }
+    },
+    "peak_data_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データを取得できませんでした"
+          }
+        }
+      }
+    },
+    "peak_data_error_with_cache": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@\n\n保存済みのデータで表示しています。"
+          }
+        }
+      }
+    },
+    "peak_data_prompt_fetch": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取得する"
+          }
+        }
+      }
+    },
+    "peak_data_prompt_later": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "あとで"
+          }
+        }
+      }
+    },
+    "peak_data_prompt_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全国の山の名前・位置・標高（OpenStreetMap のデータ、約 0.5 MB）を取得します。取得したデータは端末に保存するので、圏外でも使えます。\n\n今すぐ取得しますか？「あとで」を選んだときは、設定画面から取得できます。"
+          }
+        }
+      }
+    },
+    "peak_data_prompt_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データの取得"
+          }
+        }
+      }
+    },
+    "peak_data_up_to_date": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データは最新です"
+          }
+        }
+      }
+    },
+    "peak_data_updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データを取得しました"
+          }
+        }
+      }
+    },
+    "settings_cache_clear": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャッシュを消去"
+          }
+        }
+      }
+    },
+    "settings_cache_clear_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "消去"
+          }
+        }
+      }
+    },
+    "settings_cache_clear_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存している山データをすべて消去します。山データは上のボタンからもう一度取得できます。"
+          }
+        }
+      }
+    },
+    "settings_cache_clear_message_keep_areas": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存している山データを消去します。事前ダウンロードした地域は残ります。"
+          }
+        }
+      }
+    },
+    "settings_cache_clear_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャッシュを消去しますか？"
+          }
+        }
+      }
+    },
+    "settings_cache_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "消去すると、取得した全国の山データも消えます。上のボタンでもう一度取得できます。"
+          }
+        }
+      }
+    },
+    "settings_cache_summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山 %1$@ 件（取得済みの区画 %2$ld 個）・容量 %3$@"
+          }
+        }
+      }
+    },
+    "settings_cache_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存しているデータ"
+          }
+        }
+      }
+    },
+    "settings_data_license": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データ © OpenStreetMap contributors (ODbL)"
+          }
+        }
+      }
+    },
+    "settings_initial_range": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "起動時の表示範囲（km）"
+          }
+        }
+      }
+    },
+    "settings_initial_range_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在地から画面上端までの距離。起動後はピンチで変えられます。"
+          }
+        }
+      }
+    },
+    "settings_keep_screen_on": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面のスリープ防止"
+          }
+        }
+      }
+    },
+    "settings_keep_screen_on_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方位盤の表示中は画面を常時点灯します。バッテリーの消耗が早くなります。"
+          }
+        }
+      }
+    },
+    "settings_max_peaks": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一度に表示する山 最大 %1$ld 件"
+          }
+        }
+      }
+    },
+    "settings_max_peaks_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "多いと画面が混み合い、少ないと高い山だけになります。重なる山は標高の低いほうを省きます。"
+          }
+        }
+      }
+    },
+    "settings_min_elevation_all": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべての山を表示"
+          }
+        }
+      }
+    },
+    "settings_min_elevation_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 m ですべての山を表示します。絞り込み中は標高不明の山を表示しません。"
+          }
+        }
+      }
+    },
+    "settings_min_elevation_value": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標高 %1$@ m 以上の山だけ表示"
+          }
+        }
+      }
+    },
+    "settings_peak_data_check": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最新の山データを確認"
+          }
+        }
+      }
+    },
+    "settings_peak_data_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yamamuki-data（GitHub）から約 0.5 MB を取得し、端末に保存します。新しい版がなければ、確認だけで終わります。"
+          }
+        }
+      }
+    },
+    "settings_peak_data_fetch": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データを取得"
+          }
+        }
+      }
+    },
+    "settings_peak_data_fetching": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取得中…"
+          }
+        }
+      }
+    },
+    "settings_peak_data_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まだ取得していません。"
+          }
+        }
+      }
+    },
+    "settings_peak_data_summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山 %1$@ 件・元データ %2$@・取得日 %3$@"
+          }
+        }
+      }
+    },
+    "settings_peak_data_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全国の山データ"
+          }
+        }
+      }
+    },
+    "settings_section_about": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアプリについて"
+          }
+        }
+      }
+    },
+    "settings_section_battery": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バッテリー"
+          }
+        }
+      }
+    },
+    "settings_section_display": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "表示"
+          }
+        }
+      }
+    },
+    "settings_section_peak_data": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データ"
+          }
+        }
+      }
+    },
+    "settings_section_peaks": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "表示する山"
+          }
+        }
+      }
+    },
+    "settings_sensor_precision": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位置と方位の精度：%1$@"
+          }
+        }
+      }
+    },
+    "settings_sensor_precision_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "左に寄せるほどバッテリー消費を抑えられますが、現在地の更新が遅くなり、方位盤の回転が粗くなります。"
+          }
+        }
+      }
+    },
+    "settings_sensor_precision_precise": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高精度"
+          }
+        }
+      }
+    },
+    "settings_sensor_precision_saver": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "省電力"
+          }
+        }
+      }
+    },
+    "settings_sensor_precision_standard": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準"
+          }
+        }
+      }
+    },
+    "settings_text_size": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字の大きさ"
+          }
+        }
+      }
+    },
+    "settings_text_size_extra_large": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "特大"
+          }
+        }
+      }
+    },
+    "settings_text_size_large": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大"
+          }
+        }
+      }
+    },
+    "settings_text_size_small": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "小"
+          }
+        }
+      }
+    },
+    "settings_text_size_standard": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準"
+          }
+        }
+      }
+    },
+    "settings_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定"
+          }
+        }
+      }
+    },
+    "settings_version": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バージョン %1$@"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

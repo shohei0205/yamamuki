@@ -1,4 +1,154 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 画面の文言。iOS の ios/Yamamuki/Localizable.xcstrings と同じキー名にそろえる。 -->
 <resources>
     <string name="app_name">山むき</string>
+
+    <!-- 共通 -->
+    <string name="common_close">閉じる</string>
+    <string name="common_cancel">キャンセル</string>
+    <string name="common_delete">削除</string>
+    <string name="common_loading">読み込み中…</string>
+    <string name="common_unknown">不明</string>
+    <string name="settings_title">設定</string>
+    <string name="osm_attribution" translatable="false">© OpenStreetMap contributors</string>
+
+    <!-- 方位盤 -->
+    <string name="dial_heading_accuracy_low">コンパス補正中。8の字に動かしてください</string>
+    <string name="dial_area_download">山データの事前ダウンロード</string>
+    <string name="dial_others">ほか %1$d 山</string>
+    <string name="dial_heading">向き %1$s</string>
+    <string name="dial_heading_loading">方位を取得中</string>
+    <string name="dial_altitude">\u3000標高 %1$,dm</string>
+    <string name="dial_status_locating">現在地を取得しています…</string>
+    <string name="dial_status_waiting_heading">方位センサーの値を待っています…</string>
+    <string name="dial_status_fetching">山データを取得中…</string>
+    <string name="dial_status_loading">山データを読み込み中…</string>
+    <string name="dial_status_no_data_here">この付近の山データがありません</string>
+    <string name="dial_status_partial_data">周辺の一部の山データがありません</string>
+    <string name="dial_status_fetch_hint">%1$s。設定画面から取得できます</string>
+    <string name="dial_permission_message">周辺の山を表示するには、位置情報の許可が必要です。\n許可の画面が出ないときは、端末の設定アプリから許可してください。</string>
+    <string name="dial_permission_allow">許可する</string>
+    <string name="map_mode_manual">手動位置モード</string>
+    <string name="map_mode_heading_up">ヘディングアップモード</string>
+    <string name="map_mode_to_heading_up">現在地に戻り、進行方向を上にする</string>
+    <string name="map_mode_to_manual">今の向きのまま手動位置モードにする</string>
+    <string name="compass_face_north">北を上にする</string>
+    <string name="compass_loading">コンパス：方位を取得中</string>
+    <string name="compass_ready">コンパス：赤い針が北</string>
+
+    <!-- 16 方位 -->
+    <string name="direction_n">北</string>
+    <string name="direction_nne">北北東</string>
+    <string name="direction_ne">北東</string>
+    <string name="direction_ene">東北東</string>
+    <string name="direction_e">東</string>
+    <string name="direction_ese">東南東</string>
+    <string name="direction_se">南東</string>
+    <string name="direction_sse">南南東</string>
+    <string name="direction_s">南</string>
+    <string name="direction_ssw">南南西</string>
+    <string name="direction_sw">南西</string>
+    <string name="direction_wsw">西南西</string>
+    <string name="direction_w">西</string>
+    <string name="direction_wnw">西北西</string>
+    <string name="direction_nw">北西</string>
+    <string name="direction_nnw">北北西</string>
+
+    <!-- 山と現在地の詳細 -->
+    <string name="detail_elevation">標高</string>
+    <string name="detail_coordinate">緯度経度</string>
+    <string name="detail_distance">現在地からの距離</string>
+    <string name="detail_latitude_north">北緯 %1$s</string>
+    <string name="detail_latitude_south">南緯 %1$s</string>
+    <string name="detail_longitude_east">東経 %1$s</string>
+    <string name="detail_longitude_west">西経 %1$s</string>
+    <string name="detail_group_title">この付近の山</string>
+    <string name="detail_group_item">%1$s・%2$s</string>
+    <string name="detail_observer_title">現在地</string>
+
+    <!-- 山データの取得 -->
+    <string name="peak_data_prompt_title">山データの取得</string>
+    <string name="peak_data_prompt_message">全国の山の名前・位置・標高（OpenStreetMap のデータ、約 0.5 MB）を取得します。取得したデータは端末に保存するので、圏外でも使えます。\n\n今すぐ取得しますか？「あとで」を選んだときは、設定画面から取得できます。</string>
+    <string name="peak_data_prompt_fetch">取得する</string>
+    <string name="peak_data_prompt_later">あとで</string>
+    <string name="peak_data_error_title">山データを取得できませんでした</string>
+    <string name="peak_data_error_retry">再取得</string>
+    <string name="peak_data_updated">山データを取得しました</string>
+    <string name="peak_data_up_to_date">山データは最新です</string>
+    <string name="peak_data_error_invalid">山データを取り込めませんでした。\n%1$s</string>
+    <string name="peak_data_error_no_response">山データのサーバーから応答がありません。しばらくしてから再取得してください。</string>
+    <string name="peak_data_error_offline">インターネットに接続されていません。電波の届く場所で再取得してください。</string>
+    <string name="peak_data_error_with_cache">%1$s\n\n保存済みのデータで表示しています。</string>
+
+    <!-- 設定 -->
+    <string name="settings_section_peaks">表示する山</string>
+    <string name="settings_min_elevation_all">すべての山を表示</string>
+    <string name="settings_min_elevation_value">標高 %1$,d m 以上の山だけ表示</string>
+    <string name="settings_min_elevation_description">0 m ですべての山を表示します。絞り込み中は標高不明の山を表示しません。</string>
+    <string name="settings_max_peaks">一度に表示する山 最大 %1$d 件</string>
+    <string name="settings_max_peaks_description">多いと画面が混み合い、少ないと高い山だけになります。重なる山は標高の低いほうを省きます。</string>
+    <string name="settings_section_display">表示</string>
+    <string name="settings_text_size">文字の大きさ</string>
+    <string name="settings_text_size_small">小</string>
+    <string name="settings_text_size_standard">標準</string>
+    <string name="settings_text_size_large">大</string>
+    <string name="settings_text_size_extra_large">特大</string>
+    <string name="settings_initial_range">起動時の表示範囲（km）</string>
+    <string name="settings_initial_range_description">現在地から画面上端までの距離。起動後はピンチで変えられます。</string>
+    <string name="settings_section_battery">バッテリー</string>
+    <string name="settings_keep_screen_on">画面のスリープ防止</string>
+    <string name="settings_keep_screen_on_description">方位盤の表示中は画面を常時点灯します。バッテリーの消耗が早くなります。</string>
+    <string name="settings_sensor_precision">位置と方位の精度：%1$s</string>
+    <string name="settings_sensor_precision_description">左に寄せるほどバッテリー消費を抑えられますが、現在地の更新が遅くなり、方位盤の回転が粗くなります。</string>
+    <string name="settings_sensor_precision_saver">省電力</string>
+    <string name="settings_sensor_precision_standard">標準</string>
+    <string name="settings_sensor_precision_precise">高精度</string>
+    <string name="settings_section_peak_data">山データ</string>
+    <string name="settings_peak_data_title">全国の山データ</string>
+    <string name="settings_peak_data_none">まだ取得していません。</string>
+    <string name="settings_peak_data_summary">山 %1$,d 件・元データ %2$s・取得日 %3$s</string>
+    <string name="settings_peak_data_description">yamamuki-data（GitHub）から約 0.5 MB を取得し、端末に保存します。新しい版がなければ、確認だけで終わります。</string>
+    <string name="settings_peak_data_fetching">取得中…</string>
+    <string name="settings_peak_data_fetch">山データを取得</string>
+    <string name="settings_peak_data_check">最新の山データを確認</string>
+    <string name="settings_cache_title">保存しているデータ</string>
+    <string name="settings_cache_summary">山 %1$,d 件（取得済みの区画 %2$d 個）・容量 %3$s</string>
+    <string name="settings_cache_description">消去すると、取得した全国の山データも消えます。上のボタンでもう一度取得できます。</string>
+    <string name="settings_cache_clear">キャッシュを消去</string>
+    <string name="settings_cache_clear_title">キャッシュを消去しますか？</string>
+    <string name="settings_cache_clear_message_keep_areas">保存している山データを消去します。事前ダウンロードした地域は残ります。</string>
+    <string name="settings_cache_clear_message">保存している山データをすべて消去します。山データは上のボタンからもう一度取得できます。</string>
+    <string name="settings_cache_clear_confirm">消去</string>
+    <string name="settings_section_about">このアプリについて</string>
+    <string name="settings_version">バージョン %1$s</string>
+    <string name="settings_data_license">山データ © OpenStreetMap contributors (ODbL)</string>
+
+    <!-- 事前ダウンロード -->
+    <string name="area_title">事前ダウンロード</string>
+    <string name="area_description">目的地周辺の山データを、電波の届く場所で事前に端末へ保存することができます。\n事前に保存した山データは、キャッシュを消去しても残ります。</string>
+    <string name="area_offline">圏外のため、今はダウンロードできません。電波の届く場所で開いてください。</string>
+    <string name="area_section_saved">保存済みの地域</string>
+    <string name="area_section_choose">都道府県を選択</string>
+    <string name="area_confirm_download_title">%1$sをダウンロードしますか？</string>
+    <string name="area_confirm_refresh_title">%1$sを取り直しますか？</string>
+    <string name="area_confirm_message">%1$d 区画の山データを OpenStreetMap（Overpass API）から取得します。サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは継続します。アプリを終了すると一時停止しますが、次に開いた時に再開できます。</string>
+    <string name="area_download">ダウンロード</string>
+    <string name="area_refresh">取り直す</string>
+    <string name="area_delete_title">%1$sを削除しますか？</string>
+    <string name="area_delete_message">保存した山データを端末から消します。ほかの保存済みの地域と重なる部分は残ります。</string>
+    <string name="area_running">%1$sをダウンロード中（%2$d / %3$d 区画）</string>
+    <string name="area_status_waiting">サーバーの応答を待っています（%1$d 秒）</string>
+    <string name="area_status_waiting_retry">サーバーの応答を待っています（%1$d 秒・取り直し %2$d 回目）</string>
+    <string name="area_status_retrying">通信に失敗したため、%1$d 秒後に取り直します（%2$d 回目）</string>
+    <string name="area_cancel">中断</string>
+    <string name="area_resume">続きから再開</string>
+    <string name="area_saved_summary">%1$s 取得・山 %2$,d 件</string>
+    <string name="area_update">更新</string>
+    <string name="area_saved">保存済み</string>
+    <string name="area_tiles">%1$d 区画</string>
+    <string name="area_notice_pending">%1$sのダウンロードが途中で終わっています。「続きから再開」で残りを取得します。</string>
+    <string name="area_notice_done">%1$sのダウンロードが完了しました（山 %2$,d 件）。</string>
+    <string name="area_notice_failed">%1$sのダウンロード中に通信に失敗しました。サーバーが混み合っているか、電波が弱い可能性があります。</string>
+    <string name="area_notice_failed_progress">%1$sのダウンロード中に通信に失敗しました（%2$d / %3$d 区画まで保存済み）。サーバーが混み合っているか、電波が弱い可能性があります。</string>
+    <string name="area_notice_canceled">%1$sのダウンロードを中断しました（%2$d / %3$d 区画まで保存済み）。</string>
 </resources>

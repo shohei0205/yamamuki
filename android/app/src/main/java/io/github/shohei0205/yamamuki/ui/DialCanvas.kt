@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -48,8 +49,8 @@ import io.github.shohei0205.yamamuki.core.RingLabelGeometry
 import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.MapCenter
 import io.github.shohei0205.yamamuki.core.PeakLayout
+import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.elevationClass
-import io.github.shohei0205.yamamuki.core.othersText
 import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
@@ -136,6 +137,7 @@ fun DialCanvas(
     bottomBleed: Dp = 0.dp,
 ) {
     val styles = remember(textScale) { DialTextStyles(textScale) }
+    val texts = rememberDialTexts()
     val textMeasurer = rememberTextMeasurer(cacheSize = 512)
     val hitTargets = remember { HitTargets() }
     val peakSelection = remember { PeakSelection() }
@@ -177,7 +179,7 @@ fun DialCanvas(
                 val previousAngle = RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle, hitTargets.ringLabelHeading, headingDeg)
                 hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, previousAngle, headingUp)
                 hitTargets.ringLabelHeading = headingDeg
-                drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, maxPeaks, peakSelection)
+                drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, texts, maxPeaks, peakSelection)
             } else {
                 emptyList()
             }
@@ -196,7 +198,7 @@ fun DialCanvas(
                 // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
                 translate(top = -tapeHidden * chartTop * 1.5f) {
                     drawTape(headingDeg, tapeHeight, textMeasurer)
-                    drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles)
+                    drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles, texts)
                 }
             }
         }
@@ -338,6 +340,7 @@ private fun DrawScope.drawPeaks(
     chartTop: Float,
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
+    texts: DialTexts,
     maxPeaks: Int,
     selection: PeakSelection,
 ): List<PlacedPeak> {
@@ -400,7 +403,7 @@ private fun DrawScope.drawPeaks(
         val peak = group.peak
         if (group.members.isEmpty()) return@map null
         // 「ほか 3 山」は山名の下に添える。ほかの山の山名と重なるときは添えない(タップすれば一覧は出る)。
-        val others = textMeasurer.measure(othersText(group.members.size), styles.others)
+        val others = textMeasurer.measure(texts.others(group.members.size), styles.others)
         val p = peak.position
         val top = p.y + gap + peak.label.size.height
         val half = others.size.width / 2f
@@ -734,6 +737,7 @@ private fun DrawScope.drawReadout(
     tapeHeight: Float,
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
+    texts: DialTexts,
 ) {
     val center = size.width / 2
     val caret = 5.dp.toPx()
@@ -747,7 +751,7 @@ private fun DrawScope.drawReadout(
         ),
         NorthRed,
     )
-    val (direction, altitude) = readoutParts(headingDeg, altitudeM)
+    val (direction, altitude) = texts.readoutParts(headingDeg, altitudeM)
     val text = androidx.compose.ui.text.buildAnnotatedString {
         append(direction)
         if (altitude.isNotEmpty()) {
@@ -767,11 +771,42 @@ private fun DrawScope.drawReadout(
     drawText(label, topLeft = topLeft + Offset(padX, padY))
 }
 
-/** 方位(「北東 45°」)と標高(「　標高 312m」、分からなければ空)に分けたもの。 */
-internal fun readoutParts(headingDeg: Double, altitudeM: Double?): Pair<String, String> {
-    val deg = headingDeg.roundToInt() % 360
-    val altitude = altitudeM?.let { String.format(java.util.Locale.US, "　標高 %,dm", Math.round(it)) } ?: ""
-    return "${Heading.directionName(headingDeg)} $deg°" to altitude
+/** 16 方位の名前の文字列リソース。[Heading.directionIndex] の番号の順(北から時計回り)。 */
+private val DIRECTION_NAMES = listOf(
+    R.string.direction_n, R.string.direction_nne, R.string.direction_ne, R.string.direction_ene,
+    R.string.direction_e, R.string.direction_ese, R.string.direction_se, R.string.direction_sse,
+    R.string.direction_s, R.string.direction_ssw, R.string.direction_sw, R.string.direction_wsw,
+    R.string.direction_w, R.string.direction_wnw, R.string.direction_nw, R.string.direction_nnw,
+)
+
+/** 方位盤に描く文言。描画(DrawScope)の中では stringResource を呼べないので、先に文字列リソースから読んでおく。 */
+internal class DialTexts(
+    private val directionNames: List<String>,
+    /** 「ほか %1$d 山」。 */
+    private val othersFormat: String,
+    /** 「　標高 %1$,dm」。 */
+    private val altitudeFormat: String,
+) {
+    /** 16 方位の名前(北、北北東、…)。 */
+    fun direction(headingDeg: Double): String = directionNames[Heading.directionIndex(headingDeg)]
+
+    /** 重なって山名を省いた山の数を、代表の山の山名の下に添える文言。「ほか 3 山」。 */
+    fun others(count: Int): String = String.format(othersFormat, count)
+
+    /** 方位(「北東 45°」)と標高(「　標高 312m」、分からなければ空)に分けたもの。 */
+    fun readoutParts(headingDeg: Double, altitudeM: Double?): Pair<String, String> {
+        val deg = headingDeg.roundToInt() % 360
+        val altitude = altitudeM?.let { String.format(altitudeFormat, Math.round(it)) } ?: ""
+        return "${direction(headingDeg)} $deg°" to altitude
+    }
+}
+
+@Composable
+internal fun rememberDialTexts(): DialTexts {
+    val names = DIRECTION_NAMES.map { stringResource(it) }
+    val others = stringResource(R.string.dial_others)
+    val altitude = stringResource(R.string.dial_altitude)
+    return remember(names, others, altitude) { DialTexts(names, others, altitude) }
 }
 
 @Preview(widthDp = 320, heightDp = 560)
@@ -782,10 +817,11 @@ private fun DialCanvasPreview() {
     DialCanvas(
         headingDeg = 0.0,
         mountains = listOf(
-            peak("□□山", 1212.0, 8.0, 20.0),
-            peak("○○山", 560.0, 12.5, -18.0),
-            peak("○×山", 122.0, 3.5, -20.0),
-            peak("△△岳", 2456.0, 15.0, 5.0),
+            // プレビュー用の仮の山名なので、文字列リソースにしない。
+            peak("□□山", 1212.0, 8.0, 20.0), // 文言チェック対象外
+            peak("○○山", 560.0, 12.5, -18.0), // 文言チェック対象外
+            peak("○×山", 122.0, 3.5, -20.0), // 文言チェック対象外
+            peak("△△岳", 2456.0, 15.0, 5.0), // 文言チェック対象外
         ),
         rangeKm = DialGeometry.DEFAULT_RANGE_KM,
         modifier = Modifier.fillMaxSize().background(DialBeige),

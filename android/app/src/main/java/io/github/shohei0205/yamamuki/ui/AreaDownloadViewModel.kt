@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.YamamukiApp
 import io.github.shohei0205.yamamuki.core.DownloadProgress
 import io.github.shohei0205.yamamuki.core.Prefecture
@@ -66,7 +67,7 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
             _state.update {
                 it.copy(
                     notice = DownloadNotice(
-                        "${prefecture.name}のダウンロードが途中で終わっています。「続きから再開」で残りを取得します。",
+                        app.getString(R.string.area_notice_pending, prefecture.name),
                         resume = prefecture,
                         resumeRefresh = refresh,
                     ),
@@ -104,7 +105,7 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
                 savedAreas.put(SavedArea(prefecture, System.currentTimeMillis(), count))
                 savedAreas.pending = null
                 _state.update {
-                    it.copy(running = null, notice = DownloadNotice("${prefecture.name}のダウンロードが完了しました（山 ${"%,d".format(count)} 件）。"))
+                    it.copy(running = null, notice = DownloadNotice(app.getString(R.string.area_notice_done, prefecture.name, count)))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -116,9 +117,11 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
                     it.copy(
                         running = null,
                         notice = DownloadNotice(
-                            "${prefecture.name}のダウンロード中に通信に失敗しました" +
-                                (done?.let { p -> "（${p.doneTiles} / ${p.totalTiles} 区画まで保存済み）" } ?: "") +
-                                "。サーバーが混み合っているか、電波が弱い可能性があります。",
+                            if (done == null) {
+                                app.getString(R.string.area_notice_failed, prefecture.name)
+                            } else {
+                                app.getString(R.string.area_notice_failed_progress, prefecture.name, done.doneTiles, done.totalTiles)
+                            },
                             resume = prefecture,
                             resumeRefresh = refresh,
                         ),
@@ -137,7 +140,12 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
             it.copy(
                 running = null,
                 notice = DownloadNotice(
-                    "${running.prefecture.name}のダウンロードを中断しました（${running.progress.doneTiles} / ${running.progress.totalTiles} 区画まで保存済み）。",
+                    app.getString(
+                        R.string.area_notice_canceled,
+                        running.prefecture.name,
+                        running.progress.doneTiles,
+                        running.progress.totalTiles,
+                    ),
                     resume = running.prefecture,
                     resumeRefresh = savedAreas.pending?.second ?: false,
                 ),

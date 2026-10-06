@@ -22,10 +22,10 @@ struct AreaDownloadView: View {
         NavigationView {
             List {
                 Section {
-                    Text("目的地周辺の山データを、電波の届く場所で事前に端末へ保存することができます。\n事前に保存した山データは、キャッシュを消去しても残ります。")
+                    Text(Strings.text("area_description"))
                         .font(.subheadline)
                     if !model.isConnected {
-                        Text("圏外のため、今はダウンロードできません。電波の届く場所で開いてください。")
+                        Text(Strings.text("area_offline"))
                             .font(.subheadline)
                             .foregroundStyle(.red)
                     }
@@ -34,17 +34,17 @@ struct AreaDownloadView: View {
                 if let running = download.running {
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("\(running.prefecture.name)をダウンロード中（\(running.progress.doneTiles) / \(running.progress.totalTiles) 区画）")
+                            Text(Strings.format("area_running", running.prefecture.name, running.progress.doneTiles, running.progress.totalTiles))
                                 .font(.headline)
                             ProgressView(value: running.progress.fraction)
                             // 区画数が増えない間も止まっていないことが分かるよう、待っている秒数を 1 秒ごとに出す。
                             TimelineView(.periodic(from: running.since, by: 1)) { context in
-                                Text(running.progress.statusText(elapsed: context.date.timeIntervalSince(running.since)))
+                                Text(downloadStatusText(running.progress.status(elapsed: context.date.timeIntervalSince(running.since))))
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        Button("中断", role: .destructive) { download.cancel() }
+                        Button(Strings.text("area_cancel"), role: .destructive) { download.cancel() }
                     }
                 }
 
@@ -52,32 +52,32 @@ struct AreaDownloadView: View {
                     Section {
                         Text(notice.message).font(.subheadline)
                         if let resume = notice.resume {
-                            Button("続きから再開") {
+                            Button(Strings.text("area_resume")) {
                                 download.start(resume, refresh: notice.resumeRefresh, maxAge: AreaDownloadModel.maxAge)
                             }
                             .disabled(!canStart)
                         }
-                        Button("閉じる") { download.dismissNotice() }
+                        Button(Strings.text("common_close")) { download.dismissNotice() }
                     }
                 }
 
                 if !download.savedAreas.isEmpty {
-                    Section("保存済みの地域") {
+                    Section(Strings.text("area_section_saved")) {
                         ForEach(download.savedAreas) { area in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(area.prefecture.name)
-                                    Text("\(dateText(area.downloadedAt)) 取得・山 \(groupedInteger(area.mountainCount)) 件")
+                                    Text(Strings.format("area_saved_summary", dateText(area.downloadedAt), groupedInteger(area.mountainCount)))
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 // 1 行に 2 つのボタンを置くので、行全体ではなくボタンだけが反応するようにする。
-                                Button("更新") { confirming = Confirmation(prefecture: area.prefecture, refresh: true) }
+                                Button(Strings.text("area_update")) { confirming = Confirmation(prefecture: area.prefecture, refresh: true) }
                                     .buttonStyle(.borderless)
                                     .disabled(!canStart)
                                 // 削除は通信しないので、圏外でも(山で容量を空けたいときなど)できるようにする。
-                                Button("削除", role: .destructive) { deleting = area }
+                                Button(Strings.text("common_delete"), role: .destructive) { deleting = area }
                                     .buttonStyle(.borderless)
                                     .disabled(download.running != nil)
                             }
@@ -95,7 +95,7 @@ struct AreaDownloadView: View {
                                 HStack {
                                     Text(p.name).foregroundStyle(.primary)
                                     Spacer()
-                                    Text(saved.contains(p.code) ? "保存済み" : "\(p.tiles.count) 区画")
+                                    Text(saved.contains(p.code) ? Strings.text("area_saved") : Strings.format("area_tiles", p.tiles.count))
                                         .font(.footnote)
                                         .foregroundColor(saved.contains(p.code) ? .accentColor : .secondary)
                                 }
@@ -105,35 +105,37 @@ struct AreaDownloadView: View {
                     }
                 }
             }
-            .navigationTitle("事前ダウンロード")
+            .navigationTitle(Strings.text("area_title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("閉じる") { dismiss() }
+                    Button(Strings.text("common_close")) { dismiss() }
                 }
             }
         }
         .alert(
-            confirming.map { $0.refresh ? "\($0.prefecture.name)を取り直しますか？" : "\($0.prefecture.name)をダウンロードしますか？" } ?? "",
+            confirming.map {
+                Strings.format($0.refresh ? "area_confirm_refresh_title" : "area_confirm_download_title", $0.prefecture.name)
+            } ?? "",
             isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
             presenting: confirming
         ) { c in
-            Button(c.refresh ? "取り直す" : "ダウンロード") {
+            Button(Strings.text(c.refresh ? "area_refresh" : "area_download")) {
                 download.start(c.prefecture, refresh: c.refresh, maxAge: AreaDownloadModel.maxAge)
             }
-            Button("キャンセル", role: .cancel) {}
+            Button(Strings.text("common_cancel"), role: .cancel) {}
         } message: { c in
-            Text("\(c.prefecture.tiles.count) 区画の山データを OpenStreetMap（Overpass API）から取得します。サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは継続します。アプリを終了すると一時停止しますが、次に開いた時に再開できます。")
+            Text(Strings.format("area_confirm_message", c.prefecture.tiles.count))
         }
         .alert(
-            deleting.map { "\($0.prefecture.name)を削除しますか？" } ?? "",
+            deleting.map { Strings.format("area_delete_title", $0.prefecture.name) } ?? "",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
             presenting: deleting
         ) { area in
-            Button("削除", role: .destructive) { download.delete(area) }
-            Button("キャンセル", role: .cancel) {}
+            Button(Strings.text("common_delete"), role: .destructive) { download.delete(area) }
+            Button(Strings.text("common_cancel"), role: .cancel) {}
         } message: { _ in
-            Text("保存した山データを端末から消します。ほかの保存済みの地域と重なる部分は残ります。")
+            Text(Strings.text("area_delete_message"))
         }
     }
 

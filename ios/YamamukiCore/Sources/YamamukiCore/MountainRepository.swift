@@ -42,16 +42,22 @@ public struct DownloadProgress: Equatable, Sendable {
 
     /// 区画数が増えない間も進んでいることが分かるよう、今の区画の状況を 1 秒単位で表す。
     /// Overpass は集計が終わるまで何も返さないので、受信量ではなく待っている秒数を出す。
+    /// 画面の文言はアプリの文字列リソースで作る。
     /// - Parameter elapsed: この知らせを受け取ってからの時間。
-    public func statusText(elapsed: TimeInterval) -> String {
-        let retryNote = retry > 0 ? "・取り直し \(retry) 回目" : ""
+    public func status(elapsed: TimeInterval) -> DownloadStatus {
         if retry > 0 && elapsed < retryWait {
-            let left = Int((retryWait - elapsed).rounded(.up))
-            return "通信に失敗したため、\(left) 秒後に取り直します（\(retry) 回目）"
+            return .retryingIn(seconds: Int((retryWait - elapsed).rounded(.up)), retry: retry)
         }
-        let waited = Int(max(0, elapsed - (retry > 0 ? retryWait : 0)))
-        return "サーバーの応答を待っています（\(waited) 秒\(retryNote)）"
+        return .waiting(seconds: Int(max(0, elapsed - (retry > 0 ? retryWait : 0))), retry: retry)
     }
+}
+
+/// 事前ダウンロードで、今の区画が何を待っているか。retry は何回目の取り直しか(0 なら取り直していない)。
+public enum DownloadStatus: Equatable, Sendable {
+    /// サーバーの応答を seconds 秒待っている。
+    case waiting(seconds: Int, retry: Int)
+    /// 通信に失敗したので、seconds 秒後に取り直す。
+    case retryingIn(seconds: Int, retry: Int)
 }
 
 /// 現在地周辺の山を返す。キャッシュを優先し、未取得または古いタイルだけ Overpass に問い合わせる。

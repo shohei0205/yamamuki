@@ -543,8 +543,8 @@ struct DialCanvasView: View, Animatable {
 /// 方位(「北東 45°」)と標高(「　標高 312m」、分からなければ空)に分けたもの。
 func readoutParts(headingDeg: Double, altitudeM: Double?) -> (direction: String, altitude: String) {
     let deg = Int(headingDeg.rounded()) % 360
-    let altitude = altitudeM.map { "　標高 \(groupedInteger(Int($0.rounded())))m" } ?? ""
-    return ("\(Heading.directionName(headingDeg)) \(deg)°", altitude)
+    let altitude = altitudeM.map { Strings.format("dial_altitude", groupedInteger(Int($0.rounded()))) } ?? ""
+    return ("\(directionName(headingDeg)) \(deg)°", altitude)
 }
 
 /// 方位盤の文字の大きさ。設定の文字サイズ([scale])を山名・距離の目盛り・方位の表示に掛ける。
