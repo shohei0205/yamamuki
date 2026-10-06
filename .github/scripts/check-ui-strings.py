@@ -46,7 +46,8 @@ KEY_LITERAL = re.compile(r'"([a-z][a-z0-9]*(?:_[a-z0-9]+)+)"')
 STRINGS_CALL = re.compile(r"\bStrings\.(?:text|format)\(")
 KEYS_ARRAY = re.compile(r"\b\w+Keys\s*=\s*\[")
 # 書式指定。Android は %1$s・%1$d・%1$,d、iOS は %1$@・%1$ld。比べるときは番号だけにする。
-FORMAT_SPEC = re.compile(r"%(\d+)\$[^a-zA-Z@]*[a-zA-Z@]+")
+# 型の文字は 1 文字だけ(l・ll・h の長さ指定は除く)にし、すぐ後ろの単位(「%1$dkm」の km)は残す。
+FORMAT_SPEC = re.compile(r"%(\d+)\$[-+ #0,.\d]*(?:ll?|h)?[a-zA-Z@]")
 
 errors = []
 
@@ -115,10 +116,14 @@ def android_strings():
 
 
 def ios_strings():
-    return {
-        key: entry["localizations"]["ja"]["stringUnit"]["value"]
-        for key, entry in json.loads(XCSTRINGS.read_text(encoding="utf-8"))["strings"].items()
-    }
+    strings = {}
+    for key, entry in json.loads(XCSTRINGS.read_text(encoding="utf-8"))["strings"].items():
+        value = entry.get("localizations", {}).get("ja", {}).get("stringUnit", {}).get("value")
+        if value is None:
+            # Xcode の画面で開いたときなどに、訳の無いキーが足されることがある。
+            error(XCSTRINGS, 1, f"キー {key} に日本語の文言がありません。")
+        strings[key] = value
+    return strings
 
 
 def bracket_end(text, start, open_char, close_char):
@@ -168,6 +173,8 @@ def check_same_strings(android, ios):
     for key in sorted(set(android) & set(ios)):
         if PLATFORM_ONLY.get(key):
             error(STRINGS_XML, 1, f"キー {key} は両方の OS にあるので、PLATFORM_ONLY から消してください。")
+        if ios[key] is None:
+            continue
         a = FORMAT_SPEC.sub(r"%\1", android[key])
         i = FORMAT_SPEC.sub(r"%\1", ios[key])
         if a != i:
