@@ -24,7 +24,11 @@
 - ユーザーとのやり取り、コミットメッセージ、PR のタイトルと説明、コードのコメント、画面の文言は日本語で書く。
 - 文体は決めない。簡潔で分かりやすく書き、専門用語より普段の言葉を選ぶ。
 - コミットと PR のタイトルは、何が変わるかを一文で書く（例:「双眼鏡をタップすると現在地の緯度経度と標高を表示する」）。
-- PR の説明や README などの文章と、アプリの画面に出す文言（Android は `android/app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/` の Swift のコード内の文字列）を、自然で読みやすい表現に推敲するときは、スキル `yomiyasu`（`.agents/skills/yomiyasu/SKILL.md`）を使う。ただし、次の点はこのリポジトリの書き方を優先する。
+- 画面に出す文言はコードに直接書かず、Android は `android/app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/Localizable.xcstrings` に書き、コードからはキーで引く（iOS は `Strings.text` / `Strings.format`）。
+  - キー名は両 OS で同じにする。片方の OS だけの文言は、`.github/scripts/check-ui-strings.py` の `PLATFORM_ONLY` に理由と一緒に書く。
+  - core（`android/core/`・`ios/YamamukiCore/`）は画面の文言を持たない。方位の番号や待ち時間などの値を返し、アプリ側で文言にする。都道府県・地方の名前と、開発者向けのエラーの文は core に置いてよい。
+  - ログの文と、プレビュー用の仮の文字列（行末に `// 文言チェック対象外`）は対象外。
+- PR の説明や README などの文章と、アプリの画面に出す文言（Android は `android/app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/Localizable.xcstrings`）を、自然で読みやすい表現に推敲するときは、スキル `yomiyasu`（`.agents/skills/yomiyasu/SKILL.md`）を使う。ただし、次の点はこのリポジトリの書き方を優先する。
   - 英単語や数字の前後の半角空白（「OpenStreetMap の」「7 日間」など）は消さない。
   - コミットの本文、README、AGENTS.md の箇条書きは地の文に書き換えない。PR テンプレートの見出しも変えない。
   - 画面の文言は、画面に収まる短さを保ち、ボタンや見出しの短い語を文に書き換えない。Android と iOS で同じ文言にそろえる。
@@ -123,8 +127,9 @@ Android 版の山データの DB（Room）は、配布したあとも端末に�
 コミットの前に、変えた部分に応じて次を通す。CI（`.github/workflows/`）でも同じものを動かしている。
 
 ```bash
-# すべて: 改行コードと BOM の確認
+# すべて: 改行コードと BOM の確認、画面の文言が文字列リソースにまとまっているかの確認
 .github/scripts/check-text-format.sh
+.github/scripts/check-ui-strings.py
 
 # Android: core の単体テスト、アプリのビルドと単体テスト、DB のスキーマの確認（Gradle は android/ で動かす）
 (cd android && ./gradlew -p core test)
@@ -142,6 +147,7 @@ git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
 
 - iOS の画面を変えたら、手元で UI テストも動かす（手順は README の「iOS 版」）。CI では UI テストのビルドだけを確かめ、実行はしない。
 - CI の「Build」（Android）は、アプリの単体テストと DB のスキーマの確認（スキーマのコミット漏れと、既にある版のスキーマの書き換え）も行う。
+- CI の「Text format」は、画面の文言の確認（コードに直接書いた日本語、iOS のキーの過不足、両 OS のキーのずれ）も行う。
 - CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
 - ロジックを変えたら単体テストを足す。テストを消したり飛ばしたりして通すことはしない。
@@ -173,6 +179,7 @@ git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
 
 AI ツールが起こしやすい失敗を防ぐための指示。人の作業には当てはまらないものもある。
 
+- 画面の文言をコードに直接書いてしまうツールがあるので、文言は文字列リソースに書く（「言葉づかい」を参照）。
 - エディタの設定（`.editorconfig`）を読まずにファイルを書くツールがあるので、編集前に対象ファイルの改行コードと BOM を確かめて保つ。Markdown は保存後に先頭の BOM が残っているかを確かめる（`SKILL.md` は BOM が付いていないかを確かめる）。
 - 既存の Markdown に BOM を付けるときは、改行コードを変えない。
 - `Co-authored-by:` の書き方:

@@ -16,7 +16,7 @@
 - `android/core/` Android に依存しないデータ取得ロジック（配布データの取得・検証・取り込み、距離と方位の計算、キャッシュ方針。使っていない Overpass API の問い合わせ・解析も残している）。単体でテストできる。
 - `android/app/` Android アプリ。Room によるキャッシュ実装、設定、画面。
 - `ios/YamamukiCore/` iOS に依存しないロジックの Swift パッケージ。`android/core/` を Swift に移植したもので、単体でテストできる。キャッシュはタイルごとの JSON ファイル（`FileMountainCache`）に保存する。
-- `ios/Yamamuki/` iOS アプリ。方位盤の描画（`DialCanvasView`）、画面（`DialView`）、設定（`SettingsView`）、現在地と方位の取得（`LocationService`）。
+- `ios/Yamamuki/` iOS アプリ。方位盤の描画（`DialCanvasView`）、画面（`DialView`）、設定（`SettingsView`）、現在地と方位の取得（`LocationService`）。画面の文言は `Localizable.xcstrings` にまとめ、Android の `android/app/src/main/res/values/strings.xml` と同じキー名にしている。
 - `ios/YamamukiUITests/` iOS アプリの UI テスト（XCUITest）。アプリを起動して方位盤と設定の画面を開き、画面を撮る。
 - `ios/project.yml` Xcode プロジェクトの設定（[XcodeGen](https://github.com/yonaskolb/XcodeGen) 用）。`ios/Yamamuki.xcodeproj` はここから生成し、git には入れない。
 
