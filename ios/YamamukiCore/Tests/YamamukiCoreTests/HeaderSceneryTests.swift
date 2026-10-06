@@ -37,6 +37,13 @@ final class HeaderSceneryTests: XCTestCase {
         XCTAssertGreaterThan(HeaderScenery.peakTopY - HeaderScenery.crestRise, 0)
         XCTAssertLessThan(HeaderScenery.fadeTop, HeaderScenery.footY)
         XCTAssertLessThan(HeaderScenery.footY, HeaderScenery.height)
+        // 空と山並みは、地面の色で塗りつぶし終えた高さより下で、風景の下端より上で止める。
+        XCTAssertLessThan(HeaderScenery.fadeSolidY, HeaderScenery.fillBottom)
+        XCTAssertLessThanOrEqual(HeaderScenery.fillBottom, HeaderScenery.height - 2)
+        for layer in HeaderScenery.Layer.allCases {
+            let ridge = HeaderScenery.ridge(layer, width: 360)
+            XCTAssertTrue(ridge.segments.allSatisfy { $0.endY < HeaderScenery.fillBottom && $0.controlY < HeaderScenery.fillBottom })
+        }
         XCTAssertEqual(HeaderScenery.peakCenterX(width: 360), 230.4, accuracy: 1e-9)
     }
 }

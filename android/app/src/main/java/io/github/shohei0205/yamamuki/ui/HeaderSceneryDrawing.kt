@@ -27,6 +27,8 @@ private val RidgeNear = Color(0xFF5E8F6A)
 internal fun DrawScope.drawHeaderScenery(ground: Color) {
     val unit = 1.dp.toPx()
     val height = HeaderScenery.HEIGHT_DP.toFloat() * unit
+    // 空と山並みは、地面の色で塗りつぶした範囲の途中で止める([HeaderScenery.FILL_BOTTOM_DP])。
+    val fillBottom = HeaderScenery.FILL_BOTTOM_DP.toFloat() * unit
     val widthDp = size.width / unit
     fun y(v: Double) = v.toFloat() * unit
     fun x(v: Double) = v.toFloat() * unit
@@ -39,7 +41,7 @@ internal fun DrawScope.drawHeaderScenery(ground: Color) {
             startY = 0f,
             endY = height,
         ),
-        size = Size(size.width, height),
+        size = Size(size.width, fillBottom),
     )
     for (cloud in HeaderScenery.clouds) {
         val cx = (cloud.xFraction * size.width).toFloat()
@@ -51,12 +53,12 @@ internal fun DrawScope.drawHeaderScenery(ground: Color) {
 
     fun ridgePath(layer: HeaderScenery.Layer) = Path().apply {
         val ridge = HeaderScenery.ridge(layer, widthDp.toDouble())
-        moveTo(0f, height)
+        moveTo(0f, fillBottom)
         lineTo(0f, y(ridge.startY))
         for (segment in ridge.segments) {
             quadraticTo(x(segment.controlX), y(segment.controlY), x(segment.endX), y(segment.endY))
         }
-        lineTo(x(ridge.segments.last().endX), height)
+        lineTo(x(ridge.segments.last().endX), fillBottom)
         close()
     }
 
@@ -99,6 +101,7 @@ internal fun DrawScope.drawHeaderScenery(ground: Color) {
         Brush.verticalGradient(
             0f to ground.copy(alpha = 0f),
             HeaderScenery.FADE_MIDDLE_FRACTION.toFloat() to ground.copy(alpha = HeaderScenery.FADE_MIDDLE_ALPHA.toFloat()),
+            HeaderScenery.FADE_SOLID_FRACTION.toFloat() to ground,
             1f to ground,
             startY = fadeTop,
             endY = height,

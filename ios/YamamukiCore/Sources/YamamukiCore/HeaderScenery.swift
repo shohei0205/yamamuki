@@ -43,6 +43,19 @@ public enum HeaderScenery {
     public static let fadeMiddleFraction = 0.45
     public static let fadeMiddleAlpha = 0.85
 
+    /// 地面の色で塗りつぶし終える位置(溶かす範囲に対する割合)。ここから風景の下端までは地面の色だけになる。
+    public static let fadeSolidFraction = 0.8
+
+    /// 地面の色で塗りつぶし終える高さ。
+    public static let fadeSolidY = fadeTop + (height - fadeTop) * fadeSolidFraction
+
+    /// 空と山並みを塗る下端。地面の色で塗りつぶし終えた高さより少し下で止め、風景の下端までは描かない。
+    /// 下端を風景と同じ高さにすると、pt がピクセルの境目に来ない端末で、端の半端な行に山並みの色が透けて細い線に見える。
+    public static let fillBottom = fadeSolidY + 2
+
+    /// 方位目盛りの白い帯を、上端から濃くしていき、元の濃さになる位置(目盛りの高さに対する割合)。帯の上端を山並みの上で筋に見せない。
+    public static let tapeBandFadeFraction = 0.6
+
     /// 奥から手前へ、3 重の山並み。
     public enum Layer: CaseIterable {
         /// いちばん奥の淡い青の山並み。

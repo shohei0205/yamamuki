@@ -13,9 +13,11 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -24,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
@@ -42,6 +45,7 @@ import io.github.shohei0205.yamamuki.core.Box
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.ElevationClass
 import io.github.shohei0205.yamamuki.core.Heading
+import io.github.shohei0205.yamamuki.core.HeaderScenery
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.PlanOffset
@@ -697,10 +701,24 @@ private fun DrawScope.drawTape(headingDeg: Double, tapeHeight: Float, textMeasur
     val half = TAPE_SPAN_DEG / 2
     val baseline = 1.5.dp.toPx()
     // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ金色にする。
+    // 上端も山並みに溶かし、ヘッダーとの境目に筋を作らない。横のぼかしに縦のぼかしを重ねるため、別の層に描いて上側を削る。
+    val band = Size(size.width, tapeHeight)
+    drawIntoCanvas { it.saveLayer(Rect(Offset.Zero, band), Paint()) }
     drawRect(
         Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0f), Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0f))),
-        size = Size(size.width, tapeHeight),
+        size = band,
     )
+    drawRect(
+        Brush.verticalGradient(
+            0f to Color.Transparent,
+            HeaderScenery.TAPE_BAND_FADE_FRACTION.toFloat() to Color.Black,
+            startY = 0f,
+            endY = tapeHeight,
+        ),
+        size = band,
+        blendMode = BlendMode.DstIn,
+    )
+    drawIntoCanvas { it.restore() }
     drawRect(
         Brush.horizontalGradient(listOf(FanEdge.copy(alpha = 0f), FanEdge, FanEdge.copy(alpha = 0f))),
         topLeft = Offset(0f, tapeHeight - baseline),

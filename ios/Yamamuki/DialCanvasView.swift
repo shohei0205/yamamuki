@@ -479,13 +479,28 @@ struct DialCanvasView: View, Animatable {
         let half = tapeSpanDeg / 2
         let baseline: CGFloat = 1.5
         // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ金色にする。
-        ctx.fill(
-            Path(CGRect(x: 0, y: 0, width: size.width, height: tapeHeight)),
-            with: .linearGradient(
-                Gradient(colors: [.white.opacity(0), .white.opacity(0.55), .white.opacity(0)]),
-                startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: size.width, y: 0)
+        // 上端も山並みに溶かし、ヘッダーとの境目に筋を作らない。横のぼかしに縦のぼかしを重ねるため、別の層に描いて上側を削る。
+        let band = Path(CGRect(x: 0, y: 0, width: size.width, height: tapeHeight))
+        ctx.drawLayer { layer in
+            layer.fill(
+                band,
+                with: .linearGradient(
+                    Gradient(colors: [.white.opacity(0), .white.opacity(0.55), .white.opacity(0)]),
+                    startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: size.width, y: 0)
+                )
             )
-        )
+            layer.blendMode = .destinationIn
+            layer.fill(
+                band,
+                with: .linearGradient(
+                    Gradient(stops: [
+                        .init(color: .black.opacity(0), location: 0),
+                        .init(color: .black, location: HeaderScenery.tapeBandFadeFraction),
+                    ]),
+                    startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: 0, y: tapeHeight)
+                )
+            )
+        }
         ctx.fill(
             Path(CGRect(x: 0, y: tapeHeight - baseline, width: size.width, height: baseline)),
             with: .linearGradient(

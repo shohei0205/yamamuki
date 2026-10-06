@@ -38,6 +38,13 @@ class HeaderSceneryTest {
         assertTrue(HeaderScenery.PEAK_TOP_Y_DP - HeaderScenery.CREST_RISE_DP > 0.0)
         assertTrue(HeaderScenery.FADE_TOP_DP < HeaderScenery.FOOT_Y_DP)
         assertTrue(HeaderScenery.FOOT_Y_DP < HeaderScenery.HEIGHT_DP)
+        // 空と山並みは、地面の色で塗りつぶし終えた高さより下で、風景の下端より上で止める。
+        assertTrue(HeaderScenery.FADE_SOLID_Y_DP < HeaderScenery.FILL_BOTTOM_DP)
+        assertTrue(HeaderScenery.FILL_BOTTOM_DP <= HeaderScenery.HEIGHT_DP - 2.0)
+        for (layer in HeaderScenery.Layer.entries) {
+            val ridge = HeaderScenery.ridge(layer, 360.0)
+            assertTrue(ridge.segments.all { it.endY < HeaderScenery.FILL_BOTTOM_DP && it.controlY < HeaderScenery.FILL_BOTTOM_DP })
+        }
         assertEquals(230.4, HeaderScenery.peakCenterX(360.0), 1e-9)
     }
 }

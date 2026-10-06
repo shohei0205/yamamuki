@@ -16,9 +16,11 @@ private let ridgeNear = Color(hex: 0x5E8F6A)
 /// 広告を出すときは、ヘッダーの中央に重ねる。
 func drawHeaderScenery(_ ctx: GraphicsContext, width: CGFloat, ground: Color) {
     let height = CGFloat(HeaderScenery.height)
+    // 空と山並みは、地面の色で塗りつぶした範囲の途中で止める(`HeaderScenery.fillBottom`)。
+    let fillBottom = CGFloat(HeaderScenery.fillBottom)
 
     ctx.fill(
-        Path(CGRect(x: 0, y: 0, width: width, height: height)),
+        Path(CGRect(x: 0, y: 0, width: width, height: fillBottom)),
         with: .linearGradient(
             Gradient(stops: [
                 .init(color: headerSkyTop, location: 0),
@@ -39,13 +41,13 @@ func drawHeaderScenery(_ ctx: GraphicsContext, width: CGFloat, ground: Color) {
     func ridgePath(_ layer: HeaderScenery.Layer) -> Path {
         let ridge = HeaderScenery.ridge(layer, width: Double(width))
         var path = Path()
-        path.move(to: CGPoint(x: 0, y: height))
+        path.move(to: CGPoint(x: 0, y: fillBottom))
         path.addLine(to: CGPoint(x: 0, y: ridge.startY))
         for segment in ridge.segments {
             path.addQuadCurve(to: CGPoint(x: segment.endX, y: segment.endY),
                               control: CGPoint(x: segment.controlX, y: segment.controlY))
         }
-        path.addLine(to: CGPoint(x: ridge.segments.last?.endX ?? Double(width), y: Double(height)))
+        path.addLine(to: CGPoint(x: ridge.segments.last?.endX ?? Double(width), y: Double(fillBottom)))
         path.closeSubpath()
         return path
     }
@@ -88,6 +90,7 @@ func drawHeaderScenery(_ ctx: GraphicsContext, width: CGFloat, ground: Color) {
             Gradient(stops: [
                 .init(color: ground.opacity(0), location: 0),
                 .init(color: ground.opacity(HeaderScenery.fadeMiddleAlpha), location: HeaderScenery.fadeMiddleFraction),
+                .init(color: ground, location: HeaderScenery.fadeSolidFraction),
                 .init(color: ground, location: 1),
             ]),
             startPoint: CGPoint(x: 0, y: fadeTop), endPoint: CGPoint(x: 0, y: height)
