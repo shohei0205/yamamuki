@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  アプリアイコンの前景。方位盤の画面を縮めた形: 上に方位目盛りと赤い N、中央に山、
-  下に現在地と距離の同心円。ランチャーの切り抜きで欠けないよう、中央 66dp に収まるよう縮める。
+  アプリアイコンの前景。方位盤の画面を縮めた形: 上に方位目盛りと赤い N、中央に緑の山、
+  下に白い丸の現在地と、距離の同心円とその間の帯。地の色は ic_launcher_background。
   iOS の AppIcon(ios/Yamamuki/Assets.xcassets)も同じ図形から作っている。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -9,38 +9,68 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- 図形は 1024 四方(iOS の AppIcon と同じ座標)で描き、見える範囲(中央 72dp)に縮める。 -->
     <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.8"
-        android:scaleY="0.8">
+        android:scaleX="0.0703125"
+        android:scaleY="0.0703125"
+        android:translateX="18"
+        android:translateY="18">
+        <!-- 距離の帯(外から順に、近いほど濃い) -->
+        <path
+            android:fillColor="#FFFFF1CF"
+            android:pathData="M17,810 a495,495 0 1,0 990,0 a495,495 0 1,0 -990,0Z" />
+        <path
+            android:fillColor="#FFFFEDC2"
+            android:pathData="M182,810 a330,330 0 1,0 660,0 a330,330 0 1,0 -660,0Z" />
+        <path
+            android:fillColor="#FFFFE7B0"
+            android:pathData="M347,810 a165,165 0 1,0 330,0 a165,165 0 1,0 -330,0Z" />
         <!-- 距離の同心円 -->
         <path
-            android:pathData="M40,84 A14,14 0 0 1 68,84 M28,84 A26,26 0 0 1 80,84"
-            android:strokeColor="#FFC3C3C3"
-            android:strokeWidth="1.6" />
+            android:pathData="M17,810 a495,495 0 1,0 990,0 a495,495 0 1,0 -990,0Z M182,810 a330,330 0 1,0 660,0 a330,330 0 1,0 -660,0Z M347,810 a165,165 0 1,0 330,0 a165,165 0 1,0 -330,0Z"
+            android:strokeColor="#FFE8C98F"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="6" />
         <!-- 方位目盛り -->
         <path
-            android:pathData="M34,26v4M40,26v3M46,26v4M62,26v4M68,26v3M74,26v4"
-            android:strokeColor="#FF222222"
+            android:pathData="M259.7,300 V250.7 M343.8,300 V221.7 M427.9,300 V250.7 M596.1,300 V250.7 M680.2,300 V221.7 M764.3,300 V250.7"
+            android:strokeColor="#FF2E3A40"
             android:strokeLineCap="round"
-            android:strokeWidth="1.2" />
+            android:strokeLineJoin="round"
+            android:strokeWidth="17" />
         <!-- 北を示す N -->
         <path
-            android:pathData="M50.5,32V22.5L57.5,32V22.5"
+            android:pathData="M474,296 V166 L550,296 V166"
             android:strokeColor="#FFED1C24"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"
-            android:strokeWidth="2.4" />
-        <!-- 山。方位盤の 1000m 台の山と同じく黄緑の ▲ を緑で縁取る(縁は画面と同じ比率の細さ)。 -->
+            android:strokeWidth="30" />
+        <!-- 山。方位盤の 1000m 未満の山と同じ緑の丸い山に、影と白い縁と右の斜面の陰を付ける -->
         <path
-            android:fillColor="#FFB5E61D"
-            android:pathData="M54,43L70,70H38Z"
-            android:strokeColor="#FF22B14C"
-            android:strokeWidth="2.3" />
-        <!-- 現在地 -->
+            android:fillColor="#2E000000"
+            android:pathData="M282,713.5 Q370.6,600.4 476.6,462.4 Q512,424.6 547.4,462.4 Q653.5,600.4 742,713.5Z" />
         <path
-            android:fillColor="#FF111111"
-            android:pathData="M54,81m-3.2,0a3.2,3.2 0 1,0 6.4,0a3.2,3.2 0 1,0 -6.4,0" />
+            android:pathData="M282,700 Q370.6,586.9 476.6,448.9 Q512,411.1 547.4,448.9 Q653.5,586.9 742,700Z"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="39" />
+        <path
+            android:fillColor="#FF3DBB5C"
+            android:pathData="M282,700 Q370.6,586.9 476.6,448.9 Q512,411.1 547.4,448.9 Q653.5,586.9 742,700Z" />
+        <path
+            android:fillColor="#5923853B"
+            android:pathData="M529.7,461.3 Q618.3,574.5 688.9,674.9 L565.1,674.9Z" />
+        <!-- 現在地(白い丸の上の点) -->
+        <path
+            android:fillColor="#2E000000"
+            android:pathData="M466,814 a46,46 0 1,0 92,0 a46,46 0 1,0 -92,0Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M466,810 a46,46 0 1,0 92,0 a46,46 0 1,0 -92,0Z" />
+        <path
+            android:fillColor="#FF2E3A40"
+            android:pathData="M490,810 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0Z" />
     </group>
 </vector>
