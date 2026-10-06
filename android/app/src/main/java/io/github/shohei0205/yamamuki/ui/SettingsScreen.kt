@@ -125,7 +125,7 @@ fun SettingsScreen(
             HorizontalDivider()
             SectionTitle("バッテリー")
             SwitchRow(
-                title = "画面を常に点灯",
+                title = "画面のスリープ防止",
                 description = "方位盤の表示中は画面を常時点灯します。バッテリーの消耗が早くなります。",
                 checked = settings.keepScreenOn,
                 onChange = { v -> onSettingsChange { it.copy(keepScreenOn = v) } },
