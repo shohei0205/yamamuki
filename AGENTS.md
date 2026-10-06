@@ -25,7 +25,7 @@
 - 文体は決めない。簡潔で分かりやすく書き、専門用語より普段の言葉を選ぶ。
 - コミットと PR のタイトルは、何が変わるかを一文で書く（例:「双眼鏡をタップすると現在地の緯度経度と標高を表示する」）。
 - 画面に出す文言はコードに直接書かず、Android は `android/app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/Localizable.xcstrings` に書き、コードからはキーで引く（iOS は `Strings.text` / `Strings.format`）。
-  - キー名は両 OS で同じにする。片方の OS だけの文言は、`.github/scripts/check-ui-strings.py` の `PLATFORM_ONLY` に理由と一緒に書く。
+  - キー名は両 OS で同じにし、同じキーには同じ文言を入れる。OS で文言を変えるときは別のキーにする。片方の OS だけの文言は、`.github/scripts/check-ui-strings.py` の `PLATFORM_ONLY` に理由と一緒に書く。
   - core（`android/core/`・`ios/YamamukiCore/`）は画面の文言を持たない。方位の番号や待ち時間などの値を返し、アプリ側で文言にする。都道府県・地方の名前と、開発者向けのエラーの文は core に置いてよい。
   - ログの文と、プレビュー用の仮の文字列（行末に `// 文言チェック対象外`）は対象外。
 - PR の説明や README などの文章と、アプリの画面に出す文言（Android は `android/app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/Localizable.xcstrings`）を、自然で読みやすい表現に推敲するときは、スキル `yomiyasu`（`.agents/skills/yomiyasu/SKILL.md`）を使う。ただし、次の点はこのリポジトリの書き方を優先する。
@@ -147,7 +147,7 @@ git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
 
 - iOS の画面を変えたら、手元で UI テストも動かす（手順は README の「iOS 版」）。CI では UI テストのビルドだけを確かめ、実行はしない。
 - CI の「Build」（Android）は、アプリの単体テストと DB のスキーマの確認（スキーマのコミット漏れと、既にある版のスキーマの書き換え）も行う。
-- CI の「Text format」は、画面の文言の確認（コードに直接書いた日本語、iOS のキーの過不足、両 OS のキーのずれ）も行う。
+- CI の「Text format」は、画面の文言の確認（コードに直接書いた日本語、iOS のキーの過不足、両 OS のキーと文言のずれ）も行う。
 - CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
 - ロジックを変えたら単体テストを足す。テストを消したり飛ばしたりして通すことはしない。

@@ -26,7 +26,7 @@
     <string name="dial_status_no_data_here">この付近の山データがありません</string>
     <string name="dial_status_partial_data">周辺の一部の山データがありません</string>
     <string name="dial_status_fetch_hint">%1$s。設定画面から取得できます</string>
-    <string name="dial_permission_message">周辺の山を表示するには、位置情報の許可が必要です。\n許可の画面が出ないときは、端末の設定アプリから許可してください。</string>
+    <string name="dial_permission_message_with_hint">周辺の山を表示するには、位置情報の許可が必要です。\n許可の画面が出ないときは、端末の設定アプリから許可してください。</string>
     <string name="dial_permission_allow">許可する</string>
     <string name="map_mode_manual">手動位置モード</string>
     <string name="map_mode_heading_up">ヘディングアップモード</string>

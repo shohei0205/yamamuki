@@ -624,7 +624,7 @@ private fun PermissionRequest(onRequest: () -> Unit, modifier: Modifier = Modifi
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(R.string.dial_permission_message), textAlign = TextAlign.Center)
+        Text(stringResource(R.string.dial_permission_message_with_hint), textAlign = TextAlign.Center)
         Button(onClick = onRequest) { Text(stringResource(R.string.dial_permission_allow)) }
     }
 }
