@@ -20,6 +20,12 @@ struct DialView: View {
         GeometryReader { geometry in
             ZStack {
                 dialBeige.ignoresSafeArea()
+                // ステータスバーの裏は、ヘッダーの空の上端と同じ色で塗り、空がつながって見えるようにする。
+                VStack(spacing: 0) {
+                    headerSkyTop.frame(height: geometry.safeAreaInsets.top)
+                    Spacer()
+                }
+                .ignoresSafeArea()
 
                 DialCanvasView(
                     headingDeg: model.displayHeading,
@@ -67,7 +73,7 @@ struct DialView: View {
                     .padding(.horizontal, 16)
                 }
 
-                // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。
+                // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。どちらもヘッダーの下に置く。
                 VStack {
                     HStack {
                         if manualChrome {
@@ -87,7 +93,7 @@ struct DialView: View {
                     }
                     Spacer()
                 }
-                .padding(.top, 8)
+                .padding(.top, CGFloat(DialGeometry.headerHeight) + 8)
                 .padding(.horizontal, 8)
                 .animation(modeAnimation, value: manualChrome)
 

@@ -13,9 +13,11 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -24,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
@@ -42,6 +45,7 @@ import io.github.shohei0205.yamamuki.core.Box
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.ElevationClass
 import io.github.shohei0205.yamamuki.core.Heading
+import io.github.shohei0205.yamamuki.core.HeaderScenery
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.PlanOffset
@@ -129,7 +133,7 @@ fun DialCanvas(
     viewportLongitude: Double? = longitude,
     compassHeadingDeg: Double = headingDeg,
     headingUp: Boolean = true,
-    /** 上部の方位目盛りの引っ込み具合。0 で表示(ヘディングアップ)、1 で画面の上へ隠れる(手動位置モード)。 */
+    /** 上部の方位目盛りの引っ込み具合。0 で表示(ヘディングアップ)、1 でヘッダーの下端へ隠れる(手動位置モード)。 */
     tapeHidden: Float = 0f,
     /** 現在地から画面上部へ広がる視野の扇の濃さ(0〜1)。双眼鏡の短い視野は残りの (1 - 濃さ) で描く。 */
     viewFanAlpha: Float = 1f,
@@ -158,6 +162,7 @@ fun DialCanvas(
     }
     // 視野の扇だけを画面下端の余白まで描くので、全体では切り抜かず、扇以外を描く範囲で切り抜く。
     Canvas(modifier.then(tapModifier)) {
+        val headerHeight = DialGeometry.HEADER_HEIGHT_DP.dp.toPx()
         val tapeHeight = DialGeometry.TAPE_HEIGHT_DP.dp.toPx()
         val chartTop = DialGeometry.CHART_TOP_DP.dp.toPx()
         val origin = Offset(size.width / 2, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
@@ -168,7 +173,7 @@ fun DialCanvas(
         val observer = origin + Offset((offset.x * pxPerKm).toFloat(), (-offset.y * pxPerKm).toFloat())
         val observerRotation = Heading.delta(headingDeg, compassHeadingDeg).toFloat()
         if (viewFanAlpha > 0f) {
-            clipRect(top = tapeHeight, bottom = size.height + bottomBleed.toPx()) {
+            clipRect(top = headerHeight + tapeHeight, bottom = size.height + bottomBleed.toPx()) {
                 // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
                 drawViewFan(observer, viewFanAlpha)
             }
@@ -194,11 +199,16 @@ fun DialCanvas(
                 }
                 hitTargets.summit = null
             }
+            // 上部の青空と山並みは、地図の上に重ねる。手動位置モードで地図を動かしても、双眼鏡などがヘッダーに重ならない。
+            drawHeaderScenery(DialBeige)
             if (tapeHidden < 1f) {
+                // 目盛りはヘッダーの下に置き、手動位置モードではヘッダーの下端で切って、ヘッダーに重ねずに消す。
                 // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
-                translate(top = -tapeHidden * chartTop * 1.5f) {
-                    drawTape(headingDeg, tapeHeight, textMeasurer)
-                    drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles, texts)
+                clipRect(top = headerHeight) {
+                    translate(top = headerHeight - tapeHidden * (chartTop - headerHeight) * 1.5f) {
+                        drawTape(headingDeg, tapeHeight, textMeasurer)
+                        drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles, texts)
+                    }
                 }
             }
         }
@@ -691,10 +701,24 @@ private fun DrawScope.drawTape(headingDeg: Double, tapeHeight: Float, textMeasur
     val half = TAPE_SPAN_DEG / 2
     val baseline = 1.5.dp.toPx()
     // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ金色にする。
+    // 上端も山並みに溶かし、ヘッダーとの境目に筋を作らない。横のぼかしに縦のぼかしを重ねるため、別の層に描いて上側を削る。
+    val band = Size(size.width, tapeHeight)
+    drawIntoCanvas { it.saveLayer(Rect(Offset.Zero, band), Paint()) }
     drawRect(
         Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0f), Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0f))),
-        size = Size(size.width, tapeHeight),
+        size = band,
     )
+    drawRect(
+        Brush.verticalGradient(
+            0f to Color.Transparent,
+            HeaderScenery.TAPE_BAND_FADE_FRACTION.toFloat() to Color.Black,
+            startY = 0f,
+            endY = tapeHeight,
+        ),
+        size = band,
+        blendMode = BlendMode.DstIn,
+    )
+    drawIntoCanvas { it.restore() }
     drawRect(
         Brush.horizontalGradient(listOf(FanEdge.copy(alpha = 0f), FanEdge, FanEdge.copy(alpha = 0f))),
         topLeft = Offset(0f, tapeHeight - baseline),
