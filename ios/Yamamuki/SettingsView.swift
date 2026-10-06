@@ -49,12 +49,19 @@ struct SettingsView: View {
                     ) { v in model.updateSettings { $0.initialRangeKm = v } }
                 }
 
-                Section("画面") {
+                Section("バッテリー") {
                     SwitchRow(
-                        title: "画面を常に点灯",
-                        description: "方位盤を表示している間は画面を消しません。電池の減りが早くなります。",
+                        title: "画面のスリープ防止",
+                        description: "方位盤の表示中は画面を常時点灯します。バッテリーの消耗が早くなります。",
                         isOn: settings.keepScreenOn
                     ) { v in model.updateSettings { $0.keepScreenOn = v } }
+                    StepSlider(
+                        value: settings.sensorPrecision.rawValue,
+                        range: 0...(SensorPrecision.allCases.count - 1),
+                        step: 1,
+                        label: { "位置と方位の精度：\(SensorPrecision(rawValue: $0)?.label ?? "")" },
+                        description: "左に寄せるほどバッテリー消費を抑えられますが、現在地の更新が遅くなり、方位盤の回転が粗くなります。"
+                    ) { i in model.updateSettings { $0.sensorPrecision = SensorPrecision(rawValue: i) ?? .standard } }
                 }
 
                 Section("山データ") {

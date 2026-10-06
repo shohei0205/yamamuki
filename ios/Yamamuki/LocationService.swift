@@ -27,6 +27,21 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         manager.headingOrientation = .portrait
     }
 
+    /// 測る精度を変える。精度を下げると GPS を使う時間が減り、方位も細かな変化では届かなくなる。
+    func apply(_ precision: SensorPrecision) {
+        switch precision {
+        case .saver:
+            manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+            manager.headingFilter = 2
+        case .standard:
+            manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+            manager.headingFilter = 1
+        case .precise:
+            manager.desiredAccuracy = kCLLocationAccuracyBest
+            manager.headingFilter = 1
+        }
+    }
+
     var authorization: CLAuthorizationStatus { manager.authorizationStatus }
 
     var isAuthorized: Bool {

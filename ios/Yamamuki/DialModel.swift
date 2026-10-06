@@ -103,6 +103,7 @@ final class DialModel: ObservableObject {
         settings = saved
         rangeKm = Double(saved.initialRangeKm)
         authorization = locationService.authorization
+        locationService.apply(saved.sensorPrecision)
 
         locationService.onLocation = { [weak self] in self?.onLocation($0) }
         locationService.onHeading = { [weak self] in self?.heading = $0 }
@@ -287,6 +288,9 @@ final class DialModel: ObservableObject {
         settings = after
         settingsStore.save(after)
 
+        if after.sensorPrecision != before.sensorPrecision {
+            locationService.apply(after.sensorPrecision)
+        }
         if after.minElevationM != before.minElevationM, let here = gpsLocation {
             updatePeaks(at: here)
         }

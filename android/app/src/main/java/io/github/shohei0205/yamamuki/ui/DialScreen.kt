@@ -142,10 +142,12 @@ fun DialScreen(
     LaunchedEffect(peakDataAsked) {
         if (peakDataAsked && !hasPermission) permissionLauncher.launch(LOCATION_PERMISSIONS)
     }
-    LaunchedEffect(hasPermission) {
+    // 設定の「位置と方位の精度」を変えたら、測り方を変えて頼み直す。
+    val precision = state.settings.sensorPrecision
+    LaunchedEffect(hasPermission, precision) {
         if (!hasPermission) return@LaunchedEffect
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            locationUpdates(context).collect {
+            locationUpdates(context, precision.locationIntervalMs).collect {
                 val msl = withContext(Dispatchers.IO) { mslAltitudeM(context, it) }
                 viewModel.onLocation(GeoPoint(it.latitude, it.longitude, it.altitude, msl))
             }
@@ -153,11 +155,12 @@ fun DialScreen(
     }
 
     // センサーは磁北基準なので、現在地の偏角(日本ではおよそ西へ 7〜10°)を足して真北基準にする。
-    val magneticHeading by remember(context) {
-        val filter = HeadingFilter()
-        magneticHeadingUpdates(context)
+    val magneticHeading by remember(context, precision) {
+        // 値が届く間隔を変えても、平滑化で追いつくまでの時間は変わらないようにする。
+        val filter = HeadingFilter(HeadingFilter.alphaForPeriod(precision.headingPeriodMs.toDouble()))
+        magneticHeadingUpdates(context, precision.headingPeriodMs * 1_000)
             .map { filter.update(it) }
-            // センサーは毎秒 50 回ほど届く。端末を止めているときの細かな揺れで画面全体を描き直さないよう、
+            // センサーは高精度なら毎秒 50 回ほど届く。端末を止めているときの細かな揺れで画面全体を描き直さないよう、
             // 画面上でほぼ動かない変化(表示範囲の上端でも数 px)は流さない。
             .distinctUntilChanged { old, new -> abs(Heading.delta(old, new)) < MIN_HEADING_CHANGE_DEG }
     }.collectAsStateWithLifecycle<Double?>(initialValue = null)
