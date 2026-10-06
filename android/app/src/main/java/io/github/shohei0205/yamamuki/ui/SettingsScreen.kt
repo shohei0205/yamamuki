@@ -123,7 +123,7 @@ fun SettingsScreen(
             )
 
             HorizontalDivider()
-            SectionTitle("電池")
+            SectionTitle("バッテリー")
             SwitchRow(
                 title = "画面を常に点灯",
                 description = "方位盤を表示している間は画面を消しません。電池の減りが早くなります。",
