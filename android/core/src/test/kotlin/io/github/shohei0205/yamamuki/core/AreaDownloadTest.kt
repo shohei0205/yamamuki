@@ -109,12 +109,12 @@ class AreaDownloadTest {
     }
 
     @Test
-    fun statusTextCountsWaitingSeconds() {
-        assertEquals("サーバーの応答を待っています（35 秒）", DownloadProgress(3, 10).statusText(35_400))
+    fun statusCountsWaitingSeconds() {
+        assertEquals(DownloadStatus.Waiting(35, 0), DownloadProgress(3, 10).status(35_400))
         val retrying = DownloadProgress(3, 10, retry = 2, retryWaitMillis = 15_000)
-        assertEquals("通信に失敗したため、15 秒後に取り直します（2 回目）", retrying.statusText(0))
-        assertEquals("通信に失敗したため、1 秒後に取り直します（2 回目）", retrying.statusText(14_500))
-        assertEquals("サーバーの応答を待っています（5 秒・取り直し 2 回目）", retrying.statusText(20_000))
+        assertEquals(DownloadStatus.RetryingIn(15, 2), retrying.status(0))
+        assertEquals(DownloadStatus.RetryingIn(1, 2), retrying.status(14_500))
+        assertEquals(DownloadStatus.Waiting(5, 2), retrying.status(20_000))
     }
 
     @Test

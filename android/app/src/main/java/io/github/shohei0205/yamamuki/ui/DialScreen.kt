@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -85,7 +86,7 @@ import io.github.shohei0205.yamamuki.core.Heading
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.NearbyMountain
-import io.github.shohei0205.yamamuki.core.coordinateText
+import io.github.shohei0205.yamamuki.core.degreeText
 import io.github.shohei0205.yamamuki.core.distanceText
 import io.github.shohei0205.yamamuki.core.elevationText
 import io.github.shohei0205.yamamuki.sensor.headingAccuracyLowUpdates
@@ -97,9 +98,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-
-/** 方位センサーの精度が低いときに、上部の情報ラベルの下に出す案内。 */
-private const val HEADING_ACCURACY_LOW_MESSAGE = "コンパス補正中。8の字に動かしてください"
 
 /** これより小さい方位の変化は画面に反映しない。 */
 private const val MIN_HEADING_CHANGE_DEG = 0.1
@@ -280,7 +278,7 @@ fun DialScreen(
             viewportLongitude = state.location?.longitude,
         )
         Text(
-            "© OpenStreetMap contributors",
+            stringResource(R.string.osm_attribution),
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
         )
@@ -292,8 +290,9 @@ fun DialScreen(
             )
         } else {
             Column(Modifier.align(Alignment.TopCenter).padding(top = DialGeometry.CHART_TOP_DP.dp, start = 16.dp, end = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                // 方位センサーの精度が低いときは、上部の情報ラベルの下に案内を出す。
                 StatusLine(
-                    message = if (headingAccuracyLow && compassHeading != null) HEADING_ACCURACY_LOW_MESSAGE else null,
+                    message = if (headingAccuracyLow && compassHeading != null) stringResource(R.string.dial_heading_accuracy_low) else null,
                     // 距離の円が文字の後ろを通っても読めるよう、方位の札と同じ淡い白の札にする。
                     labeled = true,
                 )
@@ -343,7 +342,7 @@ fun DialScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             RoundMapButton(onClick = { showSettings = true }) {
-                Icon(Icons.Filled.Settings, contentDescription = "設定", Modifier.size(28.dp))
+                Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title), Modifier.size(28.dp))
             }
             if (Features.AREA_DOWNLOAD) {
                 RoundMapButton(onClick = { showDownload = true }) {
@@ -363,7 +362,7 @@ fun DialScreen(
                     } else {
                         Icon(
                             painterResource(R.drawable.ic_area_download),
-                            contentDescription = "山データの事前ダウンロード",
+                            contentDescription = stringResource(R.string.dial_area_download),
                             Modifier.size(28.dp),
                         )
                     }
@@ -445,16 +444,10 @@ private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
     AlertDialog(
         onDismissRequest = {},
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
-        title = { Text("山データの取得") },
-        text = {
-            Text(
-                "全国の山の名前・位置・標高（OpenStreetMap のデータ、約 0.5 MB）を取得します。" +
-                    "取得したデータは端末に保存するので、圏外でも使えます。\n\n" +
-                    "今すぐ取得しますか？「あとで」を選んだときは、設定画面から取得できます。",
-            )
-        },
-        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text("取得する") } },
-        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text("あとで") } },
+        title = { Text(stringResource(R.string.peak_data_prompt_title)) },
+        text = { Text(stringResource(R.string.peak_data_prompt_message)) },
+        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_prompt_fetch)) } },
+        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_prompt_later)) } },
     )
 }
 
@@ -463,10 +456,10 @@ private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
 private fun FetchErrorDialog(message: String, onRetry: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("山データを取得できませんでした") },
+        title = { Text(stringResource(R.string.peak_data_error_title)) },
         text = { Text(message) },
-        confirmButton = { TextButton(onClick = onRetry) { Text("再取得") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
+        confirmButton = { TextButton(onClick = onRetry) { Text(stringResource(R.string.peak_data_error_retry)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) } },
     )
 }
 
@@ -476,13 +469,13 @@ private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) 
     val m = nearby.mountain
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) } },
         title = { Text(m.name) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DetailRow("標高", m.elevationText())
-                DetailRow("緯度経度", m.coordinateText())
-                DetailRow("現在地からの距離", distanceText(nearby.distanceKm))
+                DetailRow(stringResource(R.string.detail_elevation), elevationLabel(m.elevationM))
+                DetailRow(stringResource(R.string.detail_coordinate), coordinateLabel(m.latitude, m.longitude))
+                DetailRow(stringResource(R.string.detail_distance), distanceText(nearby.distanceKm))
             }
         },
     )
@@ -493,8 +486,8 @@ private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) 
 private fun PeakGroupDialog(peaks: List<NearbyMountain>, onSelect: (NearbyMountain) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
-        title = { Text("この付近の山") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) } },
+        title = { Text(stringResource(R.string.detail_group_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 for (nearby in peaks) {
@@ -506,7 +499,11 @@ private fun PeakGroupDialog(peaks: List<NearbyMountain>, onSelect: (NearbyMounta
                     ) {
                         Text(nearby.mountain.name, style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "${nearby.mountain.elevationText()}・${distanceText(nearby.distanceKm)}",
+                            stringResource(
+                                R.string.detail_group_item,
+                                elevationLabel(nearby.mountain.elevationM),
+                                distanceText(nearby.distanceKm),
+                            ),
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
@@ -521,15 +518,34 @@ private fun PeakGroupDialog(peaks: List<NearbyMountain>, onSelect: (NearbyMounta
 private fun ObserverDetailDialog(location: GeoPoint, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
-        title = { Text("現在地") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) } },
+        title = { Text(stringResource(R.string.detail_observer_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DetailRow("緯度経度", coordinateText(location.latitude, location.longitude))
-                DetailRow("標高", elevationText(location.mslAltitudeM))
+                DetailRow(stringResource(R.string.detail_coordinate), coordinateLabel(location.latitude, location.longitude))
+                DetailRow(stringResource(R.string.detail_elevation), elevationLabel(location.mslAltitudeM))
             }
         },
     )
+}
+
+/** 詳細表示の標高。「1,212 m」、不明なら「不明」。山と現在地で共通に使う。 */
+@Composable
+private fun elevationLabel(elevationM: Double?): String =
+    elevationText(elevationM) ?: stringResource(R.string.common_unknown)
+
+/** 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。山と現在地で共通に使う。 */
+@Composable
+private fun coordinateLabel(latitude: Double, longitude: Double): String {
+    val lat = stringResource(
+        if (latitude >= 0) R.string.detail_latitude_north else R.string.detail_latitude_south,
+        degreeText(latitude),
+    )
+    val lon = stringResource(
+        if (longitude >= 0) R.string.detail_longitude_east else R.string.detail_longitude_west,
+        degreeText(longitude),
+    )
+    return "$lat\n$lon"
 }
 
 @Composable
@@ -540,15 +556,18 @@ private fun DetailRow(label: String, value: String) {
     }
 }
 
+@Composable
 private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String? {
     // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。欠けているのはたいてい取得半径の外縁なので、周辺に保存済みの山があれば「周辺の一部」と言う。
-    val missing = if (state.mountains.isEmpty() && state.summit == null) "この付近の山データがありません" else "周辺の一部の山データがありません"
+    val missing = stringResource(
+        if (state.mountains.isEmpty() && state.summit == null) R.string.dial_status_no_data_here else R.string.dial_status_partial_data,
+    )
     return when {
-        state.location == null -> "現在地を取得しています…"
-        !headingAvailable -> "方位センサーの値を待っています…"
-        state.peakDataUpdating -> "山データを取得中…"
-        state.loading -> "山データを読み込み中…"
-        state.incomplete && state.peakData == null -> "$missing。設定画面から取得できます"
+        state.location == null -> stringResource(R.string.dial_status_locating)
+        !headingAvailable -> stringResource(R.string.dial_status_waiting_heading)
+        state.peakDataUpdating -> stringResource(R.string.dial_status_fetching)
+        state.loading -> stringResource(R.string.dial_status_loading)
+        state.incomplete && state.peakData == null -> stringResource(R.string.dial_status_fetch_hint, missing)
         state.incomplete -> missing
         else -> null
     }
@@ -560,14 +579,12 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
  */
 @Composable
 private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Float) {
+    val texts = rememberDialTexts()
+    val parts = headingDeg?.let { texts.readoutParts(it, altitudeM) }
+    val heading = if (parts == null) stringResource(R.string.dial_heading_loading) else stringResource(R.string.dial_heading, parts.first)
     val text = buildAnnotatedString {
-        if (headingDeg == null) {
-            append("方位を取得中")
-        } else {
-            val (direction, altitude) = readoutParts(headingDeg, altitudeM)
-            append("向き $direction")
-            withStyle(SpanStyle(color = TapeSubtle)) { append(altitude) }
-        }
+        append(heading)
+        if (parts != null) withStyle(SpanStyle(color = TapeSubtle)) { append(parts.second) }
     }
     Box(Modifier.height(56.dp), contentAlignment = Alignment.CenterStart) {
         Text(
@@ -607,11 +624,7 @@ private fun PermissionRequest(onRequest: () -> Unit, modifier: Modifier = Modifi
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            "周辺の山を表示するには、位置情報の許可が必要です。\n" +
-                "許可の画面が出ないときは、端末の設定アプリから許可してください。",
-            textAlign = TextAlign.Center,
-        )
-        Button(onClick = onRequest) { Text("許可する") }
+        Text(stringResource(R.string.dial_permission_message_with_hint), textAlign = TextAlign.Center)
+        Button(onClick = onRequest) { Text(stringResource(R.string.dial_permission_allow)) }
     }
 }

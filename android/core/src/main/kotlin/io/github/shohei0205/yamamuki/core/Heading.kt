@@ -5,11 +5,6 @@ import kotlin.math.hypot
 
 /** 端末の向き(方位角)の計算。 */
 object Heading {
-    private val DIRECTION_NAMES = listOf(
-        "北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東",
-        "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西",
-    )
-
     /** 角度を 0〜360° に正規化する。 */
     fun normalize(deg: Double): Double = ((deg % 360.0) + 360.0) % 360.0
 
@@ -19,9 +14,11 @@ object Heading {
         return if (d >= 180.0) d - 360.0 else d
     }
 
-    /** 16方位の名前(北、北北東、…)。 */
-    fun directionName(deg: Double): String =
-        DIRECTION_NAMES[((normalize(deg) + 11.25) / 22.5).toInt() % 16]
+    /**
+     * 16 方位の番号。0 が北で、時計回りに 1 が北北東、4 が東、…、15 が北北西。
+     * 方位の名前はアプリの文字列リソースにあり、この番号で引く。
+     */
+    fun directionIndex(deg: Double): Int = ((normalize(deg) + 11.25) / 22.5).toInt() % 16
 
     /**
      * Android の回転行列(端末座標→世界座標 [東, 北, 上]、行優先 3×3)から、端末を向けている方位角を求める。

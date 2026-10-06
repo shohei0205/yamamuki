@@ -14,12 +14,14 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.shohei0205.yamamuki.R
 
 /**
  * 表示中の地図に対する北の方向。方位が未取得の間は針を出さない。
@@ -27,10 +29,11 @@ import androidx.compose.ui.unit.sp
  */
 @Composable
 fun CompassIndicator(heading: Double?, onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+    val description = stringResource(if (heading == null) R.string.compass_loading else R.string.compass_ready)
     Box(
         modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f))
-            .clickable(enabled = enabled, role = Role.Button, onClickLabel = "北を上にする", onClick = onClick)
-            .semantics { contentDescription = if (heading == null) "コンパス：方位を取得中" else "コンパス：赤い針が北" },
+            .clickable(enabled = enabled, role = Role.Button, onClickLabel = stringResource(R.string.compass_face_north), onClick = onClick)
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         if (heading == null) {

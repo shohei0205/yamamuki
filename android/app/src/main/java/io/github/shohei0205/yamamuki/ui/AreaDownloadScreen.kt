@@ -27,7 +27,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.core.DownloadStatus
 import io.github.shohei0205.yamamuki.core.Prefecture
 import io.github.shohei0205.yamamuki.data.SavedArea
 import android.os.SystemClock
@@ -35,7 +38,6 @@ import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /** 山データの事前ダウンロード画面。方位盤の左下のダウンロードボタンで開く。 */
 @Composable
@@ -63,12 +65,11 @@ fun AreaDownloadScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("事前ダウンロード", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = onClose) { Text("閉じる") }
+                Text(stringResource(R.string.area_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = onClose) { Text(stringResource(R.string.common_close)) }
             }
             Text(
-                "目的地周辺の山データを、電波の届く場所で事前に端末へ保存することができます。\n" +
-                    "事前に保存した山データは、キャッシュを消去しても残ります。",
+                stringResource(R.string.area_description),
                 style = MaterialTheme.typography.bodyMedium,
             )
 
@@ -83,14 +84,14 @@ fun AreaDownloadScreen(
             }
             if (!state.connected) {
                 Text(
-                    "圏外のため、今はダウンロードできません。電波の届く場所で開いてください。",
+                    stringResource(R.string.area_offline),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
             }
 
             if (state.savedAreas.isNotEmpty()) {
-                SectionTitle("保存済みの地域")
+                SectionTitle(stringResource(R.string.area_section_saved))
                 state.savedAreas.forEach { area ->
                     SavedAreaRow(
                         area = area,
@@ -104,7 +105,7 @@ fun AreaDownloadScreen(
                 HorizontalDivider()
             }
 
-            SectionTitle("都道府県を選択")
+            SectionTitle(stringResource(R.string.area_section_choose))
             val saved = state.savedAreas.map { it.prefecture.code }.toSet()
             Prefecture.ALL.groupBy { it.region }.forEach { (region, prefectures) ->
                 Text(region, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
@@ -123,36 +124,37 @@ fun AreaDownloadScreen(
     confirming?.let { (prefecture, refresh) ->
         AlertDialog(
             onDismissRequest = { confirming = null },
-            title = { Text(if (refresh) "${prefecture.name}を取り直しますか？" else "${prefecture.name}をダウンロードしますか？") },
-            text = {
+            title = {
                 Text(
-                    "${prefecture.tiles.size} 区画の山データを OpenStreetMap（Overpass API）から取得します。" +
-                        "サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは継続します。" +
-                        "アプリを終了すると一時停止しますが、次に開いた時に再開できます。",
+                    stringResource(
+                        if (refresh) R.string.area_confirm_refresh_title else R.string.area_confirm_download_title,
+                        prefecture.name,
+                    ),
                 )
             },
+            text = { Text(stringResource(R.string.area_confirm_message, prefecture.tiles.size)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirming = null
                     onStart(prefecture, refresh)
-                }) { Text(if (refresh) "取り直す" else "ダウンロード") }
+                }) { Text(stringResource(if (refresh) R.string.area_refresh else R.string.area_download)) }
             },
-            dismissButton = { TextButton(onClick = { confirming = null }) { Text("キャンセル") } },
+            dismissButton = { TextButton(onClick = { confirming = null }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 
     deleting?.let { area ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("${area.prefecture.name}を削除しますか？") },
-            text = { Text("保存した山データを端末から消します。ほかの保存済みの地域と重なる部分は残ります。") },
+            title = { Text(stringResource(R.string.area_delete_title, area.prefecture.name)) },
+            text = { Text(stringResource(R.string.area_delete_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     deleting = null
                     onDelete(area)
-                }) { Text("削除") }
+                }) { Text(stringResource(R.string.common_delete)) }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("キャンセル") } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 }
@@ -162,7 +164,12 @@ private fun RunningCard(running: RunningDownload, onCancel: () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                "${running.prefecture.name}をダウンロード中（${running.progress.doneTiles} / ${running.progress.totalTiles} 区画）",
+                stringResource(
+                    R.string.area_running,
+                    running.prefecture.name,
+                    running.progress.doneTiles,
+                    running.progress.totalTiles,
+                ),
                 style = MaterialTheme.typography.titleMedium,
             )
             // 区画数が増えない間も止まっていないことが分かるよう、待っている秒数を 1 秒ごとに出す。
@@ -173,13 +180,25 @@ private fun RunningCard(running: RunningDownload, onCancel: () -> Unit) {
                 }
             }
             Text(
-                running.progress.statusText(now - running.sinceMillis),
+                statusText(running.progress.status(now - running.sinceMillis)),
                 style = MaterialTheme.typography.bodySmall,
             )
             LinearProgressIndicator(progress = { running.progress.fraction }, modifier = Modifier.fillMaxWidth())
-            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("中断") }
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.area_cancel)) }
         }
     }
+}
+
+/** 今の区画が何を待っているかの文言。「サーバーの応答を待っています（35 秒）」など。 */
+@Composable
+private fun statusText(status: DownloadStatus): String = when (status) {
+    is DownloadStatus.RetryingIn -> stringResource(R.string.area_status_retrying, status.seconds, status.retry)
+    is DownloadStatus.Waiting ->
+        if (status.retry > 0) {
+            stringResource(R.string.area_status_waiting_retry, status.seconds, status.retry)
+        } else {
+            stringResource(R.string.area_status_waiting, status.seconds)
+        }
 }
 
 @Composable
@@ -189,9 +208,9 @@ private fun NoticeCard(notice: DownloadNotice, canResume: Boolean, onResume: () 
             Text(notice.message, style = MaterialTheme.typography.bodyMedium)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (notice.resume != null) {
-                    TextButton(onClick = onResume, enabled = canResume) { Text("続きから再開") }
+                    TextButton(onClick = onResume, enabled = canResume) { Text(stringResource(R.string.area_resume)) }
                 }
-                TextButton(onClick = onDismiss) { Text("閉じる") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) }
             }
         }
     }
@@ -209,12 +228,12 @@ private fun SavedAreaRow(
         Column(Modifier.weight(1f)) {
             Text(area.prefecture.name, style = MaterialTheme.typography.bodyLarge)
             Text(
-                String.format(Locale.US, "%s 取得・山 %,d 件", dateText(area.downloadedAtMillis), area.mountainCount),
+                stringResource(R.string.area_saved_summary, dateText(area.downloadedAtMillis), area.mountainCount),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        TextButton(onClick = onRefresh, enabled = refreshEnabled) { Text("更新") }
-        TextButton(onClick = onDelete, enabled = deleteEnabled) { Text("削除") }
+        TextButton(onClick = onRefresh, enabled = refreshEnabled) { Text(stringResource(R.string.area_update)) }
+        TextButton(onClick = onDelete, enabled = deleteEnabled) { Text(stringResource(R.string.common_delete)) }
     }
 }
 
@@ -229,7 +248,7 @@ private fun PrefectureRow(prefecture: Prefecture, saved: Boolean, enabled: Boole
     ) {
         Text(prefecture.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Text(
-            if (saved) "保存済み" else "${prefecture.tiles.size} 区画",
+            if (saved) stringResource(R.string.area_saved) else stringResource(R.string.area_tiles, prefecture.tiles.size),
             style = MaterialTheme.typography.bodySmall,
             color = if (saved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -39,18 +39,27 @@ data class DownloadProgress(
     /**
      * 区画数が増えない間も進んでいることが分かるよう、今の区画の状況を 1 秒単位で表す。
      * Overpass は集計が終わるまで何も返さないので、受信量ではなく待っている秒数を出す。
+     * 画面の文言はアプリの文字列リソースで作る。
      * @param elapsedMillis この知らせを受け取ってからの時間。
      */
-    fun statusText(elapsedMillis: Long): String {
-        val retryNote = if (retry > 0) "・取り直し $retry 回目" else ""
-        return if (retry > 0 && elapsedMillis < retryWaitMillis) {
-            val left = (retryWaitMillis - elapsedMillis + 999) / 1000
-            "通信に失敗したため、$left 秒後に取り直します（$retry 回目）"
+    fun status(elapsedMillis: Long): DownloadStatus =
+        if (retry > 0 && elapsedMillis < retryWaitMillis) {
+            DownloadStatus.RetryingIn((retryWaitMillis - elapsedMillis + 999) / 1000, retry)
         } else {
-            val waited = (elapsedMillis - if (retry > 0) retryWaitMillis else 0) / 1000
-            "サーバーの応答を待っています（$waited 秒$retryNote）"
+            DownloadStatus.Waiting((elapsedMillis - if (retry > 0) retryWaitMillis else 0) / 1000, retry)
         }
-    }
+}
+
+/** 事前ダウンロードで、今の区画が何を待っているか。 */
+sealed interface DownloadStatus {
+    /** 何回目の取り直しか。0 なら取り直していない。 */
+    val retry: Int
+
+    /** サーバーの応答を [seconds] 秒待っている。 */
+    data class Waiting(val seconds: Long, override val retry: Int) : DownloadStatus
+
+    /** 通信に失敗したので、[seconds] 秒後に取り直す。 */
+    data class RetryingIn(val seconds: Long, override val retry: Int) : DownloadStatus
 }
 
 /**

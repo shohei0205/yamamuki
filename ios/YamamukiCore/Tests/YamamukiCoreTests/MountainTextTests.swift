@@ -10,15 +10,16 @@ final class MountainTextTests: XCTestCase {
 
     func testElevation() {
         XCTAssertEqual(fuji.elevationText, "3,776 m")
-        XCTAssertEqual(variant(ele: nil).elevationText, "不明")
+        XCTAssertNil(variant(ele: nil).elevationText)
         XCTAssertEqual(elevationText(851.6), "852 m")
-        XCTAssertEqual(elevationText(nil), "不明")
+        XCTAssertNil(elevationText(nil))
     }
 
     func testCoordinate() {
-        XCTAssertEqual(fuji.coordinateText, "北緯 35.36056°\n東経 138.72739°")
-        XCTAssertEqual(variant(lat: -33.8688, lon: -151.2093, ele: 1).coordinateText, "南緯 33.86880°\n西経 151.20930°")
-        XCTAssertEqual(coordinateText(latitude: 35.681236, longitude: 139.767126), "北緯 35.68124°\n東経 139.76713°")
+        XCTAssertEqual(degreeText(fuji.latitude), "35.36056°")
+        XCTAssertEqual(degreeText(fuji.longitude), "138.72739°")
+        XCTAssertEqual(degreeText(-33.8688), "33.86880°")
+        XCTAssertEqual(degreeText(-151.2093), "151.20930°")
     }
 
     func testDistance() {

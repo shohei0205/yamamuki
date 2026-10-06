@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.YamamukiApp
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.GeoMath
@@ -363,7 +364,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                 app.peakDataStore.save(result.installed)
                 val updated = result is PeakDataUpdater.Result.Updated
                 _state.update {
-                    it.copy(peakData = result.installed, peakDataNotice = if (updated) "山データを取得しました" else "山データは最新です")
+                    it.copy(peakData = result.installed, peakDataNotice = app.getString(if (updated) R.string.peak_data_updated else R.string.peak_data_up_to_date))
                 }
                 if (updated) {
                     reloadFromCache()
@@ -399,20 +400,22 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    private companion object {
-        /** 通信エラーの知らせの文言。端末がつながっていないのか、サーバー側の問題かで案内を変える。 */
-        fun errorNotice(error: Throwable, hasCache: Boolean): String {
-            if (isOffline(error)) return offlineNotice(hasCache)
-            if (error is PeakDataException) return withCacheNote("山データを取り込めませんでした。\n${error.message}", hasCache)
-            return withCacheNote("山データのサーバーから応答がありません。しばらくしてから再取得してください。", hasCache)
+    /** 通信エラーの知らせの文言。端末がつながっていないのか、サーバー側の問題かで案内を変える。 */
+    private fun errorNotice(error: Throwable, hasCache: Boolean): String {
+        if (isOffline(error)) return offlineNotice(hasCache)
+        if (error is PeakDataException) {
+            return withCacheNote(app.getString(R.string.peak_data_error_invalid, error.message.orEmpty()), hasCache)
         }
+        return withCacheNote(app.getString(R.string.peak_data_error_no_response), hasCache)
+    }
 
-        fun offlineNotice(hasCache: Boolean): String =
-            withCacheNote("インターネットに接続されていません。電波の届く場所で再取得してください。", hasCache)
+    private fun offlineNotice(hasCache: Boolean): String =
+        withCacheNote(app.getString(R.string.peak_data_error_offline), hasCache)
 
-        private fun withCacheNote(cause: String, hasCache: Boolean): String =
-            if (hasCache) "$cause\n\n保存済みのデータで表示しています。" else cause
+    private fun withCacheNote(cause: String, hasCache: Boolean): String =
+        if (hasCache) app.getString(R.string.peak_data_error_with_cache, cause) else cause
 
+    private companion object {
         /** 端末が通信できない状態で失敗したか。HTTP クライアントが包んだ例外も、原因をたどって見る。 */
         fun isOffline(error: Throwable): Boolean = when (error) {
             is UnknownHostException, is ConnectException, is NoRouteToHostException -> true

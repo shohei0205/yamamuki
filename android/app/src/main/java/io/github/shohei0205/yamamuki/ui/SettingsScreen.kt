@@ -37,8 +37,10 @@ import androidx.core.content.pm.PackageInfoCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.Features
+import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.InstalledPeakData
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.data.CacheInfo
@@ -81,52 +83,52 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("設定", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = onClose) { Text("閉じる") }
+                Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = onClose) { Text(stringResource(R.string.common_close)) }
             }
 
-            SectionTitle("表示する山")
+            SectionTitle(stringResource(R.string.settings_section_peaks))
             StepSlider(
                 value = settings.minElevationM,
                 range = 0..MAX_MIN_ELEVATION_M,
                 step = MIN_ELEVATION_STEP_M,
-                label = ::minElevationLabel,
-                description = "0 m ですべての山を表示します。絞り込み中は標高不明の山を表示しません。",
+                label = { minElevationLabel(it) },
+                description = stringResource(R.string.settings_min_elevation_description),
                 onChange = { m -> onSettingsChange { it.copy(minElevationM = m) } },
             )
             StepSlider(
                 value = settings.maxPeaks,
                 range = Settings.MAX_PEAKS_RANGE,
                 step = MAX_PEAKS_STEP,
-                label = { "一度に表示する山 最大 $it 件" },
-                description = "多いと画面が混み合い、少ないと高い山だけになります。重なる山は標高の低いほうを省きます。",
+                label = { stringResource(R.string.settings_max_peaks, it) },
+                description = stringResource(R.string.settings_max_peaks_description),
                 onChange = { n -> onSettingsChange { it.copy(maxPeaks = n) } },
             )
 
             HorizontalDivider()
-            SectionTitle("表示")
+            SectionTitle(stringResource(R.string.settings_section_display))
             Choice(
-                title = "文字の大きさ",
+                title = stringResource(R.string.settings_text_size),
                 options = Settings.TEXT_SCALES,
                 selected = settings.textScale,
                 label = { textScaleLabel(it) },
                 onSelect = { v -> onSettingsChange { it.copy(textScale = v) } },
             )
             Choice(
-                title = "起動時の表示範囲（km）",
+                title = stringResource(R.string.settings_initial_range),
                 options = Settings.INITIAL_RANGES_KM,
                 selected = settings.initialRangeKm,
                 // 6 つ並ぶと「10km」が収まらないので、単位は見出しに出す。
                 label = { "$it" },
-                description = "現在地から画面上端までの距離。起動後はピンチで変えられます。",
+                description = stringResource(R.string.settings_initial_range_description),
                 onSelect = { v -> onSettingsChange { it.copy(initialRangeKm = v) } },
             )
 
             HorizontalDivider()
-            SectionTitle("バッテリー")
+            SectionTitle(stringResource(R.string.settings_section_battery))
             SwitchRow(
-                title = "画面のスリープ防止",
-                description = "方位盤の表示中は画面を常時点灯します。バッテリーの消耗が早くなります。",
+                title = stringResource(R.string.settings_keep_screen_on),
+                description = stringResource(R.string.settings_keep_screen_on_description),
                 checked = settings.keepScreenOn,
                 onChange = { v -> onSettingsChange { it.copy(keepScreenOn = v) } },
             )
@@ -134,18 +136,20 @@ fun SettingsScreen(
                 value = settings.sensorPrecision.ordinal,
                 range = 0..SensorPrecision.entries.lastIndex,
                 step = 1,
-                label = { "位置と方位の精度：${SensorPrecision.entries[it].label}" },
-                description = "左に寄せるほどバッテリー消費を抑えられますが、現在地の更新が遅くなり、方位盤の回転が粗くなります。",
+                label = {
+                    stringResource(R.string.settings_sensor_precision, stringResource(SensorPrecision.entries[it].label))
+                },
+                description = stringResource(R.string.settings_sensor_precision_description),
                 onChange = { i -> onSettingsChange { it.copy(sensorPrecision = SensorPrecision.entries[i]) } },
             )
 
             HorizontalDivider()
-            SectionTitle("山データ")
+            SectionTitle(stringResource(R.string.settings_section_peak_data))
             PeakDataSection(peakData, peakDataUpdating, peakDataNotice, onUpdatePeakData)
             CacheSection(cacheInfo, onClearCache)
 
             HorizontalDivider()
-            SectionTitle("このアプリについて")
+            SectionTitle(stringResource(R.string.settings_section_about))
             AboutSection()
         }
     }
@@ -160,19 +164,21 @@ private fun AboutSection() {
         "${info.versionName} (${PackageInfoCompat.getLongVersionCode(info)})"
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("バージョン $version", style = MaterialTheme.typography.bodyLarge)
-        Text("山データ © OpenStreetMap contributors (ODbL)", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.settings_version, version), style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.settings_data_license), style = MaterialTheme.typography.bodySmall)
     }
 }
 
+@Composable
 private fun minElevationLabel(m: Int): String =
-    if (m == 0) "すべての山を表示" else String.format(Locale.US, "標高 %,d m 以上の山だけ表示", m)
+    if (m == 0) stringResource(R.string.settings_min_elevation_all) else stringResource(R.string.settings_min_elevation_value, m)
 
+@Composable
 private fun textScaleLabel(scale: Float): String = when (scale) {
-    0.85f -> "小"
-    1.0f -> "標準"
-    1.2f -> "大"
-    1.4f -> "特大"
+    0.85f -> stringResource(R.string.settings_text_size_small)
+    1.0f -> stringResource(R.string.settings_text_size_standard)
+    1.2f -> stringResource(R.string.settings_text_size_large)
+    1.4f -> stringResource(R.string.settings_text_size_extra_large)
     else -> "×$scale"
 }
 
@@ -187,7 +193,7 @@ private fun StepSlider(
     value: Int,
     range: IntRange,
     step: Int,
-    label: (Int) -> String,
+    label: @Composable (Int) -> String,
     description: String,
     onChange: (Int) -> Unit,
 ) {
@@ -216,7 +222,7 @@ private fun <T> Choice(
     title: String,
     options: List<T>,
     selected: T,
-    label: (T) -> String,
+    label: @Composable (T) -> String,
     onSelect: (T) -> Unit,
     description: String? = null,
 ) {
@@ -251,21 +257,24 @@ private fun SwitchRow(title: String, description: String, checked: Boolean, onCh
 @Composable
 private fun PeakDataSection(data: InstalledPeakData?, updating: Boolean, notice: String?, onUpdate: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("全国の山データ", style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.settings_peak_data_title), style = MaterialTheme.typography.bodyLarge)
         Text(
             if (data == null) {
-                "まだ取得していません。"
+                stringResource(R.string.settings_peak_data_none)
             } else {
                 // 元データの日時は UTC なので、日付だけを出す。
-                String.format(Locale.US, "山 %,d 件・元データ %s・取得日 %s", data.mountainCount,
+                stringResource(
+                    R.string.settings_peak_data_summary,
+                    data.mountainCount,
                     data.sourceTimestamp.take(10).replace('-', '/'),
-                    SimpleDateFormat("yyyy/MM/dd", Locale.JAPAN).format(Date(data.installedAtMillis)))
+                    SimpleDateFormat("yyyy/MM/dd", Locale.JAPAN).format(Date(data.installedAtMillis)),
+                )
             },
             style = MaterialTheme.typography.bodyMedium,
         )
         if (notice != null) Text(notice, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         Text(
-            "yamamuki-data（GitHub）から約 0.5 MB を取得し、端末に保存します。新しい版がなければ、確認だけで終わります。",
+            stringResource(R.string.settings_peak_data_description),
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.padding(top = 4.dp))
@@ -273,9 +282,9 @@ private fun PeakDataSection(data: InstalledPeakData?, updating: Boolean, notice:
             if (updating) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.padding(start = 8.dp))
-                Text("取得中…")
+                Text(stringResource(R.string.settings_peak_data_fetching))
             } else {
-                Text(if (data == null) "山データを取得" else "最新の山データを確認")
+                Text(stringResource(if (data == null) R.string.settings_peak_data_fetch else R.string.settings_peak_data_check))
             }
         }
     }
@@ -286,17 +295,17 @@ private fun CacheSection(info: CacheInfo?, onClear: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("保存しているデータ", style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.settings_cache_title), style = MaterialTheme.typography.bodyLarge)
         if (info == null) {
-            Text("読み込み中…", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.common_loading), style = MaterialTheme.typography.bodyMedium)
         } else {
             Text(
-                String.format(Locale.US, "山 %,d 件（取得済みの区画 %d 個）・容量 %s", info.mountainCount, info.tileCount, byteSizeText(info.sizeBytes)),
+                stringResource(R.string.settings_cache_summary, info.mountainCount, info.tileCount, byteSizeText(info.sizeBytes)),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
         Text(
-            "消去すると、取得した全国の山データも消えます。上のボタンでもう一度取得できます。",
+            stringResource(R.string.settings_cache_description),
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.padding(top = 4.dp))
@@ -304,29 +313,31 @@ private fun CacheSection(info: CacheInfo?, onClear: () -> Unit) {
             onClick = { confirming = true },
             enabled = info != null && info.tileCount > 0,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("キャッシュを消去") }
+        ) { Text(stringResource(R.string.settings_cache_clear)) }
     }
 
     if (confirming) {
         AlertDialog(
             onDismissRequest = { confirming = false },
-            title = { Text("キャッシュを消去しますか？") },
+            title = { Text(stringResource(R.string.settings_cache_clear_title)) },
             text = {
                 Text(
-                    if (Features.AREA_DOWNLOAD) {
-                        "保存している山データを消去します。事前ダウンロードした地域は残ります。"
-                    } else {
-                        "保存している山データをすべて消去します。山データは上のボタンからもう一度取得できます。"
-                    },
+                    stringResource(
+                        if (Features.AREA_DOWNLOAD) {
+                            R.string.settings_cache_clear_message_keep_areas
+                        } else {
+                            R.string.settings_cache_clear_message
+                        },
+                    ),
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirming = false
                     onClear()
-                }) { Text("消去") }
+                }) { Text(stringResource(R.string.settings_cache_clear_confirm)) }
             },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text("キャンセル") } },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 }

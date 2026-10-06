@@ -2,6 +2,7 @@ package io.github.shohei0205.yamamuki.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class MountainTextTest {
     private val fuji = Mountain(1L, "富士山", 35.3605556, 138.7273889, 3776.24)
@@ -9,16 +10,17 @@ class MountainTextTest {
     @Test
     fun elevation() {
         assertEquals("3,776 m", fuji.elevationText())
-        assertEquals("不明", fuji.copy(elevationM = null).elevationText())
+        assertNull(fuji.copy(elevationM = null).elevationText())
         assertEquals("852 m", elevationText(851.6))
-        assertEquals("不明", elevationText(null))
+        assertNull(elevationText(null))
     }
 
     @Test
     fun coordinate() {
-        assertEquals("北緯 35.36056°\n東経 138.72739°", fuji.coordinateText())
-        assertEquals("南緯 33.86880°\n西経 151.20930°", fuji.copy(latitude = -33.8688, longitude = -151.2093).coordinateText())
-        assertEquals("北緯 35.68124°\n東経 139.76713°", coordinateText(35.681236, 139.767126))
+        assertEquals("35.36056°", degreeText(fuji.latitude))
+        assertEquals("138.72739°", degreeText(fuji.longitude))
+        assertEquals("33.86880°", degreeText(-33.8688))
+        assertEquals("151.20930°", degreeText(-151.2093))
     }
 
     @Test

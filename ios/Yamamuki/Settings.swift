@@ -46,9 +46,9 @@ enum SensorPrecision: Int, Codable, CaseIterable {
 
     var label: String {
         switch self {
-        case .saver: return "省電力"
-        case .standard: return "標準"
-        case .precise: return "高精度"
+        case .saver: return Strings.text("settings_sensor_precision_saver")
+        case .standard: return Strings.text("settings_sensor_precision_standard")
+        case .precise: return Strings.text("settings_sensor_precision_precise")
         }
     }
 }

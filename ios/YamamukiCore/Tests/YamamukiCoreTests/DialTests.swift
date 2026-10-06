@@ -8,12 +8,13 @@ final class HeadingTests: XCTestCase {
         XCTAssertEqual(Heading.delta(0, 180), -180, accuracy: 1e-9)
     }
 
-    func testDirectionNames() {
-        XCTAssertEqual(Heading.directionName(0), "北")
-        XCTAssertEqual(Heading.directionName(355), "北")
-        XCTAssertEqual(Heading.directionName(20), "北北東")
-        XCTAssertEqual(Heading.directionName(135), "南東")
-        XCTAssertEqual(Heading.directionName(-90), "西")
+    func testDirectionIndexes() {
+        XCTAssertEqual(Heading.directionIndex(0), 0)
+        XCTAssertEqual(Heading.directionIndex(355), 0)
+        XCTAssertEqual(Heading.directionIndex(20), 1)
+        XCTAssertEqual(Heading.directionIndex(135), 6)
+        XCTAssertEqual(Heading.directionIndex(-90), 12)
+        XCTAssertEqual(Heading.directionIndex(340), 15)
     }
 
 }
@@ -184,10 +185,6 @@ final class PeakLayoutTests: XCTestCase {
         // 別の山塊の高い山は、重なっても優先しない(優先順で先に置いた山が残る)。
         let xs = ["A1000": 0.0, "B3000": 5]
         XCTAssertEqual(place(["A1000", "B3000"], xs), [Group("A1000", ["B3000"])])
-    }
-
-    func testOthersTextCountsPeaks() {
-        XCTAssertEqual(othersText(3), "ほか 3 山")
     }
 
     func testElevationClass() {

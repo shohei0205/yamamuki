@@ -398,11 +398,11 @@ final class DialModel: ObservableObject {
                 peakDataStore.save(result.installed)
                 peakData = result.installed
                 if case .updated = result {
-                    peakDataNotice = "山データを取得しました"
+                    peakDataNotice = Strings.text("peak_data_updated")
                     reloadFromCache()
                     refreshCacheInfo()
                 } else {
-                    peakDataNotice = "山データは最新です"
+                    peakDataNotice = Strings.text("peak_data_up_to_date")
                 }
             } catch {
                 logger.warning("山データの取得に失敗: \(String(describing: error), privacy: .public)")
@@ -421,14 +421,17 @@ final class DialModel: ObservableObject {
     /// 通信エラーの知らせの文言。端末がつながっていないのか、サーバー側の問題かで案内を変える。
     private static func errorNotice(for error: Error, hasCache: Bool) -> String {
         if isOffline(error) { return offlineNotice(hasCache: hasCache) }
-        let cause = (error as? PeakDataError).map { "山データを取り込めませんでした。\n\($0.message)" }
-            ?? "山データのサーバーから応答がありません。しばらくしてから再取得してください。"
-        return hasCache ? cause + "\n\n保存済みのデータで表示しています。" : cause
+        let cause = (error as? PeakDataError).map { Strings.format("peak_data_error_invalid", $0.message) }
+            ?? Strings.text("peak_data_error_no_response")
+        return withCacheNote(cause, hasCache: hasCache)
     }
 
     private static func offlineNotice(hasCache: Bool) -> String {
-        let cause = "インターネットに接続されていません。電波の届く場所で再取得してください。"
-        return hasCache ? cause + "\n\n保存済みのデータで表示しています。" : cause
+        withCacheNote(Strings.text("peak_data_error_offline"), hasCache: hasCache)
+    }
+
+    private static func withCacheNote(_ cause: String, hasCache: Bool) -> String {
+        hasCache ? Strings.format("peak_data_error_with_cache", cause) : cause
     }
 
     /// 端末が通信できない状態で失敗したか。

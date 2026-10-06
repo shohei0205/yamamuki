@@ -48,22 +48,22 @@ fun Mountain.elevationClass(): ElevationClass {
     }
 }
 
-/** 詳細表示の標高。「1,212 m」、不明なら「不明」。山と現在地で共通に使う。 */
-fun elevationText(elevationM: Double?): String {
-    val ele = elevationM ?: return "不明"
+/**
+ * 詳細表示の標高。「1,212 m」。不明なら null で、「不明」の文言はアプリの文字列リソースで出す。
+ * 山と現在地で共通に使う。
+ */
+fun elevationText(elevationM: Double?): String? {
+    val ele = elevationM ?: return null
     return String.format(Locale.US, "%,d m", Math.round(ele))
 }
 
-fun Mountain.elevationText(): String = elevationText(elevationM)
+fun Mountain.elevationText(): String? = elevationText(elevationM)
 
-/** 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。山と現在地で共通に使う。 */
-fun coordinateText(latitude: Double, longitude: Double): String {
-    val lat = String.format(Locale.US, "%.5f°", abs(latitude))
-    val lon = String.format(Locale.US, "%.5f°", abs(longitude))
-    return "${if (latitude >= 0) "北緯" else "南緯"} $lat\n${if (longitude >= 0) "東経" else "西経"} $lon"
-}
-
-fun Mountain.coordinateText(): String = coordinateText(latitude, longitude)
+/**
+ * 詳細表示の緯度や経度の数値の部分。「35.36056°」。南緯・西経でも正の数にする。
+ * 「北緯」「東経」などの語はアプリの文字列リソースで付ける。
+ */
+fun degreeText(deg: Double): String = String.format(Locale.US, "%.5f°", abs(deg))
 
 /** 詳細表示の距離。1km 未満は「850 m」、以上は「12.3 km」。 */
 fun distanceText(distanceKm: Double): String =
@@ -72,9 +72,6 @@ fun distanceText(distanceKm: Double): String =
     } else {
         String.format(Locale.US, "%,.1f km", distanceKm)
     }
-
-/** 重なって山名を省いた山の数を、代表の山の山名の下に添える文言。「ほか 3 山」。 */
-fun othersText(count: Int): String = "ほか $count 山"
 
 /**
  * 標高が [minElevationM] 以上の山だけにする。0 以下なら絞り込まない。

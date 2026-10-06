@@ -136,12 +136,12 @@ final class AreaDownloadTests: XCTestCase {
         XCTAssertEqual(OverpassClient.defaultEndpoints.map(\.absoluteString), ["https://overpass-api.de/api/interpreter"])
     }
 
-    func testStatusTextCountsWaitingSeconds() {
-        XCTAssertEqual(DownloadProgress(doneTiles: 3, totalTiles: 10).statusText(elapsed: 35.4), "サーバーの応答を待っています（35 秒）")
+    func testStatusCountsWaitingSeconds() {
+        XCTAssertEqual(DownloadProgress(doneTiles: 3, totalTiles: 10).status(elapsed: 35.4), .waiting(seconds: 35, retry: 0))
         let retrying = DownloadProgress(doneTiles: 3, totalTiles: 10, retry: 2, retryWait: 15)
-        XCTAssertEqual(retrying.statusText(elapsed: 0), "通信に失敗したため、15 秒後に取り直します（2 回目）")
-        XCTAssertEqual(retrying.statusText(elapsed: 14.5), "通信に失敗したため、1 秒後に取り直します（2 回目）")
-        XCTAssertEqual(retrying.statusText(elapsed: 20), "サーバーの応答を待っています（5 秒・取り直し 2 回目）")
+        XCTAssertEqual(retrying.status(elapsed: 0), .retryingIn(seconds: 15, retry: 2))
+        XCTAssertEqual(retrying.status(elapsed: 14.5), .retryingIn(seconds: 1, retry: 2))
+        XCTAssertEqual(retrying.status(elapsed: 20), .waiting(seconds: 5, retry: 2))
     }
 
     func testRefreshRefetchesEvenFreshTiles() async throws {
