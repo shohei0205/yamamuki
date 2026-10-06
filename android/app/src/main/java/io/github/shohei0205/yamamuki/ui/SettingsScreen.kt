@@ -42,6 +42,7 @@ import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.core.InstalledPeakData
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.data.CacheInfo
+import io.github.shohei0205.yamamuki.settings.SensorPrecision
 import io.github.shohei0205.yamamuki.settings.Settings
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -128,6 +129,17 @@ fun SettingsScreen(
                 description = "方位盤を表示している間は画面を消しません。電池の減りが早くなります。",
                 checked = settings.keepScreenOn,
                 onChange = { v -> onSettingsChange { it.copy(keepScreenOn = v) } },
+            )
+
+            HorizontalDivider()
+            SectionTitle("電池")
+            StepSlider(
+                value = settings.sensorPrecision.ordinal,
+                range = 0..SensorPrecision.entries.lastIndex,
+                step = 1,
+                label = { "位置と方位の精度：${SensorPrecision.entries[it].label}" },
+                description = "左に寄せるほど電池が長持ちしますが、現在地の更新が遅くなり、方位盤の回り方が粗くなります。",
+                onChange = { i -> onSettingsChange { it.copy(sensorPrecision = SensorPrecision.entries[i]) } },
             )
 
             HorizontalDivider()

@@ -18,10 +18,11 @@ import java.io.IOException
 /**
  * 現在地を流す。最初に端末が持っている直近の位置を流し、以降は GPS とネットワーク位置の更新を流す。
  * 精度が直前よりはっきり悪い位置(山で GPS の合間に届くネットワーク位置など)は [LocationFilter] で捨てる。
+ * [intervalMs] は更新を頼む間隔で、長いほど GPS の電池の消費が減る。
  * 呼び出し側で位置情報の権限を確認してから collect すること。
  */
 @SuppressLint("MissingPermission")
-fun locationUpdates(context: Context): Flow<Location> = callbackFlow {
+fun locationUpdates(context: Context, intervalMs: Long): Flow<Location> = callbackFlow {
     val locationManager = context.getSystemService(LocationManager::class.java)
     val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
         .filter { it in locationManager.allProviders }
@@ -58,12 +59,11 @@ fun locationUpdates(context: Context): Flow<Location> = callbackFlow {
     // ネットワーク位置しか届かず、フィルタの基準が古くなって粗い位置を使ってしまう。
     providers.forEach {
         val minDistanceM = if (it == LocationManager.GPS_PROVIDER) 0f else UPDATE_DISTANCE_M
-        locationManager.requestLocationUpdates(it, UPDATE_INTERVAL_MS, minDistanceM, listener, Looper.getMainLooper())
+        locationManager.requestLocationUpdates(it, intervalMs, minDistanceM, listener, Looper.getMainLooper())
     }
     awaitClose { locationManager.removeUpdates(listener) }
 }
 
-private const val UPDATE_INTERVAL_MS = 5_000L
 private const val UPDATE_DISTANCE_M = 20f
 
 /**

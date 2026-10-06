@@ -56,6 +56,19 @@ class HeadingTest {
         assertEquals(355.0, filter.update(0.0), 1e-9)
         assertEquals(357.5, filter.update(0.0), 1e-9)
     }
+
+    @Test
+    fun filterAlphaKeepsResponseTimeForSlowerSensor() {
+        assertEquals(0.15, HeadingFilter.alphaForPeriod(20.0), 1e-9)
+        // 60 ミリ秒ごとに 1 回動かした結果は、20 ミリ秒ごとに 3 回動かした結果と同じになる。
+        val fast = HeadingFilter(alpha = HeadingFilter.alphaForPeriod(20.0))
+        val slow = HeadingFilter(alpha = HeadingFilter.alphaForPeriod(60.0))
+        fast.update(0.0)
+        slow.update(0.0)
+        fast.update(90.0)
+        fast.update(90.0)
+        assertEquals(fast.update(90.0), slow.update(90.0), 1e-9)
+    }
 }
 
 class DialGeometryTest {

@@ -52,4 +52,16 @@ class HeadingFilter(private val alpha: Double = 0.15) {
         current = next
         return next
     }
+
+    companion object {
+        /** 既定の [alpha](0.15)が前提にしている、センサーの値が届く間隔(ミリ秒)。毎秒 50 回。 */
+        const val BASE_PERIOD_MS = 20.0
+
+        /**
+         * 値が [periodMs] ごとに届くときの [alpha]。届く間隔を変えても、追いつくまでの時間が
+         * 既定(20 ミリ秒ごとに 0.15)と同じになるようにする。
+         */
+        fun alphaForPeriod(periodMs: Double): Double =
+            1.0 - Math.pow(1.0 - 0.15, periodMs.coerceAtLeast(1.0) / BASE_PERIOD_MS)
+    }
 }

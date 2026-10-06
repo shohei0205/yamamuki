@@ -57,6 +57,16 @@ struct SettingsView: View {
                     ) { v in model.updateSettings { $0.keepScreenOn = v } }
                 }
 
+                Section("電池") {
+                    StepSlider(
+                        value: settings.sensorPrecision.rawValue,
+                        range: 0...(SensorPrecision.allCases.count - 1),
+                        step: 1,
+                        label: { "位置と方位の精度：\(SensorPrecision(rawValue: $0)?.label ?? "")" },
+                        description: "左に寄せるほど電池が長持ちしますが、現在地の更新が遅くなり、方位盤の回り方が粗くなります。"
+                    ) { i in model.updateSettings { $0.sensorPrecision = SensorPrecision(rawValue: i) ?? .standard } }
+                }
+
                 Section("山データ") {
                     PeakDataSection(
                         data: model.peakData,

@@ -13,9 +13,10 @@ import kotlinx.coroutines.flow.callbackFlow
 /**
  * 端末を向けている方位角(磁北基準、0〜360°)を流す。
  * 回転ベクトルセンサーを優先し、無い端末では加速度+地磁気センサーから求める。
- * どちらも無い端末では何も流さない。
+ * どちらも無い端末では何も流さない。[samplingPeriodUs] はセンサーの値を受け取る間隔の目安(マイクロ秒)で、
+ * 長いほど電池の消費が減る。
  */
-fun magneticHeadingUpdates(context: Context): Flow<Double> = callbackFlow {
+fun magneticHeadingUpdates(context: Context, samplingPeriodUs: Int): Flow<Double> = callbackFlow {
     val sensorManager = context.getSystemService(SensorManager::class.java)
     val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -53,10 +54,10 @@ fun magneticHeadingUpdates(context: Context): Flow<Double> = callbackFlow {
     }
 
     if (rotationVector != null) {
-        sensorManager.registerListener(listener, rotationVector, SensorManager.SENSOR_DELAY_GAME)
+        sensorManager.registerListener(listener, rotationVector, samplingPeriodUs)
     } else if (accelerometer != null && magnetometer != null) {
-        sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_GAME)
-        sensorManager.registerListener(listener, magnetometer, SensorManager.SENSOR_DELAY_GAME)
+        sensorManager.registerListener(listener, accelerometer, samplingPeriodUs)
+        sensorManager.registerListener(listener, magnetometer, samplingPeriodUs)
     }
     awaitClose { sensorManager.unregisterListener(listener) }
 }

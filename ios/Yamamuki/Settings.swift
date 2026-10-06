@@ -13,6 +13,8 @@ struct Settings: Codable, Equatable {
     var textScale = 1.0
     /// 起動時の表示範囲(現在地から画面上端までの距離)。
     var initialRangeKm = Int(DialGeometry.defaultRangeKm)
+    /// 現在地と方位をどのくらいこまめに測るか。こまめなほど電池を使う。
+    var sensorPrecision = SensorPrecision.standard
     /// 初回起動時の「山データを取得しますか」に答えた。答えるまでは位置情報の許可を求めない(ダイアログを重ねない)。
     var peakDataAsked = false
 
@@ -31,7 +33,23 @@ struct Settings: Codable, Equatable {
         maxPeaks = try c.decodeIfPresent(Int.self, forKey: .maxPeaks) ?? d.maxPeaks
         textScale = try c.decodeIfPresent(Double.self, forKey: .textScale) ?? d.textScale
         initialRangeKm = try c.decodeIfPresent(Int.self, forKey: .initialRangeKm) ?? d.initialRangeKm
+        sensorPrecision = (try? c.decodeIfPresent(SensorPrecision.self, forKey: .sensorPrecision)) ?? d.sensorPrecision
         peakDataAsked = try c.decodeIfPresent(Bool.self, forKey: .peakDataAsked) ?? d.peakDataAsked
+    }
+}
+
+/// 現在地と方位を測る頻度の段階。設定画面のスライダーで左(省電力)から右(高精度)へ並ぶ。
+enum SensorPrecision: Int, Codable, CaseIterable {
+    case saver = 0
+    case standard = 1
+    case precise = 2
+
+    var label: String {
+        switch self {
+        case .saver: return "省電力"
+        case .standard: return "標準"
+        case .precise: return "高精度"
+        }
     }
 }
 
