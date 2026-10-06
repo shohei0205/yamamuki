@@ -19,12 +19,16 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.R
 
-/** 方位盤の下の角に置く丸いボタン。白地に影を付け、地図の上でも見分けやすくする。屋外で押しやすいよう 56dp にする。 */
+/**
+ * 方位盤の下の角に置く丸いボタン。白地に影を付け、地図の上でも見分けやすくする。屋外で押しやすいよう 56dp にする。
+ * アイコンはボタンごとに色を変える([iconColor])。
+ */
 @Composable
 fun RoundMapButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    iconColor: Color = MAP_BUTTON_ICON_COLOR,
     content: @Composable () -> Unit,
 ) {
     Surface(
@@ -32,7 +36,7 @@ fun RoundMapButton(
         enabled = enabled,
         shape = CircleShape,
         color = Color.White,
-        contentColor = MAP_BUTTON_ICON_COLOR,
+        contentColor = iconColor,
         shadowElevation = 6.dp,
         modifier = modifier.size(56.dp),
     ) {
@@ -42,6 +46,15 @@ fun RoundMapButton(
 
 /** 丸いボタンのアイコンの色(灰色)。 */
 val MAP_BUTTON_ICON_COLOR = Color(0xFF5F6368)
+
+/** 設定ボタンのアイコンの色(緑)。 */
+val SETTINGS_BUTTON_ICON_COLOR = Color(0xFF43A047)
+
+/** 事前ダウンロードのボタンのアイコンの色(橙)。 */
+val DOWNLOAD_BUTTON_ICON_COLOR = Color(0xFFFB8C00)
+
+/** モード切替ボタンのアイコンの色(青)。 */
+private val MODE_BUTTON_ICON_COLOR = Color(0xFF1A73E8)
 
 /** 現在地・方位への追従と手動操作を切り替える。 */
 @Composable
@@ -57,7 +70,7 @@ fun MapModeButton(manual: Boolean, enabled: Boolean, onClick: () -> Unit, modifi
         },
     ) {
         Canvas(Modifier.size(28.dp)) {
-            val color = if (!enabled) Color.LightGray else if (manual) MAP_BUTTON_ICON_COLOR else Color(0xFF1A73E8)
+            val color = if (!enabled) Color.LightGray else MODE_BUTTON_ICON_COLOR
             val u = size.width / 28f
             if (manual) {
                 drawCircle(color, radius = 8 * u, style = Stroke(2 * u))

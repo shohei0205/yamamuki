@@ -211,7 +211,7 @@ fun DialScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(DialBeige)
+            .background(DialGround)
             // ステータスバーの裏は、ヘッダーの空の上端と同じ色で塗り、空がつながって見えるようにする。
             .drawBehind { drawRect(HeaderSkyTop, size = Size(size.width, safeDrawing.getTop(this).toFloat())) }
             .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -346,24 +346,25 @@ fun DialScreen(
             Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 36.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            RoundMapButton(onClick = { showSettings = true }) {
+            RoundMapButton(onClick = { showSettings = true }, iconColor = SETTINGS_BUTTON_ICON_COLOR) {
                 Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title), Modifier.size(28.dp))
             }
             if (Features.AREA_DOWNLOAD) {
-                RoundMapButton(onClick = { showDownload = true }) {
+                RoundMapButton(onClick = { showDownload = true }, iconColor = DOWNLOAD_BUTTON_ICON_COLOR) {
                     // ダウンロード中は画面を閉じていても進み具合が分かるよう、ボタンに出す。
                     val running = download.running
                     if (running != null && running.progress.doneTiles > 0) {
                         CircularProgressIndicator(
                             progress = { running.progress.fraction },
                             modifier = Modifier.size(28.dp),
+                            color = LocalContentColor.current,
                             strokeWidth = 3.dp,
                             // 進みの少ないうちも輪の形が見えるよう、下地を描く。
                             trackColor = LocalContentColor.current.copy(alpha = 0.25f),
                         )
                     } else if (running != null) {
                         // 最初の区画が終わるまでは進みが 0 なので、回り続ける表示にする。
-                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+                        CircularProgressIndicator(Modifier.size(28.dp), color = LocalContentColor.current, strokeWidth = 3.dp)
                     } else {
                         Icon(
                             painterResource(R.drawable.ic_area_download),

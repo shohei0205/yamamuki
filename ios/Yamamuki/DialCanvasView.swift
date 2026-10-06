@@ -1,13 +1,12 @@
 import SwiftUI
 import YamamukiCore
 
-let dialBeige = Color(hex: 0xEFE4B0)
-private let ringGray = Color(hex: 0xC3C3C3)
-private let peakGreen = Color(hex: 0x22B14C)
-private let peakYellow = Color(hex: 0xB5E61D)
-private let hillGreen = Color(hex: 0x9BD65A)
-private let peakBrown = Color(hex: 0x8C5A2B)
-private let peakBrownDark = Color(hex: 0x5E3A17)
+/// 方位盤の地面のクリーム色。
+let dialGround = Color(hex: 0xFFF4D8)
+/// 距離の円の間の帯。現在地に近い帯から順に塗り、ここにない遠くの帯は地面の色のままにする。
+private let groundBands = [Color(hex: 0xFFE7B0), Color(hex: 0xFFEDC2), Color(hex: 0xFFF1CF)]
+private let ringLine = Color(hex: 0xE8C98F)
+private let shadowColor = Color.black.opacity(0.2)
 private let northRed = Color(hex: 0xED1C24)
 private let binocularBody = Color(hex: 0x333333)
 private let binocularHinge = Color(hex: 0x777777)
@@ -15,8 +14,8 @@ private let lensBlue = Color(hex: 0x5B8DB8)
 private let summitRock = Color(hex: 0x5D6D7E)
 private let summitRockLight = Color(hex: 0x8A99A8)
 private let flagPole = Color(hex: 0x333333)
-private let fanShade = Color(hex: 0x7A6F45)
-private let fanEdge = Color(hex: 0xC9B35A)
+private let fanShade = Color(hex: 0xB08D57)
+private let fanEdge = Color(hex: 0xF2A65A)
 let tapeInk = Color(hex: 0x2E3A40)
 let tapeSubtle = Color(hex: 0x6B7178)
 /// 方位目盛りの 10° ごとと 5° ごとの線の長さ。
@@ -39,8 +38,9 @@ private let tapeSpanDeg = DialGeometry.tapeSpanDeg
 /// 描画原点(双眼鏡)の画面下端からの高さ。
 private let originBottom = CGFloat(DialGeometry.originBottom)
 
-/// 山アイコンの縁取りの太さ。3 種類とも同じ太さにそろえる。
-private let outlineWidth: CGFloat = 1.5
+/// 山名の札の、文字の周りの余白。
+private let labelPadX: CGFloat = 7
+private let labelPadY: CGFloat = 2
 
 /// 方位盤。現在地(画面下部の双眼鏡)から向いている方向を上にとり、山をアイコンと山名で描く。
 /// アイコンの色と形は標高の区分([ElevationClass])で変える。
@@ -92,7 +92,7 @@ struct DialCanvasView: View, Animatable {
     }
 
     var body: some View {
-        // 視野の扇だけを画面下端の余白まで描くので、Canvas を余白の分だけ下へ広げ、扇以外は元の範囲で描く。
+        // 距離の帯と視野の扇だけを画面下端の余白まで描くので、Canvas を余白の分だけ下へ広げ、それ以外は元の範囲で描く。
         Canvas { context, size in
             draw(context, size: CGSize(width: size.width, height: size.height - bottomBleed))
         }
@@ -126,12 +126,16 @@ struct DialCanvasView: View, Animatable {
             observer.x += CGFloat(offset.x) * pxPerKm
             observer.y -= CGFloat(offset.y) * pxPerKm
         }
+        // 距離の帯と視野の扇は、画面下端の余白まで描く。
+        var groundContext = ctx
+        let groundTop = headerHeight + tapeHeight
+        groundContext.clip(to: Path(CGRect(x: 0, y: groundTop, width: size.width, height: max(0, size.height + bottomBleed - groundTop))))
+        if pxPerKm > 0 {
+            drawGroundBands(groundContext, observer: observer, pxPerKm: pxPerKm)
+        }
         if viewFanAlpha > 0 {
             // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
-            var fanContext = ctx
-            let fanTop = headerHeight + tapeHeight
-            fanContext.clip(to: Path(CGRect(x: 0, y: fanTop, width: size.width, height: max(0, size.height + bottomBleed - fanTop))))
-            drawViewFan(fanContext, size: size, apex: observer)
+            drawViewFan(groundContext, size: size, apex: observer)
         }
         var ctx = ctx
         ctx.clip(to: Path(CGRect(origin: .zero, size: size)))
@@ -151,7 +155,7 @@ struct DialCanvasView: View, Animatable {
             hitTargets.summit = nil
         }
         // 上部の青空と山並みは、地図の上に重ねる。手動位置モードで地図を動かしても、双眼鏡などがヘッダーに重ならない。
-        drawHeaderScenery(ctx, width: size.width, ground: dialBeige)
+        drawHeaderScenery(ctx, width: size.width, ground: dialGround)
         if tapeHidden < 1 {
             // 目盛りはヘッダーの下に置き、手動位置モードではヘッダーの下端で切って、ヘッダーに重ねずに消す。
             // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
@@ -171,6 +175,16 @@ struct DialCanvasView: View, Animatable {
         return rotated
     }
 
+    /// 距離の円の間を、現在地に近いほど濃い淡い色で塗り分ける(groundBands)。遠い帯から順に重ねる。
+    private func drawGroundBands(_ ctx: GraphicsContext, observer: CGPoint, pxPerKm: CGFloat) {
+        let step = CGFloat(DialGeometry.ringStepKm(rangeKm))
+        for i in groundBands.indices.reversed() {
+            let radius = step * CGFloat(i + 1) * pxPerKm
+            ctx.fill(Path(ellipseIn: CGRect(x: observer.x - radius, y: observer.y - radius, width: radius * 2, height: radius * 2)),
+                with: .color(groundBands[i]))
+        }
+    }
+
     private func drawRings(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, pxPerKm: CGFloat, chartTop: CGFloat, styles: TextStyles) {
         let step = CGFloat(DialGeometry.ringStepKm(rangeKm))
         let farthest = hypot(max(abs(observer.x), abs(size.width - observer.x)),
@@ -185,8 +199,8 @@ struct DialCanvasView: View, Animatable {
             let km = step * CGFloat(i)
             let radius = km * pxPerKm
             let circle = Path(ellipseIn: CGRect(x: observer.x - radius, y: observer.y - radius, width: radius * 2, height: radius * 2))
-            ctx.stroke(circle, with: .color(ringGray), lineWidth: 3)
-            let label = measuredText(ctx, DialGeometry.ringLabel(Double(km)), size: styles.ringLabel, color: Color(white: 0.4))
+            ctx.stroke(circle, with: .color(ringLine), lineWidth: 1.5)
+            let label = measuredText(ctx, DialGeometry.ringLabel(Double(km)), size: styles.ringLabel, color: tapeSubtle)
             rings.append((radius, label))
             i += 1
         }
@@ -195,9 +209,9 @@ struct DialCanvasView: View, Animatable {
             for (radius, label) in rings {
             if let anchor = RingLabelGeometry.place(cx: Double(observer.x), cy: Double(observer.y), radius: Double(radius),
                 left: 0, top: Double(chartTop), right: Double(size.width), bottom: Double(size.height - originBottom),
-                width: Double(label.size.width + 6), height: Double(label.size.height + 6), angle: angle) {
-                let box = CGRect(x: CGFloat(anchor.x) - label.size.width / 2 - 3,
-                    y: CGFloat(anchor.y) - label.size.height / 2 - 3, width: label.size.width + 6, height: label.size.height + 6)
+                width: Double(label.size.width + 12), height: Double(label.size.height + 6), angle: angle) {
+                let box = CGRect(x: CGFloat(anchor.x) - label.size.width / 2 - 6,
+                    y: CGFloat(anchor.y) - label.size.height / 2 - 3, width: label.size.width + 12, height: label.size.height + 6)
                 if !labels.contains(where: { $0.1.intersects(box) }) { labels.append((label, box)) }
             }
             }
@@ -210,8 +224,9 @@ struct DialCanvasView: View, Animatable {
         hitTargets.ringLabelAngle = angle
         hitTargets.ringLabelHeading = headingDeg
         for (label, box) in placements(angle) {
-            ctx.fill(Path(roundedRect: box, cornerRadius: 3), with: .color(.white.opacity(0.85)))
-            ctx.draw(label.text, at: CGPoint(x: box.minX + 3, y: box.minY + 3), anchor: .topLeading)
+            // 距離の数字は白い札に載せ、円や帯と重なっても読めるようにする。
+            ctx.fill(Path(roundedRect: box, cornerRadius: box.height / 2), with: .color(.white.opacity(0.9)))
+            ctx.draw(label.text, at: CGPoint(x: box.minX + 6, y: box.minY + 3), anchor: .topLeading)
         }
     }
 
@@ -235,13 +250,13 @@ struct DialCanvasView: View, Animatable {
                 limit: PeakLayout.aroundLimit(maxPeaks: maxPeaks, reach: Double(reach), viewArea: viewArea)
             ).map { m in
                 let icon = PeakIcon.of(m.mountain.elevationClass)
-                let label = measuredText(ctx, m.mountain.name, size: styles.label, color: .black)
-                let labelHalf = label.size.width / 2
+                let label = measuredText(ctx, m.mountain.name, size: styles.label, color: tapeInk)
+                let labelHalf = label.size.width / 2 + labelPadX
                 let box = ScreenBox(
                     left: Double(min(-icon.halfWidth, -labelHalf)),
                     top: Double(-icon.height),
                     right: Double(max(icon.halfWidth, labelHalf)),
-                    bottom: Double(gap + label.size.height)
+                    bottom: Double(gap + label.size.height + labelPadY * 2)
                 )
                 return SelectedPeak(mountain: m, box: box)
             }
@@ -270,24 +285,26 @@ struct DialCanvasView: View, Animatable {
 
         // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
         let placedBoxes = groups.map(\.peak.box)
-        let labels = groups.map { measuredText(ctx, $0.peak.mountain.mountain.name, size: styles.label, color: .black) }
+        let labels = groups.map { measuredText(ctx, $0.peak.mountain.mountain.name, size: styles.label, color: tapeInk) }
+        // 山名の札の範囲。
+        let labelBoxes = groups.indices.map { i -> ScreenBox in
+            let p = groups[i].peak.position
+            let half = Double(labels[i].size.width / 2 + labelPadX)
+            return ScreenBox(left: Double(p.x) - half, top: Double(p.y + gap), right: Double(p.x) + half,
+                bottom: Double(p.y + gap + labels[i].size.height + labelPadY * 2))
+        }
         let othersLabels: [(text: MeasuredText, box: ScreenBox)?] = groups.indices.map { i -> (text: MeasuredText, box: ScreenBox)? in
             let group = groups[i]
             guard !group.members.isEmpty else { return nil }
             // 「ほか 3 山」は山名の下に添える。ほかの山の山名と重なるときは添えない(タップすれば一覧は出る)。
             let peak = group.peak
             let others = measuredText(ctx, othersText(group.members.count), size: styles.others, color: tapeSubtle)
-            let top = Double(peak.position.y + gap + labels[i].size.height)
+            let top = labelBoxes[i].bottom
             let half = Double(others.size.width / 2)
             let x = Double(peak.position.x)
             let below = ScreenBox(left: min(peak.box.left, x - half), top: top, right: max(peak.box.right, x + half), bottom: top + Double(others.size.height))
             if placedBoxes.contains(where: { $0 != peak.box && $0.intersects(below) }) { return nil }
             return (text: others, box: below)
-        }
-        let labelBoxes = groups.indices.map { i -> ScreenBox in
-            let p = groups[i].peak.position
-            let half = Double(labels[i].size.width / 2)
-            return ScreenBox(left: Double(p.x) - half, top: Double(p.y + gap), right: Double(p.x) + half, bottom: Double(p.y + gap + labels[i].size.height))
         }
         let textBoxes = labelBoxes + othersLabels.compactMap { $0?.box }
 
@@ -304,7 +321,7 @@ struct DialCanvasView: View, Animatable {
                 let iconBox = ScreenBox(left: Double(p.x - icon.halfWidth), top: Double(p.y - icon.height),
                     right: Double(p.x + icon.halfWidth), bottom: Double(p.y))
                 if textBoxes.contains(where: { $0.intersects(iconBox) }) { continue }
-                drawPeakIcon(faded, at: p, icon: icon)
+                drawPeakIcon(faded, at: p, icon: icon, shadow: false)
                 memberTargets.append(PlacedPeak(mountain: group.peak.mountain, position: p, box: iconBox, members: members))
             }
         }
@@ -313,8 +330,9 @@ struct DialCanvasView: View, Animatable {
             let peak = group.peak
             let p = peak.position
             let label = labels[i]
-            drawPeakIcon(ctx, at: p, icon: PeakIcon.of(peak.mountain.mountain.elevationClass))
-            ctx.draw(label.text, at: CGPoint(x: p.x - label.size.width / 2, y: p.y + gap), anchor: .topLeading)
+            let icon = PeakIcon.of(peak.mountain.mountain.elevationClass)
+            drawPeakIcon(ctx, at: p, icon: icon)
+            drawNameChip(ctx, label: label, at: p, box: labelBoxes[i], edge: icon.color)
             var box = peak.box
             if let others = othersLabels[i] {
                 ctx.draw(others.text.text, at: CGPoint(x: p.x - others.text.size.width / 2, y: CGFloat(others.box.top)), anchor: .topLeading)
@@ -326,33 +344,51 @@ struct DialCanvasView: View, Animatable {
         return reps + memberTargets
     }
 
-    private func drawPeakIcon(_ ctx: GraphicsContext, at p: CGPoint, icon: PeakIcon) {
-        let halfWidth = icon.halfWidth
-        let height = icon.height
-        switch icon {
-        case .hill:
-            // 底辺を直径とする半楕円。縁取りで背景のベージュから浮かせる。
-            var unit = Path()
-            unit.addArc(center: .zero, radius: 1, startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false)
-            unit.closeSubpath()
-            let hill = unit.applying(CGAffineTransform(translationX: p.x, y: p.y).scaledBy(x: halfWidth, y: height))
-            ctx.fill(hill, with: .color(hillGreen))
-            ctx.stroke(hill, with: .color(peakGreen), lineWidth: outlineWidth)
-        case .peak:
-            let tri = triangle(bottomCenter: p, halfWidth: halfWidth, height: height)
-            ctx.fill(tri, with: .color(peakYellow))
-            ctx.stroke(tri, with: .color(peakGreen), lineWidth: outlineWidth)
-        case .alpine:
-            let tri = triangle(bottomCenter: p, halfWidth: halfWidth, height: height)
-            ctx.fill(tri, with: .color(peakBrown))
-            // 頂上から高さの 35% を白く塗って雪を表す。相似な三角形なので幅も同じ比率。
-            let snow: CGFloat = 0.35
-            ctx.fill(
-                triangle(bottomCenter: CGPoint(x: p.x, y: p.y - height * (1 - snow)), halfWidth: halfWidth * snow, height: height * snow),
-                with: .color(.white)
-            )
-            ctx.stroke(tri, with: .color(peakBrownDark), lineWidth: outlineWidth)
+    /// 山アイコンを描く。白い縁と影で地面の色から浮かせ、右の斜面を少し暗くして立体に見せる。
+    /// 形の点は、底辺の中点を原点に、横は半幅、縦は高さを 1 とした割合で決める(Android と同じ)。
+    private func drawPeakIcon(_ ctx: GraphicsContext, at p: CGPoint, icon: PeakIcon, shadow: Bool = true) {
+        let w = icon.halfWidth
+        let h = icon.height
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: p.x + x * w, y: p.y - y * h) }
+        var body = Path()
+        body.move(to: pt(-1, 0))
+        body.addQuadCurve(to: pt(-0.154, 0.93), control: pt(-0.615, 0.419))
+        body.addQuadCurve(to: pt(0.154, 0.93), control: pt(0, 1.07))
+        body.addQuadCurve(to: pt(1, 0), control: pt(0.615, 0.419))
+        body.closeSubpath()
+        if shadow {
+            ctx.fill(body.offsetBy(dx: 0, dy: 1.5), with: .color(shadowColor))
         }
+        ctx.stroke(body, with: .color(.white), style: StrokeStyle(lineWidth: 2.5, lineJoin: .round))
+        ctx.fill(body, with: .color(icon.color))
+        var slope = Path()
+        slope.move(to: pt(0.077, 0.884))
+        slope.addQuadCurve(to: pt(0.769, 0.093), control: pt(0.462, 0.465))
+        slope.addLine(to: pt(0.231, 0.093))
+        slope.closeSubpath()
+        ctx.fill(slope, with: .color(icon.shade.opacity(0.35)))
+        if icon.snow {
+            var snow = Path()
+            snow.move(to: pt(-0.423, 0.605))
+            snow.addQuadCurve(to: pt(0, 1), control: pt(-0.154, 0.977))
+            snow.addQuadCurve(to: pt(0.423, 0.605), control: pt(0.154, 0.977))
+            snow.addLine(to: pt(0.192, 0.512))
+            snow.addLine(to: pt(0, 0.628))
+            snow.addLine(to: pt(-0.192, 0.512))
+            snow.closeSubpath()
+            ctx.fill(snow, with: .color(.white))
+        }
+    }
+
+    /// 山名を白い札に載せ、札の縁をアイコンと同じ標高の色([edge])にする。どの山が高いかがひと目で分かるようにする。
+    private func drawNameChip(_ ctx: GraphicsContext, label: MeasuredText, at p: CGPoint, box: ScreenBox, edge: Color) {
+        let rect = CGRect(x: box.left, y: box.top, width: box.right - box.left, height: box.bottom - box.top)
+        ctx.fill(Path(roundedRect: rect.offsetBy(dx: 0, dy: 1), cornerRadius: rect.height / 2), with: .color(shadowColor))
+        ctx.fill(Path(roundedRect: rect, cornerRadius: rect.height / 2), with: .color(.white))
+        let border: CGFloat = 2
+        let inner = rect.insetBy(dx: border / 2, dy: border / 2)
+        ctx.stroke(Path(roundedRect: inner, cornerRadius: inner.height / 2), with: .color(edge), lineWidth: border)
+        ctx.draw(label.text, at: CGPoint(x: p.x - label.size.width / 2, y: rect.minY + labelPadY), anchor: .topLeading)
     }
 
     /// 現在地がほぼ山頂のときに双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
@@ -379,7 +415,7 @@ struct DialCanvasView: View, Animatable {
         ctx.stroke(pole, with: .color(flagPole), style: StrokeStyle(lineWidth: 2, lineCap: .round))
         ctx.fill(flag, with: .color(northRed))
 
-        let label = measuredText(ctx, summit.mountain.name, size: styles.label, color: .black)
+        let label = measuredText(ctx, summit.mountain.name, size: styles.label, color: tapeInk)
         let padX: CGFloat = 5
         let padY: CGFloat = 2
         let labelLeft = center.x + 22
@@ -420,7 +456,7 @@ struct DialCanvasView: View, Animatable {
     }
 
     /// ヘディングアップで、上部の方位目盛りと同じ幅(tapeSpanDeg)の視野。[apex] から画面の外まで扇を広げ、
-    /// 扇の外側をうっすら暗くする。山や同心円より下に描き、山名を隠さない。
+    /// 縁を橙色の線にして、扇の外側をうっすら暗くする。山や同心円より下に描き、山名を隠さない。
     private func drawViewFan(_ ctx: GraphicsContext, size: CGSize, apex: CGPoint) {
         let reach = hypot(size.width, size.height) * 2
         let half = tapeSpanDeg / 2 * .pi / 180
@@ -428,17 +464,17 @@ struct DialCanvasView: View, Animatable {
         let right = CGPoint(x: apex.x + reach * CGFloat(sin(half)), y: apex.y - reach * CGFloat(cos(half)))
         var outside = Path(CGRect(x: apex.x - reach, y: apex.y - reach, width: reach * 2, height: reach * 2))
         outside.addPath(polygon([apex, left, right]))
-        ctx.fill(outside, with: .color(fanShade.opacity(0.16 * viewFanAlpha)), style: FillStyle(eoFill: true))
+        ctx.fill(outside, with: .color(fanShade.opacity(0.12 * viewFanAlpha)), style: FillStyle(eoFill: true))
         var edge = Path()
         edge.move(to: left)
         edge.addLine(to: apex)
         edge.addLine(to: right)
-        ctx.stroke(edge, with: .color(fanEdge.opacity(viewFanAlpha)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+        ctx.stroke(edge, with: .color(fanEdge.opacity(viewFanAlpha)), style: StrokeStyle(lineWidth: 2, lineJoin: .round))
     }
 
     /// 現在地を表す双眼鏡。対物レンズを上(向いている方位)に向け、前方へ広がる視野を薄く描いて
-    /// 「前を覗いている」ように見せる。同心円や山と重なっても埋もれないよう、白い縁取りを付ける。
-    /// タップの当たり判定用に、白い縁取りまで含めた範囲を返す。
+    /// 「前を覗いている」ように見せる。同心円や山と重なっても埋もれないよう、白い丸の上に置く。
+    /// タップの当たり判定用に、白い丸まで含めた範囲を返す。
     private func drawBinoculars(_ ctx: GraphicsContext, center: CGPoint) -> CGRect {
         /// 中心からのずれで角丸の矩形を描く。[grow] だけ四方に広げる。
         func part(x: CGFloat, top: CGFloat, width: CGFloat, bottom: CGFloat, corner: CGFloat, color: Color, grow: CGFloat) {
@@ -461,6 +497,10 @@ struct DialCanvasView: View, Animatable {
         }
 
         drawViewCone(ctx, apex: CGPoint(x: center.x, y: center.y - 10))
+        // 白い丸の上に置き、帯や円の上でも現在地が目立つようにする。
+        let disc = CGRect(x: center.x - 23, y: center.y - 1 - 23, width: 46, height: 46)
+        ctx.fill(Path(ellipseIn: disc.offsetBy(dx: 0, dy: 1.5)), with: .color(shadowColor))
+        ctx.fill(Path(ellipseIn: disc), with: .color(.white))
         body(.white, grow: 2)
         body(binocularBody, grow: 0)
         ctx.fill(Path(ellipseIn: CGRect(x: center.x - 3, y: center.y + 2.5 - 3, width: 6, height: 6)), with: .color(binocularHinge))
@@ -470,7 +510,7 @@ struct DialCanvasView: View, Animatable {
             ctx.fill(Path(ellipseIn: CGRect(x: lens.x - 5.5, y: lens.y - 2.5, width: 11, height: 5)), with: .color(lensBlue))
             ctx.fill(Path(ellipseIn: CGRect(x: lens.x - 3.5, y: lens.y - 1.5, width: 3, height: 1.4)), with: .color(.white.opacity(0.8)))
         }
-        return CGRect(x: center.x - 20, y: center.y - 15, width: 40, height: 29)
+        return CGRect(x: center.x - 23, y: center.y - 24, width: 46, height: 46)
     }
 
     /// 画面上部の方位目盛り。向いている方位が中央に来る。上端は高さが決まっているので文字の倍率を掛けない。
@@ -478,7 +518,7 @@ struct DialCanvasView: View, Animatable {
         let center = size.width / 2
         let half = tapeSpanDeg / 2
         let baseline: CGFloat = 1.5
-        // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ金色にする。
+        // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ橙色にする。
         // 上端も山並みに溶かし、ヘッダーとの境目に筋を作らない。横のぼかしに縦のぼかしを重ねるため、別の層に描いて上側を削る。
         let band = Path(CGRect(x: 0, y: 0, width: size.width, height: tapeHeight))
         ctx.drawLayer { layer in
@@ -579,7 +619,7 @@ private struct TextStyles {
     init(scale: Double) {
         label = CGFloat(13 * scale)
         others = CGFloat(11 * scale)
-        ringLabel = CGFloat(12 * scale)
+        ringLabel = CGFloat(11 * scale)
         readout = CGFloat(15 * scale)
     }
 }
@@ -677,49 +717,60 @@ private final class HitTargets {
     }
 }
 
-/// 標高の区分ごとの山アイコンの大きさ(pt)。底辺の中点が山の位置に来る。
+/// 標高の区分ごとの山アイコン。形は同じ丸みのある山で、色と大きさを変え、2000m 以上には頂に雪を載せる。
+/// 色だけに頼らず、高さと雪の有無でも区別できるようにする。底辺の中点が山の位置に来る。
 private enum PeakIcon {
-    /// 1000m 未満(標高不明を含む): 黄緑の低い丘。
-    case hill
-    /// 1000m 以上 2000m 未満: 黄色の ▲ を緑で縁取る。
-    case peak
-    /// 2000m 以上: 茶色の高く尖った ▲ に白い雪の冠。濃い茶色で縁取る。
-    case alpine
+    /// 1000m 未満(標高不明を含む): 緑の低い山。
+    case low
+    /// 1000m 以上 2000m 未満: 橙の山。
+    case middle
+    /// 2000m 以上: 紫の高い山に雪。
+    case high
 
     var halfWidth: CGFloat {
         switch self {
-        case .hill: return 10
-        case .peak: return 11
-        case .alpine: return 12
+        case .low: return 11
+        case .middle: return 13
+        case .high: return 15
         }
     }
 
     var height: CGFloat {
         switch self {
-        case .hill: return 11
-        case .peak: return 18
-        case .alpine: return 25
+        case .low: return 13
+        case .middle: return 19
+        case .high: return 25
         }
     }
+
+    var color: Color {
+        switch self {
+        case .low: return Color(hex: 0x3DBB5C)
+        case .middle: return Color(hex: 0xF39A2B)
+        case .high: return Color(hex: 0x8E6CD8)
+        }
+    }
+
+    /// 右の斜面の陰の色。
+    var shade: Color {
+        switch self {
+        case .low: return Color(hex: 0x23853B)
+        case .middle: return Color(hex: 0xC46A0C)
+        case .high: return Color(hex: 0x5B3FA8)
+        }
+    }
+
+    var snow: Bool { self == .high }
 
     static let maxHeight: CGFloat = 25
 
     static func of(_ cls: ElevationClass) -> PeakIcon {
         switch cls {
-        case .low: return .hill
-        case .middle: return .peak
-        case .high: return .alpine
+        case .low: return .low
+        case .middle: return .middle
+        case .high: return .high
         }
     }
-}
-
-/// 底辺の中点を [bottomCenter] とする二等辺三角形。
-private func triangle(bottomCenter: CGPoint, halfWidth: CGFloat, height: CGFloat) -> Path {
-    polygon([
-        CGPoint(x: bottomCenter.x, y: bottomCenter.y - height),
-        CGPoint(x: bottomCenter.x + halfWidth, y: bottomCenter.y),
-        CGPoint(x: bottomCenter.x - halfWidth, y: bottomCenter.y),
-    ])
 }
 
 /// [points] を順に結んで閉じた多角形。
