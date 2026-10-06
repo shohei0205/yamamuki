@@ -49,15 +49,12 @@ struct SettingsView: View {
                     ) { v in model.updateSettings { $0.initialRangeKm = v } }
                 }
 
-                Section("画面") {
+                Section("電池") {
                     SwitchRow(
                         title: "画面を常に点灯",
                         description: "方位盤を表示している間は画面を消しません。電池の減りが早くなります。",
                         isOn: settings.keepScreenOn
                     ) { v in model.updateSettings { $0.keepScreenOn = v } }
-                }
-
-                Section("電池") {
                     StepSlider(
                         value: settings.sensorPrecision.rawValue,
                         range: 0...(SensorPrecision.allCases.count - 1),

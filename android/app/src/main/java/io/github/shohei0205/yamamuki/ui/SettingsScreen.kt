@@ -123,16 +123,13 @@ fun SettingsScreen(
             )
 
             HorizontalDivider()
-            SectionTitle("画面")
+            SectionTitle("電池")
             SwitchRow(
                 title = "画面を常に点灯",
                 description = "方位盤を表示している間は画面を消しません。電池の減りが早くなります。",
                 checked = settings.keepScreenOn,
                 onChange = { v -> onSettingsChange { it.copy(keepScreenOn = v) } },
             )
-
-            HorizontalDivider()
-            SectionTitle("電池")
             StepSlider(
                 value = settings.sensorPrecision.ordinal,
                 range = 0..SensorPrecision.entries.lastIndex,
