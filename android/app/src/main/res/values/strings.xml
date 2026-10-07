@@ -99,7 +99,7 @@
     <string name="settings_keep_screen_on">画面を常に点灯</string>
     <string name="settings_keep_screen_on_description">方位盤の表示中は画面が消えなくなります。バッテリーの消耗が早くなります。</string>
     <string name="settings_sensor_precision">位置と方位の精度：%1$s</string>
-    <string name="settings_sensor_precision_description">省電力にするほど電池は長持ちしますが、現在地や方位の更新頻度は下がります。</string>
+    <string name="settings_sensor_precision_description">精度を下げるとバッテリー消費を抑えられますが、現在地や方位の更新頻度も下がります。</string>
     <string name="settings_sensor_precision_saver">省電力</string>
     <string name="settings_sensor_precision_standard">標準</string>
     <string name="settings_sensor_precision_precise">高精度</string>
