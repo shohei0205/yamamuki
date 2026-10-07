@@ -70,7 +70,7 @@ public enum PeakData {
     /// 開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
     public static let devManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json")!
 
-    /// 正式版の最新版の manifest の URL(仮。yamamuki-data ではまだ公開していない)。配布用のビルド(Release)はこれを読む。
+    /// 正式版の最新版の manifest の URL。配布用のビルド(Release)はこれを読む。
     public static let stableManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/peaks/manifest.json")!
 
     /// ビルドの種類に合う manifest の URL。
