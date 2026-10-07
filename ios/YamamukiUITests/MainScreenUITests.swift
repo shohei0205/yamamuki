@@ -30,7 +30,7 @@ final class MainScreenUITests: XCTestCase {
         opener.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
         // 設定の一覧は画面に入った行だけが作られるので、見つかるまで上へめくる。
-        let update = app.buttons.matching(NSPredicate(format: "label == '山データを取得' OR label == '最新の山データを確認'")).firstMatch
+        let update = app.buttons.matching(NSPredicate(format: "label == '山データを更新' OR label == '更新を確認'")).firstMatch
         for _ in 0..<4 where !update.exists {
             app.swipeUp()
         }
@@ -57,7 +57,7 @@ final class MainScreenUITests: XCTestCase {
     /// 初回起動の確認に答える。山データの取得と位置情報の許可は 1 度答えると出なくなる。
     /// 山データの取得には「あとで」で答え、テストのたびに通信しないようにする。
     private func answerFirstLaunchPrompts() {
-        let peakData = app.alerts["山データの取得"]
+        let peakData = app.alerts["山データを取得"]
         if peakData.waitForExistence(timeout: 2) {
             peakData.buttons["あとで"].tap()
         }
