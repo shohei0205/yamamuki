@@ -68,7 +68,7 @@ object PeakData {
      */
     const val DEV_MANIFEST_URL = "https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json"
 
-    /** 正式版の最新版の manifest の URL(仮。yamamuki-data ではまだ公開していない)。配布用のビルド(release)はこれを読む。 */
+    /** 正式版の最新版の manifest の URL。配布用のビルド(release)はこれを読む。 */
     const val STABLE_MANIFEST_URL = "https://shohei0205.github.io/yamamuki-data/peaks/manifest.json"
 
     /** ビルドの種類に合う manifest の URL。 */
