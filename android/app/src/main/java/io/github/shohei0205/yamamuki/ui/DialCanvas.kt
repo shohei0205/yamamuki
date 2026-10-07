@@ -183,7 +183,7 @@ fun DialCanvas(
                 val previousAngle = RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle, hitTargets.ringLabelHeading, headingDeg)
                 hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, previousAngle, headingUp)
                 hitTargets.ringLabelHeading = headingDeg
-                drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, texts, maxPeaks, peakSelection)
+                drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, texts, maxPeaks, peakSelection, headingUp)
             } else {
                 emptyList()
             }
@@ -344,6 +344,8 @@ private class PeakSelection {
     var selected: List<SelectedPeak> = emptyList()
     var selectedIds: Set<Long> = emptySet()
     var drawnIds: Set<Long> = emptySet()
+    /** 前回描いた山と、そこにまとめてアイコンだけを描いた山。 */
+    var shownIds: Set<Long> = emptySet()
     /** 候補を選んだ円の中心(現在地からの距離と方角)と半径(km)。 */
     var centerKm = 0.0
     var centerBearingDeg = 0.0
@@ -371,6 +373,7 @@ private fun DrawScope.drawPeaks(
     texts: DialTexts,
     maxPeaks: Int,
     selection: PeakSelection,
+    headingUp: Boolean,
 ): List<PlacedPeak> {
     val gap = 2.dp.toPx()
     val chartBottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()
@@ -384,7 +387,11 @@ private fun DrawScope.drawPeaks(
     val centerKm = (center.getDistance() / pxPerKm).toDouble()
     val centerBearingDeg = Heading.normalize(headingDeg + Math.toDegrees(atan2(center.x.toDouble(), -center.y.toDouble())))
 
-    val key = listOf(mountains, pxPerKm, observerAltitudeM, styles, maxPeaks, size.width, chartBottom - chartTop)
+    val iconHeight = PeakIcon.MAX_HEIGHT_DP.dp.toPx()
+    // ヘディングアップでは、正面に近い山を優先する(向けた先の山が、横の山に押し出されにくくする)。
+    val forwardHeading = if (headingUp) headingDeg else null
+
+    val key = listOf(mountains, pxPerKm, observerAltitudeM, styles, maxPeaks, size.width, chartBottom - chartTop, headingUp)
     // 選んだあとは、向きを変えたり地図を動かしたりして、画面の角が円からはみ出すまで選び直さない。
     val outOfCircle = PeakLayout.planeDistanceKm(centerKm, centerBearingDeg, selection.centerKm, selection.centerBearingDeg) +
         halfDiagonal / pxPerKm > selection.radiusKm
@@ -400,6 +407,7 @@ private fun DrawScope.drawPeaks(
             centerKm = centerKm,
             centerBearingDeg = centerBearingDeg,
             drawnIds = selection.drawnIds,
+            headingDeg = forwardHeading,
         ).map { m ->
             val icon = PeakIcon.of(m.mountain.elevationClass())
             val halfWidth = icon.halfWidthDp.dp.toPx()
@@ -422,9 +430,21 @@ private fun DrawScope.drawPeaks(
             val o = DialGeometry.project(s.mountain.distanceKm, s.mountain.bearingDeg, headingDeg)
             s to Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
         }
-        .filter { (_, p) -> p.x in 0f..size.width && p.y - PeakIcon.MAX_HEIGHT_DP.dp.toPx() >= chartTop && p.y < chartBottom }
+        .filter { (s, p) ->
+            // 上端では、描いている山(アイコンだけの山を含む)は山の位置が上端を越えるまで残し、新しく出す山はアイコン全体が入ってから出す。
+            // 正面の少し先の山は、向きをわずかに変えるだけで上端を出入りするため(正面に向けたときが最も上に来る)。
+            val top = if (s.mountain.mountain.osmId in selection.shownIds) chartTop else chartTop + iconHeight
+            p.x in 0f..size.width && p.y >= top && p.y < chartBottom
+        }
         .map { (s, p) ->
             PlacedPeak(s.mountain, p, s.label, Box(p.x + s.box.left, p.y + s.box.top, p.x + s.box.right, p.y + s.box.bottom))
+        }
+        .let { peaks ->
+            // ヘディングアップでは、今の向きで正面に近い山を先に置く。
+            if (forwardHeading == null) return@let peaks
+            val rank = PeakLayout.priorityOrder(peaks.map { it.mountain }, observerAltitudeM, selection.selectedIds, forwardHeading)
+                .withIndex().associate { (i, m) -> m.mountain.osmId to i }
+            peaks.sortedBy { rank[it.mountain.mountain.osmId] }
         }
     val groups = PeakLayout.placeVisible(
         visible,
@@ -436,6 +456,7 @@ private fun DrawScope.drawPeaks(
         margin = NEW_PEAK_MARGIN.toPx(),
     )
     selection.drawnIds = groups.mapTo(HashSet()) { it.peak.mountain.mountain.osmId }
+    selection.shownIds = selection.drawnIds + groups.flatMap { g -> g.members.map { it.mountain.mountain.osmId } }
 
     // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
     val placedBoxes = groups.map { it.peak.box }

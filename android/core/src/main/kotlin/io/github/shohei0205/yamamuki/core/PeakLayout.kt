@@ -1,6 +1,7 @@
 package io.github.shohei0205.yamamuki.core
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.max
@@ -38,6 +39,7 @@ data class PeakGroup<T>(val peak: T, val members: List<T>)
  *    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
  *    山の一覧・表示範囲・文字の大きさなどが変わったときと、向きを変えたり地図を動かしたりして画面が円からはみ出したときだけ選び直す。
  *    前回描いた山は、円の中にある限り候補に残す。
+ *    ヘディングアップでは、正面に近い山ほど優先する([forwardBonus])。
  * 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
  *    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
  *    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
@@ -55,15 +57,31 @@ object PeakLayout {
     const val NEIGHBOR_KM = 3.0
 
     /**
+     * ヘディングアップで、正面にある山の仰角に上乗せする値(°)。正面から離れるほど減らし、
+     * 視野の扇の端([FORWARD_SPAN_DEG])で 0 にする。向けた先の山が、横の山に押し出されにくくする。
+     */
+    const val FORWARD_BONUS_DEG = 1.0
+
+    /** [FORWARD_BONUS_DEG] を上乗せする、正面からの角度の範囲(°)。視野の扇の片側の幅。 */
+    const val FORWARD_SPAN_DEG = DialGeometry.TAPE_SPAN_DEG / 2
+
+    /** 正面([headingDeg])からのずれに応じた上乗せ(°)。正面で [FORWARD_BONUS_DEG]、[FORWARD_SPAN_DEG] より外で 0。 */
+    fun forwardBonus(bearingDeg: Double, headingDeg: Double): Double =
+        FORWARD_BONUS_DEG * max(0.0, 1 - abs(Heading.delta(headingDeg, bearingDeg)) / FORWARD_SPAN_DEG)
+
+    /**
      * 選ぶ順。[displayPriority] の順に、前回選んだ山([keptIds]、OSM の ID)は [KEPT_BONUS_DEG] だけ上乗せする。
+     * ヘディングアップでは向いている方角([headingDeg])を渡し、正面に近い山に [forwardBonus] を上乗せする。
      */
     fun priorityOrder(
         mountains: List<NearbyMountain>,
         observerAltitudeM: Double?,
         keptIds: Set<Long> = emptySet(),
+        headingDeg: Double? = null,
     ): List<NearbyMountain> {
         fun score(m: NearbyMountain) =
-            m.displayScore(observerAltitudeM) + if (m.mountain.osmId in keptIds) KEPT_BONUS_DEG else 0.0
+            m.displayScore(observerAltitudeM) + (if (m.mountain.osmId in keptIds) KEPT_BONUS_DEG else 0.0) +
+                (headingDeg?.let { forwardBonus(m.bearingDeg, it) } ?: 0.0)
         return mountains.sortedWith(compareByDescending<NearbyMountain> { score(it) }.thenBy { it.distanceKm })
     }
 
@@ -75,6 +93,7 @@ object PeakLayout {
      * 候補の山。[priorityOrder] の順で、円の中心から [reachKm] 以内(画面に入りうる距離)の山を最大 [limit] 件。
      * 円の中心は、現在地から [centerBearingDeg] の方角へ [centerKm] 離れた点。0 なら現在地。
      * 前回描いた山([drawnIds])は、円の中にあれば上限によらず残す(選び直したときに、描いている山が消えないようにする)。
+     * [headingDeg] は [priorityOrder] に渡す(ヘディングアップのときだけ)。
      */
     fun candidates(
         mountains: List<NearbyMountain>,
@@ -85,8 +104,9 @@ object PeakLayout {
         centerKm: Double = 0.0,
         centerBearingDeg: Double = 0.0,
         drawnIds: Set<Long> = emptySet(),
+        headingDeg: Double? = null,
     ): List<NearbyMountain> {
-        val inReach = priorityOrder(mountains, observerAltitudeM, keptIds)
+        val inReach = priorityOrder(mountains, observerAltitudeM, keptIds, headingDeg)
             .filter { planeDistanceKm(it.distanceKm, it.bearingDeg, centerKm, centerBearingDeg) <= reachKm }
         var room = limit.coerceAtLeast(0) - inReach.count { it.mountain.osmId in drawnIds }
         return inReach.filter { it.mountain.osmId in drawnIds || room-- > 0 }

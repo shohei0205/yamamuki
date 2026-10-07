@@ -203,6 +203,27 @@ class PeakLayoutTest {
     }
 
     @Test
+    fun forwardBonusFadesToTheEdgeOfTheFan() {
+        assertEquals(1.0, PeakLayout.forwardBonus(0.0, 0.0), 1e-9)
+        assertEquals(0.5, PeakLayout.forwardBonus(15.0, 0.0), 1e-9)
+        assertEquals(2.0 / 3, PeakLayout.forwardBonus(350.0, 0.0), 1e-9)
+        assertEquals(0.0, PeakLayout.forwardBonus(45.0, 0.0), 1e-9)
+    }
+
+    @Test
+    fun headingUpPrefersPeaksAhead() {
+        // 横の山のほうが少し高く見えても、ヘディングアップでは正面の山を先にする。
+        val ahead = NearbyMountain(Mountain(1, "正面", 0.0, 0.0, 1000.0), 10.0, 0.0)
+        val side = NearbyMountain(Mountain(2, "横", 0.0, 0.0, 1100.0), 10.0, 90.0)
+        assertEquals(listOf("横", "正面"), PeakLayout.priorityOrder(listOf(ahead, side), 0.0).map { it.mountain.name })
+        assertEquals(listOf("正面", "横"),
+            PeakLayout.priorityOrder(listOf(ahead, side), 0.0, headingDeg = 0.0).map { it.mountain.name })
+        assertEquals(listOf("正面"),
+            PeakLayout.candidates(listOf(ahead, side), 0.0, emptySet(), reachKm = 20.0, limit = 1, headingDeg = 0.0)
+                .map { it.mountain.name })
+    }
+
+    @Test
     fun planeDistance() {
         assertEquals(5.0, PeakLayout.planeDistanceKm(3.0, 0.0, 4.0, 90.0), 1e-9)
         assertEquals(2.0, PeakLayout.planeDistanceKm(1.0, 350.0, 1.0, 170.0), 1e-9)

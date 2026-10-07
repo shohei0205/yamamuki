@@ -128,6 +128,23 @@ final class PeakLayoutTests: XCTestCase {
             .map(\.mountain.name), ["高い", "低い"])
     }
 
+    func testForwardBonusFadesToTheEdgeOfTheFan() {
+        XCTAssertEqual(PeakLayout.forwardBonus(bearingDeg: 0, headingDeg: 0), 1, accuracy: 1e-9)
+        XCTAssertEqual(PeakLayout.forwardBonus(bearingDeg: 15, headingDeg: 0), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(PeakLayout.forwardBonus(bearingDeg: 350, headingDeg: 0), 2.0 / 3, accuracy: 1e-9)
+        XCTAssertEqual(PeakLayout.forwardBonus(bearingDeg: 45, headingDeg: 0), 0, accuracy: 1e-9)
+    }
+
+    func testHeadingUpPrefersPeaksAhead() {
+        // 横の山のほうが少し高く見えても、ヘディングアップでは正面の山を先にする。
+        let ahead = NearbyMountain(mountain: Mountain(osmId: 1, name: "正面", latitude: 0, longitude: 0, elevationM: 1000), distanceKm: 10, bearingDeg: 0)
+        let side = NearbyMountain(mountain: Mountain(osmId: 2, name: "横", latitude: 0, longitude: 0, elevationM: 1100), distanceKm: 10, bearingDeg: 90)
+        XCTAssertEqual(PeakLayout.priorityOrder([ahead, side], observerAltitudeM: 0).map(\.mountain.name), ["横", "正面"])
+        XCTAssertEqual(PeakLayout.priorityOrder([ahead, side], observerAltitudeM: 0, headingDeg: 0).map(\.mountain.name), ["正面", "横"])
+        XCTAssertEqual(PeakLayout.candidates([ahead, side], observerAltitudeM: 0, keptIds: [], reachKm: 20, limit: 1, headingDeg: 0)
+            .map(\.mountain.name), ["正面"])
+    }
+
     func testPlaneDistance() {
         XCTAssertEqual(PeakLayout.planeDistanceKm(3, 0, 4, 90), 5, accuracy: 1e-9)
         XCTAssertEqual(PeakLayout.planeDistanceKm(1, 350, 1, 170), 2, accuracy: 1e-9)
