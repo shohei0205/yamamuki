@@ -40,7 +40,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@を取り直しますか？"
+            "value": "%1$@を再取得しますか？"
           }
         }
       }
@@ -51,7 +51,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存した山データを端末から消します。ほかの保存済みの地域と重なる部分は残ります。"
+            "value": "保存した山データを削除します。ほかの保存済み地域と重複するデータは残ります。"
           }
         }
       }
@@ -73,7 +73,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "目的地周辺の山データを、電波の届く場所で事前に端末へ保存することができます。\n事前に保存した山データは、キャッシュを消去しても残ります。"
+            "value": "電波が届く場所で、目的地周辺の山データを事前に保存できます。\n事前に保存した山データは、キャッシュを消去しても残ります。"
           }
         }
       }
@@ -95,7 +95,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@のダウンロードを中断しました（%2$ld / %3$ld 区画まで保存済み）。"
+            "value": "%1$@のダウンロードを中断しました（%2$ld / %3$ld 区画保存済み）。"
           }
         }
       }
@@ -117,7 +117,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@のダウンロード中に通信に失敗しました。サーバーが混み合っているか、電波が弱い可能性があります。"
+            "value": "%1$@の取得に失敗しました。サーバーの混雑または通信状況が原因の可能性があります。"
           }
         }
       }
@@ -128,7 +128,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@のダウンロード中に通信に失敗しました（%2$ld / %3$ld 区画まで保存済み）。サーバーが混み合っているか、電波が弱い可能性があります。"
+            "value": "%1$@の取得に失敗しました（%2$ld / %3$ld 区画保存済み）。サーバーの混雑または通信状況が原因の可能性があります。"
           }
         }
       }
@@ -139,7 +139,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@のダウンロードが途中で終わっています。「続きから再開」で残りを取得します。"
+            "value": "%1$@のダウンロードが中断されています。「ダウンロードを再開」で再開できます。"
           }
         }
       }
@@ -150,7 +150,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "圏外のため、今はダウンロードできません。電波の届く場所で開いてください。"
+            "value": "圏外のためダウンロードできません。通信可能な場所でお試しください。"
           }
         }
       }
@@ -161,7 +161,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "取り直す"
+            "value": "再取得"
           }
         }
       }
@@ -172,7 +172,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "続きから再開"
+            "value": "ダウンロードを再開"
           }
         }
       }
@@ -194,7 +194,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存済み"
+            "value": "ダウンロード済み"
           }
         }
       }
@@ -216,7 +216,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存済みの地域"
+            "value": "ダウンロード済みの地域"
           }
         }
       }
@@ -227,7 +227,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "通信に失敗したため、%1$ld 秒後に取り直します（%2$ld 回目）"
+            "value": "通信に失敗しました。%1$ld 秒後に再試行します（%2$ld 回目）"
           }
         }
       }
@@ -238,7 +238,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "サーバーの応答を待っています（%1$ld 秒）"
+            "value": "サーバー応答待ち（%1$ld 秒）"
           }
         }
       }
@@ -249,7 +249,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "サーバーの応答を待っています（%1$ld 秒・取り直し %2$ld 回目）"
+            "value": "サーバー応答待ち（%1$ld 秒・再試行 %2$ld 回目）"
           }
         }
       }
@@ -282,7 +282,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "更新"
+            "value": "再取得"
           }
         }
       }
@@ -359,7 +359,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "コンパス：方位を取得中"
+            "value": "コンパス：方位を確認中"
           }
         }
       }
@@ -370,7 +370,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "コンパス：赤い針が北"
+            "value": "コンパス：赤い針が北を示します"
           }
         }
       }
@@ -425,7 +425,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "この付近の山"
+            "value": "周辺の山"
           }
         }
       }
@@ -524,7 +524,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "コンパス補正中。8の字に動かしてください"
+            "value": "方位が不安定です。8の字に動かしてください"
           }
         }
       }
@@ -535,7 +535,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位を取得中"
+            "value": "方位を確認中"
           }
         }
       }
@@ -601,7 +601,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@。設定画面から取得できます"
+            "value": "%1$@。設定から取得できます"
           }
         }
       }
@@ -634,7 +634,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "現在地を取得しています…"
+            "value": "現在地を確認中…"
           }
         }
       }
@@ -667,7 +667,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位センサーの値を待っています…"
+            "value": "方位を確認中…"
           }
         }
       }
@@ -876,7 +876,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "現在地に戻り、進行方向を上にする"
+            "value": "現在地に戻る（進行方向が上）"
           }
         }
       }
@@ -887,7 +887,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "今の向きのまま手動位置モードにする"
+            "value": "現在の向きのまま操作する"
           }
         }
       }
@@ -921,7 +921,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データのサーバーから応答がありません。しばらくしてから再取得してください。"
+            "value": "サーバーから応答がありません。しばらくしてから再度お試しください。"
           }
         }
       }
@@ -932,7 +932,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "インターネットに接続されていません。電波の届く場所で再取得してください。"
+            "value": "インターネットに接続されていません。通信できる場所で再度お試しください。"
           }
         }
       }
@@ -943,7 +943,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "再取得"
+            "value": "もう一度取得"
           }
         }
       }
@@ -965,7 +965,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@\n\n保存済みのデータで表示しています。"
+            "value": "%1$@\n\n保存済みのデータを表示しています。"
           }
         }
       }
@@ -998,7 +998,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "全国の山の名前・位置・標高（OpenStreetMap のデータ、約 0.5 MB）を取得します。取得したデータは端末に保存するので、圏外でも使えます。\n\n今すぐ取得しますか？「あとで」を選んだときは、設定画面から取得できます。"
+            "value": "山データを取得します。保存後は圏外でも利用できます。\n\n今すぐ取得しますか？\nあとで取得する場合は設定画面から実行できます。"
           }
         }
       }
@@ -1009,7 +1009,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データの取得"
+            "value": "山データを取得"
           }
         }
       }
@@ -1020,7 +1020,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データは最新です"
+            "value": "最新の状態です"
           }
         }
       }
@@ -1031,7 +1031,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得しました"
+            "value": "山データを更新しました"
           }
         }
       }
@@ -1064,7 +1064,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存している山データをすべて消去します。山データは上のボタンからもう一度取得できます。"
+            "value": "保存済みの山データをすべて消去します。必要に応じて再取得できます。"
           }
         }
       }
@@ -1075,7 +1075,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存している山データを消去します。事前ダウンロードした地域は残ります。"
+            "value": "保存済みの山データを消去します。事前ダウンロードした地域は残ります。"
           }
         }
       }
@@ -1097,7 +1097,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "消去すると、取得した全国の山データも消えます。上のボタンでもう一度取得できます。"
+            "value": "消去すると取得済みの山データも消えます。必要に応じて再取得できます。"
           }
         }
       }
@@ -1119,7 +1119,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存しているデータ"
+            "value": "保存データ"
           }
         }
       }
@@ -1141,7 +1141,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "起動時の表示範囲（km）"
+            "value": "起動時の表示距離（km）"
           }
         }
       }
@@ -1152,7 +1152,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "現在地から画面上端までの距離。起動後はピンチで変えられます。"
+            "value": "現在地から画面上端までの距離です。起動後もピンチ操作で変更できます。"
           }
         }
       }
@@ -1163,7 +1163,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "画面のスリープ防止"
+            "value": "画面を常に点灯"
           }
         }
       }
@@ -1174,7 +1174,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位盤の表示中は画面を常時点灯します。バッテリーの消耗が早くなります。"
+            "value": "方位盤の表示中は画面が消えなくなります。バッテリーの消耗が早くなります。"
           }
         }
       }
@@ -1185,7 +1185,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "一度に表示する山 最大 %1$ld 件"
+            "value": "最大表示数（%1$ld 件）"
           }
         }
       }
@@ -1196,7 +1196,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "多いと画面が混み合い、少ないと高い山だけになります。重なる山は標高の低いほうを省きます。"
+            "value": "方位盤上に表示する山の数を変更します。"
           }
         }
       }
@@ -1207,7 +1207,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "すべての山を表示"
+            "value": "すべて表示"
           }
         }
       }
@@ -1218,7 +1218,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "0 m ですべての山を表示します。絞り込み中は標高不明の山を表示しません。"
+            "value": "0 m で全て表示します。絞り込み時は標高不明の山を除外します。"
           }
         }
       }
@@ -1229,7 +1229,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "標高 %1$@ m 以上の山だけ表示"
+            "value": "標高 %1$@ m 以上を表示"
           }
         }
       }
@@ -1240,7 +1240,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "最新の山データを確認"
+            "value": "更新を確認"
           }
         }
       }
@@ -1251,7 +1251,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "yamamuki-data（GitHub）から約 0.5 MB を取得し、端末に保存します。新しい版がなければ、確認だけで終わります。"
+            "value": "山データを取得して端末に保存します。新しいデータがなければ確認のみ行います。"
           }
         }
       }
@@ -1262,7 +1262,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得"
+            "value": "山データを更新"
           }
         }
       }
@@ -1284,7 +1284,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "まだ取得していません。"
+            "value": "未取得"
           }
         }
       }
@@ -1306,7 +1306,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "全国の山データ"
+            "value": "取得した山データ"
           }
         }
       }
@@ -1383,7 +1383,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "左に寄せるほどバッテリー消費を抑えられますが、現在地の更新が遅くなり、方位盤の回転が粗くなります。"
+            "value": "精度を下げるとバッテリー消費を抑えられますが、現在地や方位の更新頻度も下がります。"
           }
         }
       }
