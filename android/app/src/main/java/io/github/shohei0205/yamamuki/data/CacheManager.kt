@@ -41,11 +41,13 @@ class CacheManager(private val context: Context, private val database: MountainD
     }
 
     private suspend fun compact() {
-        // 行を消しただけではファイルは縮まないので、WAL を書き戻してから VACUUM で詰める。
+        // 行を消しただけではファイルは縮まないので、VACUUM で詰める。WAL では詰めた結果も WAL に書かれ、
+        // 書き戻すまで本体は大きいままなので、VACUUM のあとに書き戻して WAL も空にする。
+        // query() はカーソルを読み進めるまで実行されないので、moveToFirst() で実行させる。
         withContext(Dispatchers.IO) {
             val db = database.openHelper.writableDatabase
-            db.query("PRAGMA wal_checkpoint(TRUNCATE)").close()
             db.execSQL("VACUUM")
+            db.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
         }
     }
 
