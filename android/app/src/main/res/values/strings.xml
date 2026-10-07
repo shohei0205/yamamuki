@@ -68,7 +68,7 @@
 
     <!-- 山データの取得 -->
     <string name="peak_data_prompt_title">山データを取得</string>
-    <string name="peak_data_prompt_message">全国の山データを取得します。保存後は圏外でも利用できます。\n\n今すぐ取得しますか？\nあとで取得する場合は設定画面から実行できます。</string>
+    <string name="peak_data_prompt_message">山データを取得します。保存後は圏外でも利用できます。\n\n今すぐ取得しますか？\nあとで取得する場合は設定画面から実行できます。</string>
     <string name="peak_data_prompt_fetch">取得する</string>
     <string name="peak_data_prompt_later">あとで</string>
     <string name="peak_data_error_title">山データを取得できませんでした</string>
