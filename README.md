@@ -1,4 +1,4 @@
-﻿# yamamuki
+﻿# <img src="docs/images/app-icon.png" width="40" alt="" align="top"> 山むき
 
 スマホを向けた方向に見える山を、山名付きで表示する Android / iOS アプリ。山をタップすると標高などの詳細が見られる。
 
@@ -8,7 +8,7 @@
 
 | ヘディングアップモード | 手動位置モード |
 |---|---|
-| <img src="docs/images/heading-up-kamikochi.png" width="270" alt="上高地から北へ向けた方位盤。槍ヶ岳・南岳・奥穂高岳などが並ぶ"> | <img src="docs/images/manual-okuhotaka.png" width="270" alt="奥穂高岳の山頂を中心にした地図。槍ヶ岳・常念岳・焼岳などが周りに並ぶ"> |
+| <img src="docs/images/heading-up-kamikochi.png" width="270" alt="上高地から北へ向けた方位盤。槍ヶ岳・中岳・北穂高岳・奥穂高岳などが並ぶ"> | <img src="docs/images/manual-okuhotaka.png" width="270" alt="奥穂高岳の山頂を中心にした地図。槍ヶ岳・常念岳・焼岳などが周りに並ぶ"> |
 
 ## 構成
 
