@@ -84,7 +84,7 @@
     <string name="settings_section_peaks">表示する山</string>
     <string name="settings_min_elevation_all">すべて表示</string>
     <string name="settings_min_elevation_value">標高 %1$,d m 以上を表示</string>
-    <string name="settings_min_elevation_description">0 mで全て表示します。絞り込み時は標高不明の山を除外します。</string>
+    <string name="settings_min_elevation_description">0 m で全て表示します。絞り込み時は標高不明の山を除外します。</string>
     <string name="settings_max_peaks">表示する山の数（最大 %1$d 件）</string>
     <string name="settings_max_peaks_description">多いほど多くの山が表示されます。重なる山は低い方を省略します。</string>
     <string name="settings_section_display">表示</string>
@@ -137,18 +137,18 @@
     <string name="area_delete_title">%1$sを削除しますか？</string>
     <string name="area_delete_message">保存した山データを削除します。ほかの保存済み地域と重複するデータは残ります。</string>
     <string name="area_running">%1$sをダウンロード中（%2$d / %3$d 区画）</string>
-    <string name="area_status_waiting">サーバー応答待ち（%1$d秒）</string>
-    <string name="area_status_waiting_retry">サーバー応答待ち（%1$d秒・再試行%2$d回目）</string>
+    <string name="area_status_waiting">サーバー応答待ち（%1$d 秒）</string>
+    <string name="area_status_waiting_retry">サーバー応答待ち（%1$d 秒・再試行 %2$d 回目）</string>
     <string name="area_status_retrying">通信に失敗しました。%1$d 秒後に再試行します（%2$d 回目）</string>
     <string name="area_cancel">中断</string>
     <string name="area_resume">ダウンロードを再開</string>
-    <string name="area_saved_summary">%1$s取得・山%2$,d件</string>
+    <string name="area_saved_summary">%1$s 取得・山 %2$,d 件</string>
     <string name="area_update">再取得</string>
     <string name="area_saved">ダウンロード済み</string>
     <string name="area_tiles">%1$d 区画</string>
     <string name="area_notice_pending">%1$sのダウンロードが中断されています。「ダウンロードを再開」で再開できます。</string>
-    <string name="area_notice_done">%1$sのダウンロードが完了しました（%2$,d件）。</string>
+    <string name="area_notice_done">%1$sのダウンロードが完了しました（%2$,d 件）。</string>
     <string name="area_notice_failed">%1$sの取得に失敗しました。サーバーの混雑または通信状況が原因の可能性があります。</string>
-    <string name="area_notice_failed_progress">%1$sの取得に失敗しました（%2$d/%3$d区画保存済み）。サーバーの混雑または通信状況が原因の可能性があります。</string>
-    <string name="area_notice_canceled">%1$sのダウンロードを中断しました（%2$d/%3$d区画保存済み）。</string>
+    <string name="area_notice_failed_progress">%1$sの取得に失敗しました（%2$d / %3$d 区画保存済み）。サーバーの混雑または通信状況が原因の可能性があります。</string>
+    <string name="area_notice_canceled">%1$sのダウンロードを中断しました（%2$d / %3$d 区画保存済み）。</string>
 </resources>
