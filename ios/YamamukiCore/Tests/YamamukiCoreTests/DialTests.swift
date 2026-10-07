@@ -109,6 +109,23 @@ final class PeakLayoutTests: XCTestCase {
         XCTAssertEqual(PeakLayout.candidates(all, observerAltitudeM: 0, keptIds: [], reachKm: 50, limit: 1).map(\.mountain.name), ["近い"])
     }
 
+    func testCandidatesAroundScreenCenter() {
+        // 現在地のそばの高い山は、画面の周りの円(現在地から北東 60km の点を中心に 5km)の外なので選ばない。
+        func at(_ id: Int64, _ name: String, _ ele: Double, _ km: Double, _ bearing: Double) -> NearbyMountain {
+            NearbyMountain(mountain: Mountain(osmId: id, name: name, latitude: 0, longitude: 0, elevationM: ele), distanceKm: km, bearingDeg: bearing)
+        }
+        let all = [at(1, "手前", 2000, 5, 180), at(2, "筑波山", 877, 60, 45), at(3, "宝篋山", 461, 62, 47), at(4, "外", 900, 60, 60)]
+        XCTAssertEqual(PeakLayout.candidates(all, observerAltitudeM: 0, keptIds: [], reachKm: 70, limit: 1).map(\.mountain.name), ["手前"])
+        XCTAssertEqual(PeakLayout.candidates(all, observerAltitudeM: 0, keptIds: [], reachKm: 5, limit: 2, centerKm: 60, centerBearingDeg: 45)
+            .map(\.mountain.name), ["筑波山", "宝篋山"])
+    }
+
+    func testPlaneDistance() {
+        XCTAssertEqual(PeakLayout.planeDistanceKm(3, 0, 4, 90), 5, accuracy: 1e-9)
+        XCTAssertEqual(PeakLayout.planeDistanceKm(1, 350, 1, 170), 2, accuracy: 1e-9)
+        XCTAssertEqual(PeakLayout.planeDistanceKm(7, 30, 7, 30), 0, accuracy: 1e-9)
+    }
+
     func testNeighbors() {
         func at(_ name: String, _ lat: Double) -> NearbyMountain {
             NearbyMountain(mountain: Mountain(osmId: Int64(name.hashValue), name: name, latitude: lat, longitude: 137, elevationM: 1000), distanceKm: 5, bearingDeg: 0)

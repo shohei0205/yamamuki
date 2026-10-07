@@ -176,6 +176,27 @@ class PeakLayoutTest {
     }
 
     @Test
+    fun candidatesAroundScreenCenter() {
+        // 現在地のそばの高い山は、画面の周りの円(現在地から北東 60km の点を中心に 5km)の外なので選ばない。
+        val nearHigh = NearbyMountain(Mountain(1, "手前", 0.0, 0.0, 2000.0), 5.0, 180.0)
+        val target = NearbyMountain(Mountain(2, "筑波山", 0.0, 0.0, 877.0), 60.0, 45.0)
+        val next = NearbyMountain(Mountain(3, "宝篋山", 0.0, 0.0, 461.0), 62.0, 47.0)
+        val far = NearbyMountain(Mountain(4, "外", 0.0, 0.0, 900.0), 60.0, 60.0)
+        val all = listOf(nearHigh, target, next, far)
+        assertEquals(listOf("手前"), PeakLayout.candidates(all, 0.0, emptySet(), reachKm = 70.0, limit = 1).map { it.mountain.name })
+        assertEquals(listOf("筑波山", "宝篋山"),
+            PeakLayout.candidates(all, 0.0, emptySet(), reachKm = 5.0, limit = 2, centerKm = 60.0, centerBearingDeg = 45.0)
+                .map { it.mountain.name })
+    }
+
+    @Test
+    fun planeDistance() {
+        assertEquals(5.0, PeakLayout.planeDistanceKm(3.0, 0.0, 4.0, 90.0), 1e-9)
+        assertEquals(2.0, PeakLayout.planeDistanceKm(1.0, 350.0, 1.0, 170.0), 1e-9)
+        assertEquals(0.0, PeakLayout.planeDistanceKm(7.0, 30.0, 7.0, 30.0), 1e-9)
+    }
+
+    @Test
     fun neighbors() {
         fun at(name: String, lat: Double) = NearbyMountain(Mountain(name.hashCode().toLong(), name, lat, 137.0, 1000.0), 5.0, 0.0)
         assertTrue(PeakLayout.areNeighbors(at("奥穂高岳", 36.2894), at("ジャンダルム", 36.2862)))

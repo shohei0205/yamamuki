@@ -35,7 +35,8 @@ public struct PeakGroup<T> {
 /// 方位盤に出す山の選び方。2 段階で決める。
 ///
 /// 1. 候補を選ぶ([candidates])。山の一覧・表示範囲・文字の大きさなどが変わったときだけ、
-///    現在地の周り全体(360°)から仰角の大きい順に選ぶ。
+///    現在地の周り全体(360°)から仰角の大きい順に選ぶ。手動位置モードで双眼鏡が画面の外にあるときは、
+///    画面の周りの円から選ぶ(遠くの現在地の周りの山に、画面の山が押し出されないようにする)。
 /// 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
 ///    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
 ///    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
@@ -69,17 +70,26 @@ public enum PeakLayout {
         GeoMath.distanceKm(a.mountain.latitude, a.mountain.longitude, b.mountain.latitude, b.mountain.longitude) <= neighborKm
     }
 
-    /// 候補の山。[priorityOrder] の順で、現在地から [reachKm] 以内(画面に入りうる距離)の山を最大 [limit] 件。
+    /// 候補の山。[priorityOrder] の順で、円の中心から [reachKm] 以内(画面に入りうる距離)の山を最大 [limit] 件。
+    /// 円の中心は、現在地から [centerBearingDeg] の方角へ [centerKm] 離れた点。0 なら現在地。
     public static func candidates(
         _ mountains: [NearbyMountain],
         observerAltitudeM: Double?,
         keptIds: Set<Int64>,
         reachKm: Double,
-        limit: Int
+        limit: Int,
+        centerKm: Double = 0,
+        centerBearingDeg: Double = 0
     ) -> [NearbyMountain] {
         Array(priorityOrder(mountains, observerAltitudeM: observerAltitudeM, keptIds: keptIds)
-            .filter { $0.distanceKm <= reachKm }
+            .filter { planeDistanceKm($0.distanceKm, $0.bearingDeg, centerKm, centerBearingDeg) <= reachKm }
             .prefix(max(limit, 0)))
+    }
+
+    /// 現在地から見た 2 点(距離 km と方角)の、方位盤の平面上での距離(km)。
+    public static func planeDistanceKm(_ aKm: Double, _ aBearingDeg: Double, _ bKm: Double, _ bBearingDeg: Double) -> Double {
+        let delta = Heading.delta(aBearingDeg, bBearingDeg) * .pi / 180
+        return (max(0, aKm * aKm + bKm * bKm - 2 * aKm * bKm * cos(delta))).squareRoot()
     }
 
     /// 周り全体から選ぶ山の上限。画面に [maxPeaks] 件までの密度になるよう、
