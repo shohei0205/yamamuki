@@ -34,9 +34,10 @@ data class PeakGroup<T>(val peak: T, val members: List<T>)
 /**
  * 方位盤に出す山の選び方。2 段階で決める。
  *
- * 1. 候補を選ぶ([candidates])。山の一覧・表示範囲・文字の大きさなどが変わったときだけ、
- *    現在地の周り全体(360°)から仰角の大きい順に選ぶ。手動位置モードで双眼鏡が画面の外にあるときは、
- *    画面の周りの円から選ぶ(遠くの現在地の周りの山に、画面の山が押し出されないようにする)。
+ * 1. 候補を選ぶ([candidates])。画面より一回り大きい、画面の周りの円から仰角の大きい順に選ぶ。
+ *    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
+ *    山の一覧・表示範囲・文字の大きさなどが変わったときと、向きを変えたり地図を動かしたりして画面が円からはみ出したときだけ選び直す。
+ *    前回描いた山は、円の中にある限り候補に残す。
  * 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
  *    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
  *    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
@@ -73,6 +74,7 @@ object PeakLayout {
     /**
      * 候補の山。[priorityOrder] の順で、円の中心から [reachKm] 以内(画面に入りうる距離)の山を最大 [limit] 件。
      * 円の中心は、現在地から [centerBearingDeg] の方角へ [centerKm] 離れた点。0 なら現在地。
+     * 前回描いた山([drawnIds])は、円の中にあれば上限によらず残す(選び直したときに、描いている山が消えないようにする)。
      */
     fun candidates(
         mountains: List<NearbyMountain>,
@@ -82,10 +84,13 @@ object PeakLayout {
         limit: Int,
         centerKm: Double = 0.0,
         centerBearingDeg: Double = 0.0,
-    ): List<NearbyMountain> =
-        priorityOrder(mountains, observerAltitudeM, keptIds)
+        drawnIds: Set<Long> = emptySet(),
+    ): List<NearbyMountain> {
+        val inReach = priorityOrder(mountains, observerAltitudeM, keptIds)
             .filter { planeDistanceKm(it.distanceKm, it.bearingDeg, centerKm, centerBearingDeg) <= reachKm }
-            .take(limit.coerceAtLeast(0))
+        var room = limit.coerceAtLeast(0) - inReach.count { it.mountain.osmId in drawnIds }
+        return inReach.filter { it.mountain.osmId in drawnIds || room-- > 0 }
+    }
 
     /** 現在地から見た 2 点(距離 km と方角)の、方位盤の平面上での距離(km)。 */
     fun planeDistanceKm(aKm: Double, aBearingDeg: Double, bKm: Double, bBearingDeg: Double): Double {
@@ -94,8 +99,8 @@ object PeakLayout {
     }
 
     /**
-     * 周り全体から選ぶ山の上限。画面に [maxPeaks] 件までの密度になるよう、
-     * 現在地から [reachPx] の円の面積と画面の面積 [viewAreaPx] の比で増やす。
+     * 候補の円から選ぶ山の上限。画面に [maxPeaks] 件までの密度になるよう、
+     * 半径 [reachPx] の円の面積と画面の面積 [viewAreaPx] の比で増やす。
      */
     fun aroundLimit(maxPeaks: Int, reachPx: Double, viewAreaPx: Double): Int {
         if (viewAreaPx <= 0 || maxPeaks <= 0) return maxPeaks.coerceAtLeast(0)

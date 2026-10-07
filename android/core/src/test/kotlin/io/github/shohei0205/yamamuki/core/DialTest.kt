@@ -190,6 +190,19 @@ class PeakLayoutTest {
     }
 
     @Test
+    fun candidatesKeepDrawnPeaks() {
+        val high = m("高い", 3000.0, 10.0)
+        val mid = m("中", 2000.0, 10.0)
+        val low = m("低い", 1000.0, 10.0)
+        val out = m("外", 500.0, 40.0)
+        val all = listOf(high, mid, low, out)
+        // 前回描いた「低い」は上限によらず残し、残りの枠を優先順に埋める。円の外の山は描いていても残さない。
+        val drawn = setOf(low.mountain.osmId, out.mountain.osmId)
+        assertEquals(listOf("高い", "低い"),
+            PeakLayout.candidates(all, 0.0, emptySet(), reachKm = 20.0, limit = 2, drawnIds = drawn).map { it.mountain.name })
+    }
+
+    @Test
     fun planeDistance() {
         assertEquals(5.0, PeakLayout.planeDistanceKm(3.0, 0.0, 4.0, 90.0), 1e-9)
         assertEquals(2.0, PeakLayout.planeDistanceKm(1.0, 350.0, 1.0, 170.0), 1e-9)

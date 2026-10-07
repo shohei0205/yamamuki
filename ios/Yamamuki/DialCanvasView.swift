@@ -234,45 +234,33 @@ struct DialCanvasView: View, Animatable {
         let gap: CGFloat = 2
         let chartBottom = size.height - originBottom
 
-        // 双眼鏡が画面(とそのすぐ外)にあれば、向きを変えても選び直さずに済むよう、現在地の周り全体から選ぶ。
-        // 画面の外にあれば、画面の周りの円から選ぶ。現在地の周り全体からだと、遠くの現在地の周りの山に候補の数を取られ、
-        // 画面の山が拡大率のわずかな違いで候補から外れたり戻ったりする。
-        let observerOnScreen = observer.x >= -reachStep && observer.x <= size.width + reachStep
-            && observer.y >= chartTop - reachStep && observer.y <= chartBottom + reachStep
+        // 候補は、画面より一回り大きい、画面の周りの円から選ぶ。現在地の周り全体から選ぶと、ほかの方角の山に候補の数を取られ、
+        // 向けた先に山が出なかったり、拡大率のわずかな違いで画面の山が候補から外れたり戻ったりする。
         let halfDiagonal = hypot(size.width, chartBottom - chartTop) / 2
-        let reach: CGFloat
-        if observerOnScreen {
-            // 山の位置が画面に入りうる、現在地からの最大の距離(画面の最も遠い角まで)。
-            let corners = [CGPoint(x: 0, y: chartTop), CGPoint(x: size.width, y: chartTop), CGPoint(x: 0, y: chartBottom), CGPoint(x: size.width, y: chartBottom)]
-            let farthestCorner = corners.map { hypot($0.x - observer.x, $0.y - observer.y) }.max() ?? 0
-            reach = (farthestCorner / reachStep).rounded(.up) * reachStep
-        } else {
-            reach = halfDiagonal + reachStep
-        }
+        let reach = halfDiagonal + reachStep
         // 画面の中央の位置(現在地からの距離と方角)。画面の中央を軸に回しても変わらない。
         let center = CGPoint(x: size.width / 2 - observer.x, y: (chartTop + chartBottom) / 2 - observer.y)
         let centerKm = Double(hypot(center.x, center.y) / pxPerKm)
         let centerBearingDeg = Heading.normalize(headingDeg + atan2(Double(center.x), Double(-center.y)) * 180 / .pi)
 
         let key = PeakSelection.Key(mountains: mountains, pxPerKm: pxPerKm, observerAltitudeM: altitudeM,
-            textScale: textScale, maxPeaks: maxPeaks, reach: observerOnScreen ? reach : nil, width: size.width, chartHeight: chartBottom - chartTop)
+            textScale: textScale, maxPeaks: maxPeaks, width: size.width, chartHeight: chartBottom - chartTop)
         let selection = peakSelection
-        // 画面の周りの円から選んだあとは、画面の角がその円からはみ出すまで選び直さない。
-        let outOfCircle = !observerOnScreen
-            && PeakLayout.planeDistanceKm(centerKm, centerBearingDeg, selection.centerKm, selection.centerBearingDeg)
-                + Double(halfDiagonal / pxPerKm) > selection.radiusKm
+        // 選んだあとは、向きを変えたり地図を動かしたりして、画面の角が円からはみ出すまで選び直さない。
+        let outOfCircle = PeakLayout.planeDistanceKm(centerKm, centerBearingDeg, selection.centerKm, selection.centerBearingDeg)
+            + Double(halfDiagonal / pxPerKm) > selection.radiusKm
         if selection.key != key || outOfCircle {
             let viewArea = Double(size.width * (chartBottom - chartTop))
-            let reachKm = Double(reach / pxPerKm)
-            selection.centerKm = observerOnScreen ? 0 : centerKm
-            selection.centerBearingDeg = observerOnScreen ? 0 : centerBearingDeg
-            selection.radiusKm = reachKm
+            selection.centerKm = centerKm
+            selection.centerBearingDeg = centerBearingDeg
+            selection.radiusKm = Double(reach / pxPerKm)
             selection.selected = PeakLayout.candidates(
                 mountains, observerAltitudeM: altitudeM, keptIds: selection.selectedIds,
-                reachKm: reachKm,
+                reachKm: selection.radiusKm,
                 limit: PeakLayout.aroundLimit(maxPeaks: maxPeaks, reach: Double(reach), viewArea: viewArea),
-                centerKm: selection.centerKm,
-                centerBearingDeg: selection.centerBearingDeg
+                centerKm: centerKm,
+                centerBearingDeg: centerBearingDeg,
+                drawnIds: selection.drawnIds
             ).map { m in
                 let icon = PeakIcon.of(m.mountain.elevationClass)
                 let label = measuredText(ctx, m.mountain.name, size: styles.label, color: tapeInk)
@@ -665,8 +653,8 @@ private struct SelectedPeak {
     let box: ScreenBox
 }
 
-/// 選び直すかどうかを決める刻み。現在地から画面の角までの距離をこの刻みで切り上げ、画面の周りの円はこの分だけ広く取る。
-/// 地図を少し動かしただけでは選び直さない。
+/// 候補を選ぶ円を、画面の角(画面の中央から対角線の半分)より広く取る幅。
+/// 地図を少し動かしたり向きを少し変えたりしただけでは選び直さない(ヘディングアップでは、向きを 10〜15° ほど変えるごとに選び直す)。
 private let reachStep: CGFloat = 64
 
 /// 新しく画面に出す山に求める、ほかの山との余白(pt)。境目で出たり消えたりしないようにする。
@@ -675,7 +663,8 @@ private let newPeakMargin = 4.0
 /// 代表の山にまとめた山のアイコンの濃さ。代表の山と見分けられるように薄くする。
 private let memberIconAlpha = 0.45
 
-/// 方位盤に出す山の候補。向きによらずに周り全体(双眼鏡が画面の外なら画面の周りの円)から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
+/// 方位盤に出す山の候補。画面より一回り大きい、画面の周りの円から選び、山の一覧・表示範囲などが変わったときと、
+/// 画面がその円からはみ出したときだけ選び直す。
 /// 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
 private final class PeakSelection {
     struct Key: Equatable {
@@ -684,8 +673,6 @@ private final class PeakSelection {
         let observerAltitudeM: Double?
         let textScale: Double
         let maxPeaks: Int
-        /// 現在地の周り全体から選ぶときの円の半径。画面の周りの円から選ぶときは nil。
-        let reach: CGFloat?
         let width: CGFloat
         let chartHeight: CGFloat
     }
@@ -694,7 +681,7 @@ private final class PeakSelection {
     var selected: [SelectedPeak] = []
     var selectedIds: Set<Int64> = []
     var drawnIds: Set<Int64> = []
-    /// 画面の周りの円から選んだときの、円の中心(現在地からの距離と方角)と半径(km)。
+    /// 候補を選んだ円の中心(現在地からの距離と方角)と半径(km)。
     var centerKm = 0.0
     var centerBearingDeg = 0.0
     var radiusKm = 0.0

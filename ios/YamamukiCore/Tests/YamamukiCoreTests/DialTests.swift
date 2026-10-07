@@ -120,6 +120,14 @@ final class PeakLayoutTests: XCTestCase {
             .map(\.mountain.name), ["筑波山", "宝篋山"])
     }
 
+    func testCandidatesKeepDrawnPeaks() {
+        let high = m("高い", 3000, 10), mid = m("中", 2000, 10), low = m("低い", 1000, 10), out = m("外", 500, 40)
+        // 前回描いた「低い」は上限によらず残し、残りの枠を優先順に埋める。円の外の山は描いていても残さない。
+        let drawn: Set<Int64> = [low.mountain.osmId, out.mountain.osmId]
+        XCTAssertEqual(PeakLayout.candidates([high, mid, low, out], observerAltitudeM: 0, keptIds: [], reachKm: 20, limit: 2, drawnIds: drawn)
+            .map(\.mountain.name), ["高い", "低い"])
+    }
+
     func testPlaneDistance() {
         XCTAssertEqual(PeakLayout.planeDistanceKm(3, 0, 4, 90), 5, accuracy: 1e-9)
         XCTAssertEqual(PeakLayout.planeDistanceKm(1, 350, 1, 170), 2, accuracy: 1e-9)

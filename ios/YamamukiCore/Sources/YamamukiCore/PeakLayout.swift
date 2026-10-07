@@ -34,9 +34,10 @@ public struct PeakGroup<T> {
 
 /// 方位盤に出す山の選び方。2 段階で決める。
 ///
-/// 1. 候補を選ぶ([candidates])。山の一覧・表示範囲・文字の大きさなどが変わったときだけ、
-///    現在地の周り全体(360°)から仰角の大きい順に選ぶ。手動位置モードで双眼鏡が画面の外にあるときは、
-///    画面の周りの円から選ぶ(遠くの現在地の周りの山に、画面の山が押し出されないようにする)。
+/// 1. 候補を選ぶ([candidates])。画面より一回り大きい、画面の周りの円から仰角の大きい順に選ぶ。
+///    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
+///    山の一覧・表示範囲・文字の大きさなどが変わったときと、向きを変えたり地図を動かしたりして画面が円からはみ出したときだけ選び直す。
+///    前回描いた山は、円の中にある限り候補に残す。
 /// 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
 ///    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
 ///    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
@@ -72,6 +73,7 @@ public enum PeakLayout {
 
     /// 候補の山。[priorityOrder] の順で、円の中心から [reachKm] 以内(画面に入りうる距離)の山を最大 [limit] 件。
     /// 円の中心は、現在地から [centerBearingDeg] の方角へ [centerKm] 離れた点。0 なら現在地。
+    /// 前回描いた山([drawnIds])は、円の中にあれば上限によらず残す(選び直したときに、描いている山が消えないようにする)。
     public static func candidates(
         _ mountains: [NearbyMountain],
         observerAltitudeM: Double?,
@@ -79,11 +81,17 @@ public enum PeakLayout {
         reachKm: Double,
         limit: Int,
         centerKm: Double = 0,
-        centerBearingDeg: Double = 0
+        centerBearingDeg: Double = 0,
+        drawnIds: Set<Int64> = []
     ) -> [NearbyMountain] {
-        Array(priorityOrder(mountains, observerAltitudeM: observerAltitudeM, keptIds: keptIds)
+        let inReach = priorityOrder(mountains, observerAltitudeM: observerAltitudeM, keptIds: keptIds)
             .filter { planeDistanceKm($0.distanceKm, $0.bearingDeg, centerKm, centerBearingDeg) <= reachKm }
-            .prefix(max(limit, 0)))
+        var room = max(limit, 0) - inReach.filter { drawnIds.contains($0.mountain.osmId) }.count
+        return inReach.filter { m in
+            if drawnIds.contains(m.mountain.osmId) { return true }
+            room -= 1
+            return room >= 0
+        }
     }
 
     /// 現在地から見た 2 点(距離 km と方角)の、方位盤の平面上での距離(km)。
@@ -92,8 +100,8 @@ public enum PeakLayout {
         return (max(0, aKm * aKm + bKm * bKm - 2 * aKm * bKm * cos(delta))).squareRoot()
     }
 
-    /// 周り全体から選ぶ山の上限。画面に [maxPeaks] 件までの密度になるよう、
-    /// 現在地から [reach] の円の面積と画面の面積 [viewArea] の比で増やす。
+    /// 候補の円から選ぶ山の上限。画面に [maxPeaks] 件までの密度になるよう、
+    /// 半径 [reach] の円の面積と画面の面積 [viewArea] の比で増やす。
     public static func aroundLimit(maxPeaks: Int, reach: Double, viewArea: Double) -> Int {
         guard viewArea > 0, maxPeaks > 0 else { return max(maxPeaks, 0) }
         let ratio = max(1, Double.pi * reach * reach / viewArea)

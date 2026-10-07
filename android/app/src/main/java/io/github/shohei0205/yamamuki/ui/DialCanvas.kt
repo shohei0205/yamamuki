@@ -54,7 +54,6 @@ import io.github.shohei0205.yamamuki.core.PeakLayout
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.elevationClass
 import kotlin.math.atan2
-import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -336,7 +335,8 @@ private class SelectedPeak(
 )
 
 /**
- * 方位盤に出す山の候補。向きによらずに周り全体(双眼鏡が画面の外なら画面の周りの円)から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
+ * 方位盤に出す山の候補。画面より一回り大きい、画面の周りの円から選び、山の一覧・表示範囲などが変わったときと、
+ * 画面がその円からはみ出したときだけ選び直す。
  * 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
  */
 private class PeakSelection {
@@ -344,15 +344,15 @@ private class PeakSelection {
     var selected: List<SelectedPeak> = emptyList()
     var selectedIds: Set<Long> = emptySet()
     var drawnIds: Set<Long> = emptySet()
-    /** 画面の周りの円から選んだときの、円の中心(現在地からの距離と方角)と半径(km)。 */
+    /** 候補を選んだ円の中心(現在地からの距離と方角)と半径(km)。 */
     var centerKm = 0.0
     var centerBearingDeg = 0.0
     var radiusKm = 0.0
 }
 
 /**
- * 選び直すかどうかを決める刻み。現在地から画面の角までの距離をこの刻みで切り上げ、画面の周りの円はこの分だけ広く取る。
- * 地図を少し動かしただけでは選び直さない。
+ * 候補を選ぶ円を、画面の角(画面の中央から対角線の半分)より広く取る幅。
+ * 地図を少し動かしたり向きを少し変えたりしただけでは選び直さない(ヘディングアップでは、向きを 10〜15° ほど変えるごとに選び直す)。
  */
 private val REACH_STEP = 64.dp
 
@@ -375,42 +375,31 @@ private fun DrawScope.drawPeaks(
     val gap = 2.dp.toPx()
     val chartBottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()
 
-    val step = REACH_STEP.toPx()
-    // 双眼鏡が画面(とそのすぐ外)にあれば、向きを変えても選び直さずに済むよう、現在地の周り全体から選ぶ。
-    // 画面の外にあれば、画面の周りの円から選ぶ。現在地の周り全体からだと、遠くの現在地の周りの山に候補の数を取られ、
-    // 画面の山が拡大率のわずかな違いで候補から外れたり戻ったりする。
-    val observerOnScreen = observer.x in -step..size.width + step && observer.y in chartTop - step..chartBottom + step
-    val reachPx = if (observerOnScreen) {
-        // 山の位置が画面に入りうる、現在地からの最大の距離(画面の最も遠い角まで)。
-        val farthestCorner = listOf(Offset(0f, chartTop), Offset(size.width, chartTop), Offset(0f, chartBottom), Offset(size.width, chartBottom))
-            .maxOf { (it - observer).getDistance() }
-        ceil(farthestCorner / step) * step
-    } else {
-        hypot(size.width, chartBottom - chartTop) / 2 + step
-    }
+    // 候補は、画面より一回り大きい、画面の周りの円から選ぶ。現在地の周り全体から選ぶと、ほかの方角の山に候補の数を取られ、
+    // 向けた先に山が出なかったり、拡大率のわずかな違いで画面の山が候補から外れたり戻ったりする。
+    val halfDiagonal = hypot(size.width, chartBottom - chartTop) / 2
+    val reachPx = halfDiagonal + REACH_STEP.toPx()
     // 画面の中央の位置(現在地からの距離と方角)。画面の中央を軸に回しても変わらない。
     val center = Offset(size.width / 2, (chartTop + chartBottom) / 2) - observer
     val centerKm = (center.getDistance() / pxPerKm).toDouble()
     val centerBearingDeg = Heading.normalize(headingDeg + Math.toDegrees(atan2(center.x.toDouble(), -center.y.toDouble())))
 
-    val key = listOf(mountains, pxPerKm, observerAltitudeM, styles, maxPeaks, size.width, chartBottom - chartTop,
-        if (observerOnScreen) reachPx else null)
-    // 画面の周りの円から選んだあとは、画面の角がその円からはみ出すまで選び直さない。
-    val outOfCircle = !observerOnScreen &&
-        PeakLayout.planeDistanceKm(centerKm, centerBearingDeg, selection.centerKm, selection.centerBearingDeg) +
-        hypot(size.width, chartBottom - chartTop) / 2 / pxPerKm > selection.radiusKm
+    val key = listOf(mountains, pxPerKm, observerAltitudeM, styles, maxPeaks, size.width, chartBottom - chartTop)
+    // 選んだあとは、向きを変えたり地図を動かしたりして、画面の角が円からはみ出すまで選び直さない。
+    val outOfCircle = PeakLayout.planeDistanceKm(centerKm, centerBearingDeg, selection.centerKm, selection.centerBearingDeg) +
+        halfDiagonal / pxPerKm > selection.radiusKm
     if (selection.key != key || outOfCircle) {
         val viewArea = size.width.toDouble() * (chartBottom - chartTop)
-        val reachKm = (reachPx / pxPerKm).toDouble()
-        selection.centerKm = if (observerOnScreen) 0.0 else centerKm
-        selection.centerBearingDeg = if (observerOnScreen) 0.0 else centerBearingDeg
-        selection.radiusKm = reachKm
+        selection.centerKm = centerKm
+        selection.centerBearingDeg = centerBearingDeg
+        selection.radiusKm = (reachPx / pxPerKm).toDouble()
         selection.selected = PeakLayout.candidates(
             mountains, observerAltitudeM, selection.selectedIds,
-            reachKm = reachKm,
+            reachKm = selection.radiusKm,
             limit = PeakLayout.aroundLimit(maxPeaks, reachPx.toDouble(), viewArea),
-            centerKm = selection.centerKm,
-            centerBearingDeg = selection.centerBearingDeg,
+            centerKm = centerKm,
+            centerBearingDeg = centerBearingDeg,
+            drawnIds = selection.drawnIds,
         ).map { m ->
             val icon = PeakIcon.of(m.mountain.elevationClass())
             val halfWidth = icon.halfWidthDp.dp.toPx()
