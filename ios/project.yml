@@ -32,6 +32,9 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        # 暗号は iOS 標準のもの(URLSession の HTTPS、CryptoKit の SHA-256)しか使わないので、輸出規制の対象外と宣言する。
+        # これで TestFlight へのアップロードのたびに輸出コンプライアンスを聞かれなくなる。
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
       # 山データの manifest は、Debug は開発版(peaks-dev/)、Release は正式版(peaks/)を読む(DialModel.peakDataDev)。
       configs:
         Debug:
