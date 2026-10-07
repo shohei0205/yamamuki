@@ -73,15 +73,57 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(m.sourceTimestamp, "2026-09-30T20:21:22Z")
     }
 
+    /// yamamuki-data の README.md の manifest 版 5 と同じ形。件数は pointCount、データ本体の版は dataSchemaVersion。
+    private func manifestV5(dataSchemaVersion: String = "5", sourceTimestamp: String? = "2026-09-30T20:21:22Z") -> Data {
+        let source = sourceTimestamp.map { #""sourceTimestamp":"\#($0)","# } ?? ""
+        return Data("""
+        {"schemaVersion":5,"dataSchemaVersion":\(dataSchemaVersion),"name":"山頂","version":"v1",
+         "fileName":"osm-peaks.json.gz","downloadUrl":"https://example.com/osm-peaks.json.gz",
+         "sha256":"\(gzipSha256)","sizeBytes":\(gzip.count),"uncompressedSizeBytes":460,"pointCount":2,\(source)
+         "license":"ODbL-1.0","attribution":"© OpenStreetMap contributors"}
+        """.utf8)
+    }
+
+    func testParsesManifestV5() throws {
+        let m = try PeakData.parseManifest(manifestV5())
+        XCTAssertEqual(m.schemaVersion, 5)
+        XCTAssertEqual(m.downloadUrl.absoluteString, "https://example.com/osm-peaks.json.gz")
+        XCTAssertEqual(m.mountainCount, 2)
+        XCTAssertEqual(m.sourceTimestamp, "2026-09-30T20:21:22Z")
+        // 版 5 では元データの日時を省略できる。
+        XCTAssertEqual(try PeakData.parseManifest(manifestV5(sourceTimestamp: nil)).sourceTimestamp, "")
+    }
+
     func testManifestUrlFollowsBuildType() {
-        XCTAssertEqual(PeakData.manifestUrl(dev: true).absoluteString, "https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json")
+        XCTAssertEqual(PeakData.manifestUrl(dev: true).absoluteString, "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json")
         XCTAssertEqual(PeakData.manifestUrl(dev: false).absoluteString, "https://shohei0205.github.io/yamamuki-data/peaks/manifest.json")
     }
 
     func testRejectsUnknownSchemaVersion() {
-        XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 5))) { error in
+        XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 6))) { error in
             XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
         }
+        XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 3)))
+    }
+
+    func testRejectsUnknownDataSchemaVersion() {
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV5(dataSchemaVersion: "6"))) { error in
+            XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
+        }
+        // データ本体の版が分からないときは、manifest の版から推測せずに断る。
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV5(dataSchemaVersion: "null")))
+    }
+
+    func testParsesPointsV5() throws {
+        // 地点データ版 5。osmId の無い地点と、山頂以外の種別の地点は飛ばす。種別の無い地点は山頂として読む。
+        // 中身は Android の PeakDataTest.parsesPointsV5 と同じ 4 件を、Python の gzip.compress(mtime=0) で圧縮したもの。
+        let v5 = Data(base64Encoded:
+            "H4sIAAAAAAAC/4uuVspMUbJSUDJU0lFQKqksSAVxClITs0H8/OJcT5CsIZCdl5gLlnu6cePLBU0g2ZzEksyS0hSQqLGpngFIJD8vHSZkaGwBFkvNSS0DKszP8wUJGhiABUsS04uB3GilZ9OXPpuz5vnMfU8n9AJNVoqt1VGAOckI2QlGSE54vmLd046lT3b0PpvRh+kQQywOMUR4Lq80JwfJEmMUfycWZWfmpSPba4xk78vlE17s7nq6YAumpUZYLDVCssYEW/DCzPUP9lV43Lji5bRFLxsWP9k943HjxMeN6563LHzc2AIKFAzbjLHYZlwbCwDxOcQXzQEAAA=="
+        )!
+        XCTAssertEqual(try PeakData.parseMountains(v5), [
+            Mountain(osmId: 1, name: "山頂", latitude: 35.0, longitude: 138.0, elevationM: 100.0),
+            Mountain(osmId: 2, name: "種別不明", latitude: 35.1, longitude: 138.1, elevationM: nil),
+        ])
     }
 
     func testRejectsBrokenManifest() {

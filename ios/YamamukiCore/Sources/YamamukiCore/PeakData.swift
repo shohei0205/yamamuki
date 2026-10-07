@@ -10,7 +10,7 @@ import Compression
 #endif
 
 /// yamamuki-data が配る全国の山頂データの、最新版の目印(manifest.json)。
-/// 形式は yamamuki-data の peaks/README.md の「置き場所」にある。
+/// 形式は yamamuki-data の README.md の「manifest.json」と、points/README.md にある。
 public struct PeakManifest: Equatable, Sendable {
     public let schemaVersion: Int
     /// データの版。生成時の UTC 日時と Actions の実行 ID をつないだ文字列。
@@ -21,8 +21,9 @@ public struct PeakManifest: Equatable, Sendable {
     public let sha256: String
     /// データ本体のバイト数。
     public let sizeBytes: Int
+    /// 収録した山の数。版 4 は mountainCount、版 5 は pointCount。
     public let mountainCount: Int
-    /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。
+    /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。
     public let sourceTimestamp: String
 }
 
@@ -68,16 +69,26 @@ public protocol PeakDataSource: Sendable {
 public enum PeakData {
     /// 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)はこれを読む。
     /// 開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
-    public static let devManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json")!
+    /// yamamuki-data の新しい置き場所(points/osm-peaks-dev/)で、manifest は版 5。
+    public static let devManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json")!
 
     /// 正式版の最新版の manifest の URL。配布用のビルド(Release)はこれを読む。
+    /// 配布済みのアプリ(0.5.0 まで)のために yamamuki-data が残している置き場所で、manifest は版 4。
     public static let stableManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/peaks/manifest.json")!
 
     /// ビルドの種類に合う manifest の URL。
     public static func manifestUrl(dev: Bool) -> URL { dev ? devManifestUrl : stableManifestUrl }
 
-    /// 読める manifest の形式の版。版 4 で downloadUrl が入った。山ごとの項目は版 2 から変わっていない。
-    public static let supportedSchemaVersion = 4
+    /// 読める manifest の形式の版。版 4 で downloadUrl が入った。版 5 で件数が pointCount になり、
+    /// データ本体の版(dataSchemaVersion)が別に書かれるようになった。
+    public static let supportedSchemaVersions: Set<Int> = [4, 5]
+
+    /// 読めるデータ本体の版(manifest 版 5 の dataSchemaVersion)。地点データ版 5 は、山ごとの項目(osmId・name・latitude・
+    /// longitude・elevationM)が版 4 までと同じで、読み仮名などの項目が増えただけなので、そのまま読める。
+    public static let supportedDataSchemaVersions: Set<Int> = [5]
+
+    /// 地点データ版 5 の、山頂の種別。
+    static let peakType = "peak"
 
     /// これより大きいデータは受け取らない。今は約 0.45 MB で、yamamuki-data も 5 MB を超えたら公開を止める。
     public static let maxSizeBytes = 20_000_000
@@ -118,8 +129,15 @@ public enum PeakData {
         }
 
         let schemaVersion = try int("schemaVersion")
-        guard schemaVersion == supportedSchemaVersion else {
+        guard supportedSchemaVersions.contains(schemaVersion) else {
             throw PeakDataError("このアプリが読めない形式の山データです(形式の版 \(schemaVersion))。アプリを更新してください。")
+        }
+        // 版 5 は、データ本体の版が分からなければ読めないものとして扱う(manifest の版から推測しない)。
+        if schemaVersion >= 5 {
+            let dataSchemaVersion = root["dataSchemaVersion"] == nil ? nil : try? int("dataSchemaVersion")
+            guard let dataSchemaVersion, supportedDataSchemaVersions.contains(dataSchemaVersion) else {
+                throw PeakDataError("このアプリが読めない形式の山データです(データの版 \(dataSchemaVersion.map(String.init) ?? "不明"))。アプリを更新してください。")
+            }
         }
         let downloadText = try string("downloadUrl")
         guard downloadText.hasPrefix("https://"), let downloadUrl = URL(string: downloadText) else {
@@ -131,8 +149,8 @@ public enum PeakData {
             downloadUrl: downloadUrl,
             sha256: try string("sha256").lowercased(),
             sizeBytes: try int("sizeBytes"),
-            mountainCount: try int("mountainCount"),
-            sourceTimestamp: try string("sourceTimestamp")
+            mountainCount: try int(schemaVersion >= 5 ? "pointCount" : "mountainCount"),
+            sourceTimestamp: schemaVersion >= 5 ? root["sourceTimestamp"] as? String ?? "" : try string("sourceTimestamp")
         )
         guard (1...maxSizeBytes).contains(manifest.sizeBytes) else {
             throw PeakDataError("manifest のサイズ \(manifest.sizeBytes) バイトは受け取れません")
@@ -156,7 +174,8 @@ public enum PeakData {
         #endif
     }
 
-    /// gzip を展開し、JSON 配列の山を読む。名前・座標のない項目は飛ばす。
+    /// gzip を展開し、JSON 配列の山を読む。名前・座標・osmId のない項目と、山頂以外の種別(type)の項目は飛ばす。
+    /// 種別の無い項目(版 4 までと、版 5 で種別不明のもの)は山頂として読む。
     public static func parseMountains(_ gzip: Data) throws -> [Mountain] {
         let json = try gunzip(gzip)
         guard let items = (try? JSONSerialization.jsonObject(with: json)) as? [Any] else {
@@ -165,6 +184,7 @@ public enum PeakData {
         var seen = Set<Int64>()
         return items.compactMap { item -> Mountain? in
             guard let m = item as? [String: Any],
+                  (m["type"] as? String ?? peakType) == peakType,
                   let osmId = (m["osmId"] as? NSNumber)?.int64Value,
                   let name = (m["name"] as? String)?.trimmingCharacters(in: .whitespaces), !name.isEmpty,
                   let latitude = (m["latitude"] as? NSNumber)?.doubleValue,
