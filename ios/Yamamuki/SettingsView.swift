@@ -13,7 +13,7 @@ struct SettingsView: View {
 
     var body: some View {
         let settings = model.settings
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(Strings.text("settings_section_peaks")) {
                     StepSlider(
@@ -89,8 +89,6 @@ struct SettingsView: View {
                 }
             }
         }
-        // iOS 15 でも使えるよう NavigationView にする。1 画面だけなので分割表示にはしない。
-        .navigationViewStyle(.stack)
         .onAppear { model.refreshCacheInfo() }
     }
 
