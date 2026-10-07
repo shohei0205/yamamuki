@@ -19,6 +19,7 @@
 - `ios/Yamamuki/` iOS アプリ。方位盤の描画（`DialCanvasView`）、画面（`DialView`）、設定（`SettingsView`）、現在地と方位の取得（`LocationService`）。画面の文言は `Localizable.xcstrings` にまとめ、Android の `android/app/src/main/res/values/strings.xml` と同じキー名にしている。
 - `ios/YamamukiUITests/` iOS アプリの UI テスト（XCUITest）。アプリを起動して方位盤と設定の画面を開き、画面を撮る。
 - `ios/project.yml` Xcode プロジェクトの設定（[XcodeGen](https://github.com/yonaskolb/XcodeGen) 用）。`ios/Yamamuki.xcodeproj` はここから生成し、git には入れない。
+- `site/` GitHub Pages で公開するページ（プライバシーポリシー `site/privacy/index.html` → https://shohei0205.github.io/yamamuki/privacy/ ）。main に入ると `.github/workflows/pages.yml` で公開する（Settings → Pages の Source は「GitHub Actions」）。
 
 ## 開発環境
 
