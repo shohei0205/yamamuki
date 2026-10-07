@@ -85,8 +85,8 @@
     <string name="settings_min_elevation_all">すべて表示</string>
     <string name="settings_min_elevation_value">標高 %1$,d m 以上を表示</string>
     <string name="settings_min_elevation_description">0 m で全て表示します。絞り込み時は標高不明の山を除外します。</string>
-    <string name="settings_max_peaks">表示する山の数（最大 %1$d 件）</string>
-    <string name="settings_max_peaks_description">大きく見える山（見上げる角度の大きい山）から順に表示します。重なる山は山名を省き、代表の山にまとめます。</string>
+    <string name="settings_max_peaks">最大表示件数（%1$d 件）</string>
+    <string name="settings_max_peaks_description">方位盤上に表示する山の数を変更します。</string>
     <string name="settings_section_display">表示</string>
     <string name="settings_text_size">文字の大きさ</string>
     <string name="settings_text_size_small">小</string>
