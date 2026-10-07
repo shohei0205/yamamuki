@@ -1,4 +1,4 @@
-﻿# <img src="docs/images/app-icon.png" width="48" alt="" align="middle"> 山むき
+﻿# <img src="docs/images/app-icon.png" width="40" alt="" align="top"> 山むき
 
 スマホを向けた方向に見える山を、山名付きで表示する Android / iOS アプリ。山をタップすると標高などの詳細が見られる。
 
