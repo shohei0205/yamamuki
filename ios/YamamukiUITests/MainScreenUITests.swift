@@ -30,7 +30,7 @@ final class MainScreenUITests: XCTestCase {
         opener.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
         // 設定の一覧は画面に入った行だけが作られるので、見つかるまで上へめくる。
-        let update = app.buttons.matching(NSPredicate(format: "label == '山データを取得' OR label == '更新を確認'")).firstMatch
+        let update = app.buttons.matching(NSPredicate(format: "label == '山データを更新' OR label == '更新を確認'")).firstMatch
         for _ in 0..<4 where !update.exists {
             app.swipeUp()
         }

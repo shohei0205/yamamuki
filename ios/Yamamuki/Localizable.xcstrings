@@ -1031,7 +1031,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得しました"
+            "value": "山データを更新しました"
           }
         }
       }
@@ -1262,7 +1262,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得"
+            "value": "山データを更新"
           }
         }
       }

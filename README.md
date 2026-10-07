@@ -153,7 +153,7 @@ open Yamamuki.xcodeproj
 全国の山頂データ(約 14,000 件、約 0.45 MB)を [yamamuki-data](https://github.com/shohei0205/yamamuki-data) から取得し、端末に保存する。方位盤は保存したデータだけで表示し、自分では通信しない。
 
 - 初回起動時に「山データを取得」を聞く。「取得する」を選ぶとすぐに取得し、「あとで」を選んだときは設定画面の「山データ」から取得できる。位置情報の許可はこのあとに聞く。
-- 設定画面の「山データを取得」(取得済みなら「更新を確認」)で取り直せる。新しい版がなければ確認だけで終わる。
+- 設定画面の「山データを更新」(取得済みなら「更新を確認」)で取り直せる。新しい版がなければ確認だけで終わる。
 - 取得先の manifest はビルドの種類で変わる。正式版の manifest はまだ公開されていないので、今は配布用のビルドでは取得できない。
   - 開発用(Android の debug、iOS の Debug): `https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json`(開発版)
   - 配布用(Android の release、iOS の Release): `https://shohei0205.github.io/yamamuki-data/peaks/manifest.json`(正式版。仮)

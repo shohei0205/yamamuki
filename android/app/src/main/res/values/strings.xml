@@ -73,7 +73,7 @@
     <string name="peak_data_prompt_later">あとで</string>
     <string name="peak_data_error_title">山データを取得できませんでした</string>
     <string name="peak_data_error_retry">もう一度取得</string>
-    <string name="peak_data_updated">山データを取得しました</string>
+    <string name="peak_data_updated">山データを更新しました</string>
     <string name="peak_data_up_to_date">最新の状態です</string>
     <string name="peak_data_error_invalid">山データを取り込めませんでした。\n%1$s</string>
     <string name="peak_data_error_no_response">サーバーから応答がありません。しばらくしてから再度お試しください。</string>
@@ -109,7 +109,7 @@
     <string name="settings_peak_data_summary">山 %1$,d 件・元データ %2$s・取得日 %3$s</string>
     <string name="settings_peak_data_description">山データを取得して端末に保存します。新しいデータがなければ確認のみ行います。</string>
     <string name="settings_peak_data_fetching">取得中…</string>
-    <string name="settings_peak_data_fetch">山データを取得</string>
+    <string name="settings_peak_data_fetch">山データを更新</string>
     <string name="settings_peak_data_check">更新を確認</string>
     <string name="settings_cache_title">保存データ</string>
     <string name="settings_cache_summary">山 %1$,d 件（取得済みの区画 %2$d 個）・容量 %3$s</string>
