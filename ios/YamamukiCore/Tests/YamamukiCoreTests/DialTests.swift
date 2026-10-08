@@ -145,6 +145,22 @@ final class PeakLayoutTests: XCTestCase {
             .map(\.mountain.name), ["正面"])
     }
 
+    func testHeightBonusGrowsWithRange() {
+        XCTAssertEqual(PeakLayout.heightBonus(elevationM: 2000, rangeKm: 20), 0, accuracy: 1e-9)
+        XCTAssertEqual(PeakLayout.heightBonus(elevationM: 2000, rangeKm: 40), 2, accuracy: 1e-9)
+        XCTAssertEqual(PeakLayout.heightBonus(elevationM: 2000, rangeKm: 60), 4, accuracy: 1e-9)
+        XCTAssertEqual(PeakLayout.heightBonus(elevationM: 2000, rangeKm: 80), 4, accuracy: 1e-9)
+        XCTAssertEqual(PeakLayout.heightBonus(elevationM: nil, rangeKm: 80), 0, accuracy: 1e-9)
+    }
+
+    func testWideRangePrefersHighPeaksFarAway() {
+        // 近くの低い山のほうが高く見えても、表示範囲が広いときは遠くの高い山を先にする。
+        let near = NearbyMountain(mountain: Mountain(osmId: 1, name: "近くの低い山", latitude: 0, longitude: 0, elevationM: 400), distanceKm: 5, bearingDeg: 0)
+        let far = NearbyMountain(mountain: Mountain(osmId: 2, name: "遠くの高い山", latitude: 0, longitude: 0, elevationM: 2500), distanceKm: 70, bearingDeg: 0)
+        XCTAssertEqual(PeakLayout.priorityOrder([near, far], observerAltitudeM: 0, rangeKm: 15).map(\.mountain.name), ["近くの低い山", "遠くの高い山"])
+        XCTAssertEqual(PeakLayout.priorityOrder([near, far], observerAltitudeM: 0, rangeKm: 80).map(\.mountain.name), ["遠くの高い山", "近くの低い山"])
+    }
+
     func testPlaneDistance() {
         XCTAssertEqual(PeakLayout.planeDistanceKm(3, 0, 4, 90), 5, accuracy: 1e-9)
         XCTAssertEqual(PeakLayout.planeDistanceKm(1, 350, 1, 170), 2, accuracy: 1e-9)

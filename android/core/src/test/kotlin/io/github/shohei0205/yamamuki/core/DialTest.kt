@@ -224,6 +224,26 @@ class PeakLayoutTest {
     }
 
     @Test
+    fun heightBonusGrowsWithRange() {
+        assertEquals(0.0, PeakLayout.heightBonus(2000.0, 20.0), 1e-9)
+        assertEquals(2.0, PeakLayout.heightBonus(2000.0, 40.0), 1e-9)
+        assertEquals(4.0, PeakLayout.heightBonus(2000.0, 60.0), 1e-9)
+        assertEquals(4.0, PeakLayout.heightBonus(2000.0, 80.0), 1e-9)
+        assertEquals(0.0, PeakLayout.heightBonus(null, 80.0), 1e-9)
+    }
+
+    @Test
+    fun wideRangePrefersHighPeaksFarAway() {
+        // 近くの低い山のほうが高く見えても、表示範囲が広いときは遠くの高い山を先にする。
+        val near = NearbyMountain(Mountain(1, "近くの低い山", 0.0, 0.0, 400.0), 5.0, 0.0)
+        val far = NearbyMountain(Mountain(2, "遠くの高い山", 0.0, 0.0, 2500.0), 70.0, 0.0)
+        assertEquals(listOf("近くの低い山", "遠くの高い山"),
+            PeakLayout.priorityOrder(listOf(near, far), 0.0, rangeKm = 15.0).map { it.mountain.name })
+        assertEquals(listOf("遠くの高い山", "近くの低い山"),
+            PeakLayout.priorityOrder(listOf(near, far), 0.0, rangeKm = 80.0).map { it.mountain.name })
+    }
+
+    @Test
     fun planeDistance() {
         assertEquals(5.0, PeakLayout.planeDistanceKm(3.0, 0.0, 4.0, 90.0), 1e-9)
         assertEquals(2.0, PeakLayout.planeDistanceKm(1.0, 350.0, 1.0, 170.0), 1e-9)

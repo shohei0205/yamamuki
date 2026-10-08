@@ -39,7 +39,7 @@ data class PeakGroup<T>(val peak: T, val members: List<T>)
  *    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
  *    山の一覧・表示範囲・文字の大きさなどが変わったときと、向きを変えたり地図を動かしたりして画面が円からはみ出したときだけ選び直す。
  *    前回描いた山は、円の中にある限り候補に残す。
- *    ヘディングアップでは、正面に近い山ほど優先する([forwardBonus])。
+ *    ヘディングアップでは、正面に近い山ほど優先する([forwardBonus])。表示範囲を広げるほど、高い山を優先する([heightBonus])。
  * 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
  *    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
  *    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
@@ -70,18 +70,40 @@ object PeakLayout {
         FORWARD_BONUS_DEG * max(0.0, 1 - abs(Heading.delta(headingDeg, bearingDeg)) / FORWARD_SPAN_DEG)
 
     /**
+     * ヘディングアップで表示範囲を広げたときに、標高 1000m あたり仰角に上乗せする値の最大(°)。
+     * 遠くまで表示しているときは、近くの低い山より遠くの高い山の名前を知りたいことが多いため。
+     */
+    const val HEIGHT_BONUS_DEG_PER_KM = 2.0
+
+    /** 標高の上乗せを始める表示範囲(km)。これより狭いときは上乗せしない。 */
+    const val HEIGHT_BONUS_START_KM = 20.0
+
+    /** 標高の上乗せを最大にする表示範囲(km)。[HEIGHT_BONUS_START_KM] からここまで、だんだん増やす。 */
+    const val HEIGHT_BONUS_FULL_KM = 60.0
+
+    /** 表示範囲([rangeKm])に応じた、標高([elevationM])の上乗せ(°)。標高が分からない山は 0。 */
+    fun heightBonus(elevationM: Double?, rangeKm: Double): Double {
+        val elevation = elevationM ?: return 0.0
+        val weight = ((rangeKm - HEIGHT_BONUS_START_KM) / (HEIGHT_BONUS_FULL_KM - HEIGHT_BONUS_START_KM)).coerceIn(0.0, 1.0)
+        return weight * HEIGHT_BONUS_DEG_PER_KM * max(0.0, elevation) / 1000
+    }
+
+    /**
      * 選ぶ順。[displayPriority] の順に、前回選んだ山([keptIds]、OSM の ID)は [KEPT_BONUS_DEG] だけ上乗せする。
-     * ヘディングアップでは向いている方角([headingDeg])を渡し、正面に近い山に [forwardBonus] を上乗せする。
+     * ヘディングアップでは向いている方角([headingDeg])と表示範囲([rangeKm])を渡し、
+     * 正面に近い山に [forwardBonus] を、表示範囲が広いときは高い山に [heightBonus] を上乗せする。
      */
     fun priorityOrder(
         mountains: List<NearbyMountain>,
         observerAltitudeM: Double?,
         keptIds: Set<Long> = emptySet(),
         headingDeg: Double? = null,
+        rangeKm: Double? = null,
     ): List<NearbyMountain> {
         fun score(m: NearbyMountain) =
             m.displayScore(observerAltitudeM) + (if (m.mountain.osmId in keptIds) KEPT_BONUS_DEG else 0.0) +
-                (headingDeg?.let { forwardBonus(m.bearingDeg, it) } ?: 0.0)
+                (headingDeg?.let { forwardBonus(m.bearingDeg, it) } ?: 0.0) +
+                (rangeKm?.let { heightBonus(m.mountain.elevationM, it) } ?: 0.0)
         return mountains.sortedWith(compareByDescending<NearbyMountain> { score(it) }.thenBy { it.distanceKm })
     }
 

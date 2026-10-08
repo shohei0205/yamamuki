@@ -38,7 +38,7 @@ public struct PeakGroup<T> {
 ///    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
 ///    山の一覧・表示範囲・文字の大きさなどが変わったときと、向きを変えたり地図を動かしたりして画面が円からはみ出したときだけ選び直す。
 ///    前回描いた山は、円の中にある限り候補に残す。
-///    ヘディングアップでは、正面に近い山ほど優先する([forwardBonus])。
+///    ヘディングアップでは、正面に近い山ほど優先する([forwardBonus])。表示範囲を広げるほど、高い山を優先する([heightBonus])。
 /// 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
 ///    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
 ///    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
@@ -64,17 +64,37 @@ public enum PeakLayout {
         forwardBonusDeg * max(0, 1 - abs(Heading.delta(headingDeg, bearingDeg)) / forwardSpanDeg)
     }
 
+    /// ヘディングアップで表示範囲を広げたときに、標高 1000m あたり仰角に上乗せする値の最大(°)。
+    /// 遠くまで表示しているときは、近くの低い山より遠くの高い山の名前を知りたいことが多いため。
+    public static let heightBonusDegPerKm = 2.0
+
+    /// 標高の上乗せを始める表示範囲(km)。これより狭いときは上乗せしない。
+    public static let heightBonusStartKm = 20.0
+
+    /// 標高の上乗せを最大にする表示範囲(km)。[heightBonusStartKm] からここまで、だんだん増やす。
+    public static let heightBonusFullKm = 60.0
+
+    /// 表示範囲([rangeKm])に応じた、標高([elevationM])の上乗せ(°)。標高が分からない山は 0。
+    public static func heightBonus(elevationM: Double?, rangeKm: Double) -> Double {
+        guard let elevation = elevationM else { return 0 }
+        let weight = min(max((rangeKm - heightBonusStartKm) / (heightBonusFullKm - heightBonusStartKm), 0), 1)
+        return weight * heightBonusDegPerKm * max(0, elevation) / 1000
+    }
+
     /// 選ぶ順。[displayPriority] の順に、前回選んだ山([keptIds]、OSM の ID)は [keptBonusDeg] だけ上乗せする。
-    /// ヘディングアップでは向いている方角([headingDeg])を渡し、正面に近い山に [forwardBonus] を上乗せする。
+    /// ヘディングアップでは向いている方角([headingDeg])と表示範囲([rangeKm])を渡し、
+    /// 正面に近い山に [forwardBonus] を、表示範囲が広いときは高い山に [heightBonus] を上乗せする。
     public static func priorityOrder(
         _ mountains: [NearbyMountain],
         observerAltitudeM: Double?,
         keptIds: Set<Int64> = [],
-        headingDeg: Double? = nil
+        headingDeg: Double? = nil,
+        rangeKm: Double? = nil
     ) -> [NearbyMountain] {
         func score(_ m: NearbyMountain) -> Double {
             m.displayScore(observerAltitudeM: observerAltitudeM) + (keptIds.contains(m.mountain.osmId) ? keptBonusDeg : 0)
                 + (headingDeg.map { forwardBonus(bearingDeg: m.bearingDeg, headingDeg: $0) } ?? 0)
+                + (rangeKm.map { heightBonus(elevationM: m.mountain.elevationM, rangeKm: $0) } ?? 0)
         }
         return mountains
             .map { (m: $0, score: score($0)) }

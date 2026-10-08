@@ -1185,7 +1185,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "最大表示数（%1$ld 件）"
+            "value": "山名の最大数（%1$ld 件）"
           }
         }
       }
@@ -1196,7 +1196,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位盤上に表示する山の数を変更します。"
+            "value": "1画面に出す山名の数を変更します。"
           }
         }
       }
