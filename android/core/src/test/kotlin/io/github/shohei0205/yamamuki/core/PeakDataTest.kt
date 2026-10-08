@@ -51,10 +51,39 @@ class PeakDataTest {
         assertEquals("2026-09-30T20:21:22Z", m.sourceTimestamp)
     }
 
+    // yamamuki-data の README.md の manifest 版 5 と同じ形。件数は pointCount、データ本体の版は dataSchemaVersion。
+    private fun manifestV5(dataSchemaVersion: String = "5", sourceTimestamp: String? = "2026-09-30T20:21:22Z") = """
+        {"schemaVersion":5,"dataSchemaVersion":$dataSchemaVersion,"name":"山頂","version":"v1",
+         "fileName":"osm-peaks.json.gz","downloadUrl":"https://example.com/osm-peaks.json.gz",
+         "sha256":"${sha256(gzip)}","sizeBytes":${gzip.size},"uncompressedSizeBytes":${json.length},"pointCount":2,
+         ${sourceTimestamp?.let { "\"sourceTimestamp\":\"$it\"," }.orEmpty()}
+         "license":"ODbL-1.0","attribution":"© OpenStreetMap contributors"}
+    """.trimIndent()
+
+    @Test
+    fun parsesManifestV5() {
+        val m = PeakData.parseManifest(manifestV5())
+        assertEquals(5, m.schemaVersion)
+        assertEquals("https://example.com/osm-peaks.json.gz", m.downloadUrl)
+        assertEquals(2, m.mountainCount)
+        assertEquals("2026-09-30T20:21:22Z", m.sourceTimestamp)
+        // 版 5 では元データの日時を省略できる。
+        assertEquals("", PeakData.parseManifest(manifestV5(sourceTimestamp = null)).sourceTimestamp)
+    }
+
     @Test
     fun rejectsUnknownSchemaVersion() {
-        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 5)) }
+        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 6)) }
         assertTrue(e.message!!.contains("アプリを更新"))
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 3)) }
+    }
+
+    @Test
+    fun rejectsUnknownDataSchemaVersion() {
+        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "6")) }
+        assertTrue(e.message!!.contains("アプリを更新"))
+        // データ本体の版が分からないときは、manifest の版から推測せずに断る。
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "null")) }
     }
 
     @Test
@@ -82,6 +111,23 @@ class PeakDataTest {
                 Mountain(12, "名無し標高", 43.5, 142.9, null),
             ),
             mountains,
+        )
+    }
+
+    @Test
+    fun parsesPointsV5() {
+        // 地点データ版 5。osmId の無い地点と、山頂以外の種別の地点は飛ばす。種別の無い地点は山頂として読む。
+        val v5 = gzip(
+            """
+            [{"id":"1","type":"peak","osmId":1,"name":"山頂","latitude":35.0,"longitude":138.0,"elevationM":100.0,"tags":["日本百名山"]},
+             {"id":"2","osmId":2,"name":"種別不明","latitude":35.1,"longitude":138.1,"type":null},
+             {"id":"3","type":"parking","osmId":3,"name":"駐車場","latitude":35.2,"longitude":138.2},
+             {"id":"4","type":"peak","name":"OSM と関連付けの無い山","latitude":35.3,"longitude":138.3}]
+            """.trimIndent(),
+        )
+        assertEquals(
+            listOf(Mountain(1, "山頂", 35.0, 138.0, 100.0), Mountain(2, "種別不明", 35.1, 138.1, null)),
+            PeakData.parseMountains(v5),
         )
     }
 
@@ -209,7 +255,7 @@ class PeakDataTest {
 
     @Test
     fun manifestUrlFollowsBuildType() {
-        assertEquals("https://shohei0205.github.io/yamamuki-data/peaks-dev/manifest.json", PeakData.manifestUrl(dev = true))
+        assertEquals("https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json", PeakData.manifestUrl(dev = true))
         assertEquals("https://shohei0205.github.io/yamamuki-data/peaks/manifest.json", PeakData.manifestUrl(dev = false))
     }
 
