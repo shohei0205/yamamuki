@@ -67,12 +67,12 @@ public protocol PeakDataSource: Sendable {
 }
 
 public enum PeakData {
-    /// 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)はこれを読む。
+    /// 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先に開発版を選んだときに読む。
     /// 開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
     /// yamamuki-data の新しい置き場所(points/osm-peaks-dev/)で、manifest は版 5。
     public static let devManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json")!
 
-    /// 正式版の最新版の manifest の URL。配布用のビルド(Release)はこれを読む。
+    /// 正式版の最新版の manifest の URL。配布用のビルド(Release)と、取得先を選ばなかった開発用のビルドはこれを読む。
     /// 配布済みのアプリ(0.5.0 まで)のために yamamuki-data が残している置き場所で、manifest は版 4。
     public static let stableManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/peaks/manifest.json")!
 

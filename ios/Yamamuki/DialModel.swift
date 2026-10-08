@@ -80,7 +80,7 @@ final class DialModel: ObservableObject {
     /// これ以上移動したら、保存済みのデータを読み直す。
     private static let refetchDistanceKm = 1.0
 
-    /// 開発版の山データ(peaks-dev/)を読むか。Debug のビルドだけ project.yml で PEAK_DATA_DEV を付ける。
+    /// 開発版の山データを読むか。Debug のビルドで PEAK_DATA_SOURCE を dev にしたときだけ、project.yml で PEAK_DATA_DEV が付く。
     #if PEAK_DATA_DEV
     private static let peakDataDev = true
     #else

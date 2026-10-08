@@ -155,10 +155,14 @@ open Yamamuki.xcodeproj
 
 - 初回起動時に「山データを取得」を聞く。「取得する」を選ぶとすぐに取得し、「あとで」を選んだときは設定画面の「山データ」から取得できる。位置情報の許可はこのあとに聞く。
 - 設定画面の「山データを更新」(取得済みなら「更新を確認」)で取り直せる。新しい版がなければ確認だけで終わる。
-- 取得先の manifest はビルドの種類で変わる。
-  - 開発用(Android の debug、iOS の Debug): `https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json`(開発版。manifest は版 5)
-  - 配布用(Android の release、iOS の Release): `https://shohei0205.github.io/yamamuki-data/peaks/manifest.json`(正式版。配布済みのアプリのために yamamuki-data が残している置き場所で、manifest は版 4)
-  - 切り替えは Android が `android/app/build.gradle.kts` の `PEAK_DATA_DEV`、iOS が `ios/project.yml` の Debug の `SWIFT_ACTIVE_COMPILATION_CONDITIONS`(`PEAK_DATA_DEV`)。URL は core の `PeakData` にある。
+- 取得先の manifest は 2 つある。URL は core の `PeakData` にある。
+  - 正式版: `https://shohei0205.github.io/yamamuki-data/peaks/manifest.json`(yamamuki-data の main が公開する。配布済みのアプリのために残している置き場所で、manifest は版 4)
+  - 開発版: `https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json`(yamamuki-data の dev が公開する。manifest は版 5)
+- 配布用のビルド(Android の release、iOS の Release)は、いつも正式版を読む。
+- 開発用のビルド(Android の debug、iOS の Debug)も、既定では正式版を読む。開発版のデータを試すときだけ、ビルドのときに取得先を切り替える。画面からは切り替えられない。
+  - Android: Gradle のプロパティ `peakDataSource=dev` を付ける(例: `./gradlew :app:installDebug -PpeakDataSource=dev`。`~/.gradle/gradle.properties` に書いてもよい)。`android/app/build.gradle.kts` で `BuildConfig.PEAK_DATA_DEV` になる。
+  - iOS: ビルド設定 `PEAK_DATA_SOURCE` を `dev` にする(例: `xcodebuild ... PEAK_DATA_SOURCE=dev`。Xcode ではターゲットの Build Settings の User-Defined で変える。`xcodegen generate` で `stable` に戻る)。`ios/project.yml` で `PEAK_DATA_DEV` の条件が付く。
+  - 取得先を切り替えた開発版は、前の取得先の版と違えば取り直し、保存している山データを入れ替える。
 - manifest は前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「もう一度取得」で取り直せる)。
 - 対応する manifest の形式は schemaVersion 4 と 5。版 5 では、データ本体の版(`dataSchemaVersion`)が 5 のときだけ取り込む。知らない版や、データ本体の版が書かれていないときは取り込まず、アプリの更新を促す。
 - 版 5 のデータ本体(地点データ)は、山ごとの項目が版 4 までと同じなので、同じ読み方で読む。山頂以外の種別(`type`)の地点と、`osmId` の無い地点は飛ばす。
