@@ -20,12 +20,15 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -41,7 +44,11 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.shohei0205.yamamuki.core.Box
@@ -128,7 +135,7 @@ fun DialCanvas(
     summit: NearbyMountain? = null,
     /** 現在地の標高(海抜)。方位の表示の後ろに添え、山の仰角の計算にも使う。null なら出さない(仰角は 0m とみなす)。 */
     altitudeM: Double? = null,
-    /** 一度に表示する山の上限。 */
+    /** 1 画面に出す山名の上限。山名を出さない山はアイコンだけで描く。 */
     maxPeaks: Int = 40,
     /** 文字の大きさ(標準 = 1.0 に対する倍率)。 */
     textScale: Float = 1f,
@@ -354,6 +361,8 @@ private class PeakSelection {
     var shownIds: Set<Long> = emptySet()
     /** 候補を選んだ円の中にある、すべての山。 */
     var around: List<NearbyMountain> = emptyList()
+    /** 山アイコンの画像。 */
+    val sprites = PeakIconSprites()
     /** 山名の濃さ(0〜1)。山名を出す山は 1 へ、山名を外した山は 0 へ近づける。0 になったら除く。 */
     val labelAlpha = HashMap<Long, Float>()
     /** 山名を出さない山のアイコンの濃さ。画面の外へ出た山は除く。 */
@@ -573,7 +582,7 @@ private fun DrawScope.drawPeaks(
             continue
         }
         selection.iconAlpha[id] = alpha
-        drawPeakIcon(p, icon, alpha = alpha, shadow = false)
+        drawPeakIcon(selection.sprites, p, icon, alpha = alpha, shadow = false)
         if (underText || target <= 0f) continue
         iconTargets += if (owner != null) {
             PlacedPeak(owner.peak.mountain, p, owner.peak.label, iconBox, owner.members.map { it.mountain })
@@ -588,7 +597,7 @@ private fun DrawScope.drawPeaks(
     // 山名を外した山は、アイコンをアイコンだけの濃さへ、山名を透明へ近づけながら描く。
     for ((peak, alpha) in fadingOut) {
         val icon = PeakIcon.of(peak.mountain.mountain.elevationClass())
-        drawPeakIcon(peak.position, icon, alpha = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha), shadow = false)
+        drawPeakIcon(selection.sprites, peak.position, icon, alpha = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha), shadow = false)
         drawNameChip(peak, gap, icon.color, alpha)
     }
     val reps = groups.mapIndexed { i, group ->
@@ -596,7 +605,7 @@ private fun DrawScope.drawPeaks(
         val p = peak.position
         val icon = PeakIcon.of(peak.mountain.mountain.elevationClass())
         val alpha = selection.labelAlpha[peak.mountain.mountain.osmId] ?: 1f
-        drawPeakIcon(p, icon, alpha = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha), shadow = alpha >= 1f)
+        drawPeakIcon(selection.sprites, p, icon, alpha = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha), shadow = alpha >= 1f)
         drawNameChip(peak, gap, icon.color, alpha)
         var box = peak.box
         othersLabels[i]?.let { (others, below) ->
@@ -700,10 +709,60 @@ private enum class PeakIcon(val halfWidthDp: Float, val heightDp: Float, val col
 }
 
 /**
- * 山アイコンを描く。白い縁と影で地面の色から浮かせ、右の斜面を少し暗くして立体に見せる。
+ * 山アイコンを [p](底辺の中点)に描く。[sprites] に覚えた画像を、濃さ([alpha])を変えて貼る。
+ * 1 画面に数百のアイコンを描くことがあるので、毎回形を作って描くより軽くする。
+ * 位置は画素にそろえて貼り、画像がにじまないようにする。
+ */
+private fun DrawScope.drawPeakIcon(sprites: PeakIconSprites, p: Offset, icon: PeakIcon, alpha: Float = 1f, shadow: Boolean = true) {
+    val sprite = sprites.get(this, icon, shadow)
+    drawImage(
+        sprite.image,
+        dstOffset = IntOffset(p.x.roundToInt() - sprite.anchor.x, p.y.roundToInt() - sprite.anchor.y),
+        dstSize = IntSize(sprite.image.width, sprite.image.height),
+        alpha = alpha,
+    )
+}
+
+/**
+ * 山アイコンの画像。標高の区分と影の有無ごとに一度だけ描いて覚え、画面の画素の細かさが変わったら描き直す。
+ * 画像にしておくと、薄く描いたときもアイコン全体が一様に薄くなる(縁や斜面が本体から透けない)。
+ */
+private class PeakIconSprites {
+    class Sprite(val image: ImageBitmap, val anchor: IntOffset)
+
+    private var density = 0f
+    private val sprites = HashMap<Pair<PeakIcon, Boolean>, Sprite>()
+
+    fun get(scope: DrawScope, icon: PeakIcon, shadow: Boolean): Sprite {
+        if (scope.density != density) {
+            sprites.clear()
+            density = scope.density
+        }
+        return sprites.getOrPut(icon to shadow) {
+            with(scope) {
+                // 白い縁と影がはみ出す分の余白をとる。山の頂は高さの 1.07 倍まで膨らむ。
+                val pad = 3.dp.toPx()
+                val halfWidth = icon.halfWidthDp.dp.toPx()
+                val height = icon.heightDp.dp.toPx()
+                val anchor = IntOffset((pad + halfWidth).roundToInt(), (pad + height * 1.1f).roundToInt())
+                val image = ImageBitmap((anchor.x * 2), (anchor.y + pad + 1.5.dp.toPx()).roundToInt())
+                CanvasDrawScope().draw(
+                    Density(scope.density, scope.fontScale), LayoutDirection.Ltr, GraphicsCanvas(image),
+                    Size(image.width.toFloat(), image.height.toFloat()),
+                ) {
+                    drawPeakIconShape(Offset(anchor.x.toFloat(), anchor.y.toFloat()), icon, shadow)
+                }
+                Sprite(image, anchor)
+            }
+        }
+    }
+}
+
+/**
+ * 山アイコンの形を描く。白い縁と影で地面の色から浮かせ、右の斜面を少し暗くして立体に見せる。
  * 形の点は、底辺の中点を原点に、横は半幅、縦は高さを 1 とした割合で決める(iOS と同じ)。
  */
-private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon, alpha: Float = 1f, shadow: Boolean = true) {
+private fun DrawScope.drawPeakIconShape(p: Offset, icon: PeakIcon, shadow: Boolean, alpha: Float = 1f) {
     val w = icon.halfWidthDp.dp.toPx()
     val h = icon.heightDp.dp.toPx()
     fun x(f: Float) = p.x + f * w

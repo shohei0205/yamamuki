@@ -4,7 +4,7 @@ import YamamukiCore
 /// 最低標高スライダーの上限と刻み。
 private let maxMinElevationM = 3000
 private let minElevationStepM = 100
-private let maxPeaksStep = 10
+private let maxPeaksStep = 5
 
 /// 設定画面。方位盤の左下の設定ボタンで開く。
 struct SettingsView: View {
