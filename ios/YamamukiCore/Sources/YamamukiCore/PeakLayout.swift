@@ -34,8 +34,11 @@ public struct PeakGroup<T> {
 
 /// 方位盤に出す山の選び方。2 段階で決める。
 ///
-/// 1. 候補を選ぶ([candidates])。山の一覧・表示範囲・文字の大きさなどが変わったときだけ、
-///    現在地の周り全体(360°)から仰角の大きい順に選ぶ。
+/// 1. 候補を選ぶ([candidates])。画面より一回り大きい、画面の周りの円から仰角の大きい順に選ぶ。
+///    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
+///    山の一覧・表示範囲・文字の大きさなどが変わったときと、向きを変えたり地図を動かしたりして画面が円からはみ出したときだけ選び直す。
+///    前回描いた山は、円の中にある限り候補に残す。
+///    ヘディングアップでは、正面に近い山ほど優先する([forwardBonus])。
 /// 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
 ///    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
 ///    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
@@ -49,14 +52,29 @@ public enum PeakLayout {
     /// 尾根続きでも別の山として数えたい隣の峰(数 km 先)は入りにくい長さにする。
     public static let neighborKm = 3.0
 
+    /// ヘディングアップで、正面にある山の仰角に上乗せする値(°)。正面から離れるほど減らし、
+    /// 視野の扇の端([forwardSpanDeg])で 0 にする。向けた先の山が、横の山に押し出されにくくする。
+    public static let forwardBonusDeg = 1.0
+
+    /// [forwardBonusDeg] を上乗せする、正面からの角度の範囲(°)。視野の扇の片側の幅。
+    public static let forwardSpanDeg = DialGeometry.tapeSpanDeg / 2
+
+    /// 正面([headingDeg])からのずれに応じた上乗せ(°)。正面で [forwardBonusDeg]、[forwardSpanDeg] より外で 0。
+    public static func forwardBonus(bearingDeg: Double, headingDeg: Double) -> Double {
+        forwardBonusDeg * max(0, 1 - abs(Heading.delta(headingDeg, bearingDeg)) / forwardSpanDeg)
+    }
+
     /// 選ぶ順。[displayPriority] の順に、前回選んだ山([keptIds]、OSM の ID)は [keptBonusDeg] だけ上乗せする。
+    /// ヘディングアップでは向いている方角([headingDeg])を渡し、正面に近い山に [forwardBonus] を上乗せする。
     public static func priorityOrder(
         _ mountains: [NearbyMountain],
         observerAltitudeM: Double?,
-        keptIds: Set<Int64> = []
+        keptIds: Set<Int64> = [],
+        headingDeg: Double? = nil
     ) -> [NearbyMountain] {
         func score(_ m: NearbyMountain) -> Double {
             m.displayScore(observerAltitudeM: observerAltitudeM) + (keptIds.contains(m.mountain.osmId) ? keptBonusDeg : 0)
+                + (headingDeg.map { forwardBonus(bearingDeg: m.bearingDeg, headingDeg: $0) } ?? 0)
         }
         return mountains
             .map { (m: $0, score: score($0)) }
@@ -69,21 +87,39 @@ public enum PeakLayout {
         GeoMath.distanceKm(a.mountain.latitude, a.mountain.longitude, b.mountain.latitude, b.mountain.longitude) <= neighborKm
     }
 
-    /// 候補の山。[priorityOrder] の順で、現在地から [reachKm] 以内(画面に入りうる距離)の山を最大 [limit] 件。
+    /// 候補の山。[priorityOrder] の順で、円の中心から [reachKm] 以内(画面に入りうる距離)の山を最大 [limit] 件。
+    /// 円の中心は、現在地から [centerBearingDeg] の方角へ [centerKm] 離れた点。0 なら現在地。
+    /// 前回描いた山([drawnIds])は、円の中にあれば上限によらず残す(選び直したときに、描いている山が消えないようにする)。
+    /// [headingDeg] は [priorityOrder] に渡す(ヘディングアップのときだけ)。
     public static func candidates(
         _ mountains: [NearbyMountain],
         observerAltitudeM: Double?,
         keptIds: Set<Int64>,
         reachKm: Double,
-        limit: Int
+        limit: Int,
+        centerKm: Double = 0,
+        centerBearingDeg: Double = 0,
+        drawnIds: Set<Int64> = [],
+        headingDeg: Double? = nil
     ) -> [NearbyMountain] {
-        Array(priorityOrder(mountains, observerAltitudeM: observerAltitudeM, keptIds: keptIds)
-            .filter { $0.distanceKm <= reachKm }
-            .prefix(max(limit, 0)))
+        let inReach = priorityOrder(mountains, observerAltitudeM: observerAltitudeM, keptIds: keptIds, headingDeg: headingDeg)
+            .filter { planeDistanceKm($0.distanceKm, $0.bearingDeg, centerKm, centerBearingDeg) <= reachKm }
+        var room = max(limit, 0) - inReach.filter { drawnIds.contains($0.mountain.osmId) }.count
+        return inReach.filter { m in
+            if drawnIds.contains(m.mountain.osmId) { return true }
+            room -= 1
+            return room >= 0
+        }
     }
 
-    /// 周り全体から選ぶ山の上限。画面に [maxPeaks] 件までの密度になるよう、
-    /// 現在地から [reach] の円の面積と画面の面積 [viewArea] の比で増やす。
+    /// 現在地から見た 2 点(距離 km と方角)の、方位盤の平面上での距離(km)。
+    public static func planeDistanceKm(_ aKm: Double, _ aBearingDeg: Double, _ bKm: Double, _ bBearingDeg: Double) -> Double {
+        let delta = Heading.delta(aBearingDeg, bBearingDeg) * .pi / 180
+        return (max(0, aKm * aKm + bKm * bKm - 2 * aKm * bKm * cos(delta))).squareRoot()
+    }
+
+    /// 候補の円から選ぶ山の上限。画面に [maxPeaks] 件までの密度になるよう、
+    /// 半径 [reach] の円の面積と画面の面積 [viewArea] の比で増やす。
     public static func aroundLimit(maxPeaks: Int, reach: Double, viewArea: Double) -> Int {
         guard viewArea > 0, maxPeaks > 0 else { return max(maxPeaks, 0) }
         let ratio = max(1, Double.pi * reach * reach / viewArea)

@@ -234,20 +234,37 @@ struct DialCanvasView: View, Animatable {
         let gap: CGFloat = 2
         let chartBottom = size.height - originBottom
 
-        // 山の位置が画面に入りうる、現在地からの最大の距離(画面の最も遠い角まで)。
-        let corners = [CGPoint(x: 0, y: chartTop), CGPoint(x: size.width, y: chartTop), CGPoint(x: 0, y: chartBottom), CGPoint(x: size.width, y: chartBottom)]
-        let farthestCorner = corners.map { hypot($0.x - observer.x, $0.y - observer.y) }.max() ?? 0
-        let reach = (farthestCorner / reachStep).rounded(.up) * reachStep
+        // 候補は、画面より一回り大きい、画面の周りの円から選ぶ。現在地の周り全体から選ぶと、ほかの方角の山に候補の数を取られ、
+        // 向けた先に山が出なかったり、拡大率のわずかな違いで画面の山が候補から外れたり戻ったりする。
+        let halfDiagonal = hypot(size.width, chartBottom - chartTop) / 2
+        let reach = halfDiagonal + reachStep
+        // 画面の中央の位置(現在地からの距離と方角)。画面の中央を軸に回しても変わらない。
+        let center = CGPoint(x: size.width / 2 - observer.x, y: (chartTop + chartBottom) / 2 - observer.y)
+        let centerKm = Double(hypot(center.x, center.y) / pxPerKm)
+        let centerBearingDeg = Heading.normalize(headingDeg + atan2(Double(center.x), Double(-center.y)) * 180 / .pi)
+
+        // ヘディングアップでは、正面に近い山を優先する(向けた先の山が、横の山に押し出されにくくする)。
+        let forwardHeading: Double? = headingUp ? headingDeg : nil
 
         let key = PeakSelection.Key(mountains: mountains, pxPerKm: pxPerKm, observerAltitudeM: altitudeM,
-            textScale: textScale, maxPeaks: maxPeaks, reach: reach, width: size.width, chartHeight: chartBottom - chartTop)
+            textScale: textScale, maxPeaks: maxPeaks, width: size.width, chartHeight: chartBottom - chartTop, headingUp: headingUp)
         let selection = peakSelection
-        if selection.key != key {
+        // 選んだあとは、向きを変えたり地図を動かしたりして、画面の角が円からはみ出すまで選び直さない。
+        let outOfCircle = PeakLayout.planeDistanceKm(centerKm, centerBearingDeg, selection.centerKm, selection.centerBearingDeg)
+            + Double(halfDiagonal / pxPerKm) > selection.radiusKm
+        if selection.key != key || outOfCircle {
             let viewArea = Double(size.width * (chartBottom - chartTop))
+            selection.centerKm = centerKm
+            selection.centerBearingDeg = centerBearingDeg
+            selection.radiusKm = Double(reach / pxPerKm)
             selection.selected = PeakLayout.candidates(
                 mountains, observerAltitudeM: altitudeM, keptIds: selection.selectedIds,
-                reachKm: Double(reach / pxPerKm),
-                limit: PeakLayout.aroundLimit(maxPeaks: maxPeaks, reach: Double(reach), viewArea: viewArea)
+                reachKm: selection.radiusKm,
+                limit: PeakLayout.aroundLimit(maxPeaks: maxPeaks, reach: Double(reach), viewArea: viewArea),
+                centerKm: centerKm,
+                centerBearingDeg: centerBearingDeg,
+                drawnIds: selection.drawnIds,
+                headingDeg: forwardHeading
             ).map { m in
                 let icon = PeakIcon.of(m.mountain.elevationClass)
                 let label = measuredText(ctx, m.mountain.name, size: styles.label, color: tapeInk)
@@ -264,13 +281,23 @@ struct DialCanvasView: View, Animatable {
             selection.key = key
         }
 
-        let visible: [PlacedPeak] = selection.selected.compactMap { s -> PlacedPeak? in
+        var visible: [PlacedPeak] = selection.selected.compactMap { s -> PlacedPeak? in
             let o = DialGeometry.project(distanceKm: s.mountain.distanceKm, bearingDeg: s.mountain.bearingDeg, headingDeg: headingDeg)
             let p = CGPoint(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
-            guard p.x >= 0, p.x <= size.width, p.y - PeakIcon.maxHeight >= chartTop, p.y < chartBottom else { return nil }
+            // 上端では、描いている山(アイコンだけの山を含む)は山の位置が上端を越えるまで残し、新しく出す山はアイコン全体が入ってから出す。
+            // 正面の少し先の山は、向きをわずかに変えるだけで上端を出入りするため(正面に向けたときが最も上に来る)。
+            let top = selection.shownIds.contains(s.mountain.mountain.osmId) ? chartTop : chartTop + PeakIcon.maxHeight
+            guard p.x >= 0, p.x <= size.width, p.y >= top, p.y < chartBottom else { return nil }
             return PlacedPeak(mountain: s.mountain, position: p, box: ScreenBox(
                 left: Double(p.x) + s.box.left, top: Double(p.y) + s.box.top,
                 right: Double(p.x) + s.box.right, bottom: Double(p.y) + s.box.bottom))
+        }
+        if let forwardHeading {
+            // ヘディングアップでは、今の向きで正面に近い山を先に置く。
+            let order = PeakLayout.priorityOrder(visible.map(\.mountain), observerAltitudeM: altitudeM,
+                keptIds: selection.selectedIds, headingDeg: forwardHeading)
+            let rank = Dictionary(order.enumerated().map { ($1.mountain.osmId, $0) }, uniquingKeysWith: { a, _ in a })
+            visible.sort { (rank[$0.mountain.mountain.osmId] ?? 0) < (rank[$1.mountain.mountain.osmId] ?? 0) }
         }
         let groups = PeakLayout.placeVisible(
             visible,
@@ -282,6 +309,7 @@ struct DialCanvasView: View, Animatable {
             margin: newPeakMargin
         )
         selection.drawnIds = Set(groups.map { $0.peak.mountain.mountain.osmId })
+        selection.shownIds = selection.drawnIds.union(groups.flatMap { $0.members.map(\.mountain.mountain.osmId) })
 
         // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
         let placedBoxes = groups.map(\.peak.box)
@@ -640,7 +668,8 @@ private struct SelectedPeak {
     let box: ScreenBox
 }
 
-/// 選び直すかどうかを決める、現在地から画面の角までの距離の刻み。地図を少し動かしただけでは選び直さない。
+/// 候補を選ぶ円を、画面の角(画面の中央から対角線の半分)より広く取る幅。
+/// 地図を少し動かしたり向きを少し変えたりしただけでは選び直さない(ヘディングアップでは、向きを 10〜15° ほど変えるごとに選び直す)。
 private let reachStep: CGFloat = 64
 
 /// 新しく画面に出す山に求める、ほかの山との余白(pt)。境目で出たり消えたりしないようにする。
@@ -649,7 +678,8 @@ private let newPeakMargin = 4.0
 /// 代表の山にまとめた山のアイコンの濃さ。代表の山と見分けられるように薄くする。
 private let memberIconAlpha = 0.45
 
-/// 方位盤に出す山の候補。向きによらずに周り全体から選び、山の一覧・表示範囲などが変わったときだけ選び直す。
+/// 方位盤に出す山の候補。画面より一回り大きい、画面の周りの円から選び、山の一覧・表示範囲などが変わったときと、
+/// 画面がその円からはみ出したときだけ選び直す。
 /// 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
 private final class PeakSelection {
     struct Key: Equatable {
@@ -658,15 +688,21 @@ private final class PeakSelection {
         let observerAltitudeM: Double?
         let textScale: Double
         let maxPeaks: Int
-        let reach: CGFloat
         let width: CGFloat
         let chartHeight: CGFloat
+        let headingUp: Bool
     }
 
     var key: Key?
     var selected: [SelectedPeak] = []
     var selectedIds: Set<Int64> = []
     var drawnIds: Set<Int64> = []
+    /// 前回描いた山と、そこにまとめてアイコンだけを描いた山。
+    var shownIds: Set<Int64> = []
+    /// 候補を選んだ円の中心(現在地からの距離と方角)と半径(km)。
+    var centerKm = 0.0
+    var centerBearingDeg = 0.0
+    var radiusKm = 0.0
 }
 
 private struct PlacedPeak {
