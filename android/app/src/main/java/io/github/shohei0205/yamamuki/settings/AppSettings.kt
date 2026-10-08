@@ -14,8 +14,8 @@ data class Settings(
     val minElevationM: Int = 0,
     /** 方位盤を表示している間は画面を消さない。 */
     val keepScreenOn: Boolean = false,
-    /** 方位盤に一度に出す山の上限。 */
-    val maxPeaks: Int = 40,
+    /** 方位盤の 1 画面に出す山名の上限。山名を出さない山はアイコンだけで描く。 */
+    val maxPeaks: Int = 15,
     /** 方位盤の文字の大きさ(標準 = 1.0 に対する倍率)。 */
     val textScale: Float = 1.0f,
     /** 起動時の表示範囲(現在地から画面上端までの距離)。 */
@@ -28,7 +28,7 @@ data class Settings(
     companion object {
         val TEXT_SCALES = listOf(0.85f, 1.0f, 1.2f, 1.4f)
         val INITIAL_RANGES_KM = listOf(5, 10, 15, 20, 30, 50)
-        val MAX_PEAKS_RANGE = 10..100
+        val MAX_PEAKS_RANGE = 5..30
     }
 }
 
@@ -68,7 +68,8 @@ class AppSettings(context: Context) {
         return Settings(
             minElevationM = prefs.getInt(KEY_MIN_ELEVATION, d.minElevationM),
             keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, d.keepScreenOn),
-            maxPeaks = prefs.getInt(KEY_MAX_PEAKS, d.maxPeaks),
+            // 以前は山の数(10〜100)だった。山名の数に変えたので、今の範囲に収める。
+            maxPeaks = prefs.getInt(KEY_MAX_PEAKS, d.maxPeaks).coerceIn(Settings.MAX_PEAKS_RANGE),
             textScale = prefs.getFloat(KEY_TEXT_SCALE, d.textScale),
             initialRangeKm = prefs.getInt(KEY_INITIAL_RANGE, d.initialRangeKm),
             sensorPrecision = SensorPrecision.entries.getOrNull(prefs.getInt(KEY_SENSOR_PRECISION, -1))

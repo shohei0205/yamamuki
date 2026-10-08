@@ -5,9 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -15,12 +20,15 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -36,7 +44,11 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.shohei0205.yamamuki.core.Box
@@ -50,9 +62,12 @@ import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.RingLabelGeometry
 import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.MapCenter
+import io.github.shohei0205.yamamuki.core.PeakGroup
 import io.github.shohei0205.yamamuki.core.PeakLayout
 import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.core.displayScore
 import io.github.shohei0205.yamamuki.core.elevationClass
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.max
@@ -120,7 +135,7 @@ fun DialCanvas(
     summit: NearbyMountain? = null,
     /** 現在地の標高(海抜)。方位の表示の後ろに添え、山の仰角の計算にも使う。null なら出さない(仰角は 0m とみなす)。 */
     altitudeM: Double? = null,
-    /** 一度に表示する山の上限。 */
+    /** 1 画面に出す山名の上限。山名を出さない山はアイコンだけで描く。 */
     maxPeaks: Int = 40,
     /** 文字の大きさ(標準 = 1.0 に対する倍率)。 */
     textScale: Float = 1f,
@@ -142,6 +157,11 @@ fun DialCanvas(
     val textMeasurer = rememberTextMeasurer(cacheSize = 512)
     val hitTargets = remember { HitTargets() }
     val peakSelection = remember { PeakSelection() }
+    // 山名をふわっと出し入れしている間だけ、毎フレーム描き直す。
+    var frameTick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(peakSelection.fading) {
+        if (peakSelection.fading) while (true) withFrameNanos { frameTick = it }
+    }
     val currentOnTap by rememberUpdatedState(onMountainTap)
     val currentOnGroupTap by rememberUpdatedState(onGroupTap)
     val currentOnObserverTap by rememberUpdatedState(onObserverTap)
@@ -159,6 +179,8 @@ fun DialCanvas(
     }
     // 距離の帯と視野の扇だけを画面下端の余白まで描くので、全体では切り抜かず、それ以外を描く範囲で切り抜く。
     Canvas(modifier.then(tapModifier)) {
+        // 読むだけで、山名の出し入れの間は毎フレーム描き直される。
+        peakSelection.frameTick = frameTick
         val headerHeight = DialGeometry.HEADER_HEIGHT_DP.dp.toPx()
         val tapeHeight = DialGeometry.TAPE_HEIGHT_DP.dp.toPx()
         val chartTop = DialGeometry.CHART_TOP_DP.dp.toPx()
@@ -327,13 +349,6 @@ private class HitTargets {
 private fun Box.contains(p: Offset, slop: Float) =
     p.x in left - slop..right + slop && p.y in top - slop..bottom + slop
 
-/** 選んだ山の 1 件。位置は現在地からの px(北が上)、範囲は山の位置を原点にしたもの。 */
-private class SelectedPeak(
-    val mountain: NearbyMountain,
-    val label: TextLayoutResult,
-    val box: Box,
-)
-
 /**
  * 方位盤に出す山の候補。画面より一回り大きい、画面の周りの円から選び、山の一覧・表示範囲などが変わったときと、
  * 画面がその円からはみ出したときだけ選び直す。
@@ -341,11 +356,25 @@ private class SelectedPeak(
  */
 private class PeakSelection {
     var key: List<Any?>? = null
-    var selected: List<SelectedPeak> = emptyList()
-    var selectedIds: Set<Long> = emptySet()
     var drawnIds: Set<Long> = emptySet()
     /** 前回描いた山と、そこにまとめてアイコンだけを描いた山。 */
     var shownIds: Set<Long> = emptySet()
+    /** 候補を選んだ円の中にある、すべての山。 */
+    var around: List<NearbyMountain> = emptyList()
+    /** 山アイコンの画像。 */
+    val sprites = PeakIconSprites()
+    /** 山名の濃さ(0〜1)。山名を出す山は 1 へ、山名を外した山は 0 へ近づける。0 になったら除く。 */
+    val labelAlpha = HashMap<Long, Float>()
+    /** 山名を出さない山のアイコンの濃さ。画面の外へ出た山は除く。 */
+    val iconAlpha = HashMap<Long, Float>()
+    /** 前回描いた時刻(ns)。山名とアイコンの濃さを時間に合わせて変える。 */
+    var lastNanos = 0L
+    var frameTick = 0L
+    /** 山名かアイコンの濃さを変えている途中か。途中の間は毎フレーム描き直す。 */
+    var fading by mutableStateOf(false)
+    /** 山ごとの山名と、山の位置を原点にしたアイコンと山名の範囲。文字の大きさが変わったら測り直す。 */
+    val labels = HashMap<Long, Pair<TextLayoutResult, Box>>()
+    var labelStyles: DialTextStyles? = null
     /** 候補を選んだ円の中心(現在地からの距離と方角)と半径(km)。 */
     var centerKm = 0.0
     var centerBearingDeg = 0.0
@@ -361,6 +390,26 @@ private val REACH_STEP = 64.dp
 /** 新しく画面に出す山に求める、ほかの山との余白。境目で出たり消えたりしないようにする。 */
 private val NEW_PEAK_MARGIN = 4.dp
 
+/**
+ * 方位盤に山を描く。表示の優先度は、現在地から見上げる角度(仰角、[displayScore])に、モードごとに次の値を上乗せして決める。
+ *
+ * ヘディングアップ(端末を向けた方向が上):
+ * - 正面に近い山ほど優先する。正面で +1°、視野の扇の端(左右 30°)で 0([PeakLayout.forwardBonus])。
+ * - 表示範囲を広げるほど高い山を優先する。表示範囲 20km から 60km にかけて、標高 1000m あたり 0° から 2° まで増やす
+ *   ([PeakLayout.heightBonus])。遠くまで表示しているときは、近くの低い山より遠くの高い山の名前を知りたいことが多いため。
+ * - 視野の扇の中の山は、山名を出さない山もアイコンだけで描く。扇の端の 8° では、外へ行くほど薄くする。
+ *
+ * 手動位置モード(地図を指で動かす):
+ * - 仰角だけで決める(向きと表示範囲による上乗せはしない)。
+ * - 画面の中央の円(直径は画面の幅)の中の山は、山名を出さない山もアイコンだけで描く。円の縁では、外へ行くほど薄くする。
+ *
+ * どちらのモードでも:
+ * - 前回描いた山は少し優先する([PeakLayout.KEPT_BONUS_DEG])。
+ * - 画面に入る山を優先度の高い順に置き、山名を [maxPeaks] 件まで出す。重なる山は山名を省き、代表の山の「ほか 3 山」にまとめる。
+ *   すぐそばの山どうし([PeakLayout.NEIGHBOR_KM] 以内)は、優先度によらず標高の高い山を代表にする。
+ * - 山名を出さない山のアイコンは、優先度が低いほど薄くする。山名や「ほか 3 山」にかかるアイコンは一番薄くする。
+ * - 山名とアイコンの濃さは時間をかけて変え、向きを変えたときに急に出たり消えたりしないようにする。
+ */
 private fun DrawScope.drawPeaks(
     observer: Offset,
     pxPerKm: Float,
@@ -390,61 +439,56 @@ private fun DrawScope.drawPeaks(
     val iconHeight = PeakIcon.MAX_HEIGHT_DP.dp.toPx()
     // ヘディングアップでは、正面に近い山を優先する(向けた先の山が、横の山に押し出されにくくする)。
     val forwardHeading = if (headingUp) headingDeg else null
+    // ヘディングアップでは、表示範囲を広げるほど高い山を優先する(遠くの高い山の名前を知りたいことが多いため)。
+    val headingUpRangeKm = if (headingUp) ((chartBottom - chartTop) / pxPerKm).toDouble() else null
+    fun score(m: NearbyMountain) =
+        m.displayScore(observerAltitudeM) + (headingUpRangeKm?.let { PeakLayout.heightBonus(m.mountain.elevationM, it) } ?: 0.0)
 
     val key = listOf(mountains, pxPerKm, observerAltitudeM, styles, maxPeaks, size.width, chartBottom - chartTop, headingUp)
     // 選んだあとは、向きを変えたり地図を動かしたりして、画面の角が円からはみ出すまで選び直さない。
     val outOfCircle = PeakLayout.planeDistanceKm(centerKm, centerBearingDeg, selection.centerKm, selection.centerBearingDeg) +
         halfDiagonal / pxPerKm > selection.radiusKm
     if (selection.key != key || outOfCircle) {
-        val viewArea = size.width.toDouble() * (chartBottom - chartTop)
         selection.centerKm = centerKm
         selection.centerBearingDeg = centerBearingDeg
         selection.radiusKm = (reachPx / pxPerKm).toDouble()
-        selection.selected = PeakLayout.candidates(
-            mountains, observerAltitudeM, selection.selectedIds,
-            reachKm = selection.radiusKm,
-            limit = PeakLayout.aroundLimit(maxPeaks, reachPx.toDouble(), viewArea),
-            centerKm = centerKm,
-            centerBearingDeg = centerBearingDeg,
-            drawnIds = selection.drawnIds,
-            headingDeg = forwardHeading,
-        ).map { m ->
-            val icon = PeakIcon.of(m.mountain.elevationClass())
-            val halfWidth = icon.halfWidthDp.dp.toPx()
-            val label = textMeasurer.measure(m.mountain.name, styles.label)
-            val labelHalf = label.size.width / 2f + LABEL_PAD_X.toPx()
-            val box = Box(
-                left = min(-halfWidth, -labelHalf),
-                top = -icon.heightDp.dp.toPx(),
-                right = max(halfWidth, labelHalf),
-                bottom = gap + label.size.height + LABEL_PAD_Y.toPx() * 2,
-            )
-            SelectedPeak(m, label, box)
+        selection.around = mountains.filter {
+            PeakLayout.planeDistanceKm(it.distanceKm, it.bearingDeg, centerKm, centerBearingDeg) <= selection.radiusKm
         }
-        selection.selectedIds = selection.selected.mapTo(HashSet()) { it.mountain.mountain.osmId }
+        if (selection.labelStyles != styles) {
+            selection.labels.clear()
+            selection.labelStyles = styles
+        }
         selection.key = key
     }
 
-    val visible = selection.selected
-        .map { s ->
-            val o = DialGeometry.project(s.mountain.distanceKm, s.mountain.bearingDeg, headingDeg)
-            s to Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
-        }
-        .filter { (s, p) ->
-            // 上端では、描いている山(アイコンだけの山を含む)は山の位置が上端を越えるまで残し、新しく出す山はアイコン全体が入ってから出す。
-            // 正面の少し先の山は、向きをわずかに変えるだけで上端を出入りするため(正面に向けたときが最も上に来る)。
-            val top = if (s.mountain.mountain.osmId in selection.shownIds) chartTop else chartTop + iconHeight
-            p.x in 0f..size.width && p.y >= top && p.y < chartBottom
-        }
-        .map { (s, p) ->
-            PlacedPeak(s.mountain, p, s.label, Box(p.x + s.box.left, p.y + s.box.top, p.x + s.box.right, p.y + s.box.bottom))
-        }
-        .let { peaks ->
-            // ヘディングアップでは、今の向きで正面に近い山を先に置く。
-            if (forwardHeading == null) return@let peaks
-            val rank = PeakLayout.priorityOrder(peaks.map { it.mountain }, observerAltitudeM, selection.selectedIds, forwardHeading)
-                .withIndex().associate { (i, m) -> m.mountain.osmId to i }
-            peaks.sortedBy { rank[it.mountain.mountain.osmId] }
+    // 画面に入る山すべてを、優先順に並べて山名の候補にする。山名の数は [maxPeaks] までにする。
+    // 上端では、描いている山(アイコンだけの山を含む)は山の位置が上端を越えるまで残し、新しく出す山はアイコン全体が入ってから出す。
+    // 正面の少し先の山は、向きをわずかに変えるだけで上端を出入りするため(正面に向けたときが最も上に来る)。
+    val onScreen = selection.around.mapNotNull { m ->
+        val o = DialGeometry.project(m.distanceKm, m.bearingDeg, headingDeg)
+        val p = Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
+        val top = if (m.mountain.osmId in selection.shownIds) chartTop else chartTop + iconHeight
+        if (p.x in 0f..size.width && p.y >= top && p.y < chartBottom) m to p else null
+    }
+    val positions = onScreen.associate { (m, p) -> m.mountain.osmId to p }
+    val visible = PeakLayout.priorityOrder(onScreen.map { it.first }, observerAltitudeM, selection.drawnIds, forwardHeading, headingUpRangeKm)
+        .map { m ->
+            val p = positions.getValue(m.mountain.osmId)
+            // 山名の大きさは山ごとに一度だけ測る(画面に入る山が多いと、毎回測ると重い)。
+            val (label, rel) = selection.labels.getOrPut(m.mountain.osmId) {
+                val icon = PeakIcon.of(m.mountain.elevationClass())
+                val halfWidth = icon.halfWidthDp.dp.toPx()
+                val label = textMeasurer.measure(m.mountain.name, styles.label)
+                val labelHalf = label.size.width / 2f + LABEL_PAD_X.toPx()
+                label to Box(
+                    left = min(-halfWidth, -labelHalf),
+                    top = -icon.heightDp.dp.toPx(),
+                    right = max(halfWidth, labelHalf),
+                    bottom = gap + label.size.height + LABEL_PAD_Y.toPx() * 2,
+                )
+            }
+            PlacedPeak(m, p, label, Box(p.x + rel.left, p.y + rel.top, p.x + rel.right, p.y + rel.bottom))
         }
     val groups = PeakLayout.placeVisible(
         visible,
@@ -457,6 +501,27 @@ private fun DrawScope.drawPeaks(
     )
     selection.drawnIds = groups.mapTo(HashSet()) { it.peak.mountain.mountain.osmId }
     selection.shownIds = selection.drawnIds + groups.flatMap { g -> g.members.map { it.mountain.mountain.osmId } }
+
+    // 山名は、出すときも外すときも [LABEL_FADE_SECONDS] かけて濃さを変える。外した山名は、薄くなりきるまでその場に描く。
+    val now = System.nanoTime()
+    val dt = if (!selection.fading || selection.lastNanos == 0L) 1f / 60 else ((now - selection.lastNanos) / 1e9f).coerceIn(0f, 0.1f)
+    selection.lastNanos = now
+    val fadeStep = dt / LABEL_FADE_SECONDS
+    for (id in selection.drawnIds) selection.labelAlpha[id] = min(1f, (selection.labelAlpha[id] ?: 0f) + fadeStep)
+    val visibleById = visible.associateBy { it.mountain.mountain.osmId }
+    val fadingOut = mutableListOf<Pair<PlacedPeak, Float>>()
+    val iterator = selection.labelAlpha.entries.iterator()
+    while (iterator.hasNext()) {
+        val entry = iterator.next()
+        if (entry.key in selection.drawnIds) continue
+        val peak = visibleById[entry.key]
+        val alpha = entry.value - fadeStep
+        if (peak == null || alpha <= 0f) iterator.remove() else {
+            entry.setValue(alpha)
+            fadingOut += peak to alpha
+        }
+    }
+    val fadingOutIds = fadingOut.mapTo(HashSet()) { it.first.mountain.mountain.osmId }
 
     // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
     val placedBoxes = groups.map { it.peak.box }
@@ -473,37 +538,108 @@ private fun DrawScope.drawPeaks(
     }
     val textBoxes = groups.map { labelBox(it.peak, gap) } + othersLabels.mapNotNull { it?.second }
 
-    // まとめた山のアイコンは薄く描き、代表の山のアイコンと山名を上に重ねる。標高が不明な山と、
-    // どれかの山名や「ほか 3 山」にかかる山は描かない(一覧には残る)。描いたアイコンを押すと一覧を開く。
-    val memberTargets = mutableListOf<PlacedPeak>()
-    for (group in groups) {
-        val members = group.members.map { it.mountain }
-        for (member in group.members) {
-            if (member.mountain.mountain.elevationM == null) continue
-            val icon = PeakIcon.of(member.mountain.mountain.elevationClass())
-            val p = member.position
-            val halfWidth = icon.halfWidthDp.dp.toPx()
-            val iconBox = Box(p.x - halfWidth, p.y - icon.heightDp.dp.toPx(), p.x + halfWidth, p.y)
-            if (textBoxes.any { it.intersects(iconBox) }) continue
-            drawPeakIcon(p, icon, alpha = MEMBER_ICON_ALPHA, shadow = false)
-            memberTargets += PlacedPeak(group.peak.mountain, p, group.peak.label, iconBox, members)
+    // 山名を出さない山のアイコンを描く。描くのは次の 2 つ。標高が不明な山は描かない(一覧には残る)。
+    // - まとめた山(「ほか 3 山」に数えた山)。押すと、まとめた山の一覧を開く。
+    // - 視界の正面(手動位置モードでは画面の中央)の山。山の多い方角から少ない方角へ向けたときに、
+    //   山が急に現れたように見えないようにする。範囲の縁では、外へ行くほど薄くする。
+    // 濃さは優先度のスコアが低いほど薄くし、山名や「ほか 3 山」にかかる山は一番薄くして、押しても反応しない(山名を押しやすくする)。
+    // 濃さは [ICON_FADE_SECONDS] かけて変え、まとめた山でなくなった山や範囲を出た山も、急に消さずにだんだん薄くする。
+    val focusCenter = Offset(size.width / 2, (chartTop + chartBottom) / 2)
+    val focusRadius = size.width * FOCUS_RADIUS_RATIO
+    val owners = HashMap<Long, PeakGroup<PlacedPeak>>()
+    for (group in groups) for (member in group.members) owners[member.mountain.mountain.osmId] = group
+    val iconStep = dt / ICON_FADE_SECONDS
+    val iconTargets = mutableListOf<PlacedPeak>()
+    var iconFading = false
+    for (peak in visible) {
+        val m = peak.mountain
+        val id = m.mountain.osmId
+        if (m.mountain.elevationM == null) continue
+        if (id in selection.drawnIds || id in fadingOutIds) {
+            // 山名を出している間は山名と一緒に描く。山名を外し終えたら、アイコンだけの濃さから続ける。
+            selection.iconAlpha[id] = scoreAlpha(score(m))
+            continue
         }
+        val p = peak.position
+        val icon = PeakIcon.of(m.mountain.elevationClass())
+        val halfWidth = icon.halfWidthDp.dp.toPx()
+        val iconBox = Box(p.x - halfWidth, p.y - icon.heightDp.dp.toPx(), p.x + halfWidth, p.y)
+        val owner = owners[id]
+        val focus = if (headingUp) {
+            ((DialGeometry.TAPE_SPAN_DEG / 2 - abs(Heading.delta(headingDeg, m.bearingDeg))) / FAN_EDGE_FADE_DEG).toFloat()
+        } else {
+            (focusRadius - (p - focusCenter).getDistance()) / (focusRadius * FOCUS_EDGE_FADE_RATIO)
+        }.coerceIn(0f, 1f)
+        val weight = if (owner != null) 1f else focus
+        val underText = textBoxes.any { it.intersects(iconBox) }
+        val target = if (weight <= 0f || p.y < chartTop + iconHeight) 0f
+            else (if (underText) MIN_ICON_ALPHA else scoreAlpha(score(m))) * weight
+        val current = selection.iconAlpha[id] ?: 0f
+        val alpha = if (current < target) min(target, current + iconStep) else max(target, current - iconStep)
+        if (alpha != target) iconFading = true
+        if (alpha <= 0f) {
+            selection.iconAlpha.remove(id)
+            continue
+        }
+        selection.iconAlpha[id] = alpha
+        drawPeakIcon(selection.sprites, p, icon, alpha = alpha, shadow = false)
+        if (underText || target <= 0f) continue
+        iconTargets += if (owner != null) {
+            PlacedPeak(owner.peak.mountain, p, owner.peak.label, iconBox, owner.members.map { it.mountain })
+        } else {
+            PlacedPeak(m, p, peak.label, iconBox)
+        }
+    }
+    // 画面の外へ出た山は忘れる。
+    selection.iconAlpha.keys.retainAll(visibleById.keys)
+    selection.fading = selection.labelAlpha.values.any { it < 1f } || iconFading
+
+    // 山名を外した山は、アイコンをアイコンだけの濃さへ、山名を透明へ近づけながら描く。
+    for ((peak, alpha) in fadingOut) {
+        val icon = PeakIcon.of(peak.mountain.mountain.elevationClass())
+        drawPeakIcon(selection.sprites, peak.position, icon, alpha = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha), shadow = false)
+        drawNameChip(peak, gap, icon.color, alpha)
     }
     val reps = groups.mapIndexed { i, group ->
         val peak = group.peak
         val p = peak.position
         val icon = PeakIcon.of(peak.mountain.mountain.elevationClass())
-        drawPeakIcon(p, icon)
-        drawNameChip(peak, gap, icon.color)
+        val alpha = selection.labelAlpha[peak.mountain.mountain.osmId] ?: 1f
+        drawPeakIcon(selection.sprites, p, icon, alpha = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha), shadow = alpha >= 1f)
+        drawNameChip(peak, gap, icon.color, alpha)
         var box = peak.box
         othersLabels[i]?.let { (others, below) ->
-            drawText(others, topLeft = Offset(p.x - others.size.width / 2f, below.top))
+            drawText(others, topLeft = Offset(p.x - others.size.width / 2f, below.top), alpha = alpha)
             box = Box(min(box.left, below.left), box.top, max(box.right, below.right), below.bottom)
         }
         PlacedPeak(peak.mountain, p, peak.label, box, group.members.map { it.mountain })
     }
-    return reps + memberTargets
+    return reps + iconTargets
 }
+
+/**
+ * アイコンだけで描く山の濃さ。優先度のスコア(仰角、°)が低いほど薄くする。
+ * [SCORE_ALPHA_FULL_DEG] 以上で [MAX_ICON_ALPHA]、0° 以下で [MIN_ICON_ALPHA]。
+ */
+private fun scoreAlpha(scoreDeg: Double): Float {
+    val t = (scoreDeg / SCORE_ALPHA_FULL_DEG).coerceIn(0.0, 1.0).toFloat()
+    return MIN_ICON_ALPHA + (MAX_ICON_ALPHA - MIN_ICON_ALPHA) * t
+}
+
+/** 山名を出す山のアイコンの濃さ。山名の濃さ([labelAlpha])に合わせて、アイコンだけの濃さ([base])から 1 へ近づける。 */
+private fun labeledIconAlpha(base: Float, labelAlpha: Float): Float = base + (1f - base) * labelAlpha
+
+/** 山名を出し入れするときに、濃さを変える時間(秒)。 */
+private const val LABEL_FADE_SECONDS = 0.25f
+
+/** 山名を出さない山のアイコンの濃さを、0 から 1 まで変えるのにかける時間(秒)。 */
+private const val ICON_FADE_SECONDS = 0.5f
+
+/** ヘディングアップで、視野の扇の端からこの角度(°)の内側まで、アイコンをだんだん薄くする。 */
+private const val FAN_EDGE_FADE_DEG = 8.0
+
+/** 手動位置モードで、画面の中央の円の縁から半径のこの割合の内側まで、アイコンをだんだん薄くする。 */
+private const val FOCUS_EDGE_FADE_RATIO = 0.2f
 
 /** 山名の札の範囲。 */
 private fun DrawScope.labelBox(peak: PlacedPeak, gap: Float): Box = peak.labelBox(gap, LABEL_PAD_X.toPx(), LABEL_PAD_Y.toPx())
@@ -518,12 +654,12 @@ private val LABEL_PAD_X = 7.dp
 private val LABEL_PAD_Y = 2.dp
 
 /** 山名を白い札に載せ、札の縁をアイコンと同じ標高の色([edge])にする。どの山が高いかがひと目で分かるようにする。 */
-private fun DrawScope.drawNameChip(peak: PlacedPeak, gap: Float, edge: Color) {
+private fun DrawScope.drawNameChip(peak: PlacedPeak, gap: Float, edge: Color, alpha: Float = 1f) {
     val box = labelBox(peak, gap)
     val chip = Size(box.right - box.left, box.bottom - box.top)
     val radius = CornerRadius(chip.height / 2)
-    drawRoundRect(ShadowColor, Offset(box.left, box.top + 1.dp.toPx()), chip, radius)
-    drawRoundRect(Color.White, Offset(box.left, box.top), chip, radius)
+    drawRoundRect(ShadowColor, Offset(box.left, box.top + 1.dp.toPx()), chip, radius, alpha = alpha)
+    drawRoundRect(Color.White, Offset(box.left, box.top), chip, radius, alpha = alpha)
     val border = 2.dp.toPx()
     drawRoundRect(
         edge,
@@ -531,12 +667,20 @@ private fun DrawScope.drawNameChip(peak: PlacedPeak, gap: Float, edge: Color) {
         Size(chip.width - border, chip.height - border),
         CornerRadius((chip.height - border) / 2),
         style = Stroke(width = border),
+        alpha = alpha,
     )
-    drawText(peak.label, topLeft = Offset(peak.position.x - peak.label.size.width / 2f, box.top + LABEL_PAD_Y.toPx()))
+    drawText(peak.label, topLeft = Offset(peak.position.x - peak.label.size.width / 2f, box.top + LABEL_PAD_Y.toPx()), alpha = alpha)
 }
 
-/** 代表の山にまとめた山のアイコンの濃さ。代表の山と見分けられるように薄くする。 */
-private const val MEMBER_ICON_ALPHA = 0.45f
+/** アイコンだけで描く山(まとめた山と、視界の正面の山名を出さない山)の濃さの範囲。山名を出す山と見分けられるように薄くする。 */
+private const val MIN_ICON_ALPHA = 0.15f
+private const val MAX_ICON_ALPHA = 0.6f
+
+/** アイコンを最も濃く描く仰角(°)。 */
+private const val SCORE_ALPHA_FULL_DEG = 3.0
+
+/** 手動位置モードで、山名を出さない山もアイコンで描く画面の中央の円の半径(画面の幅に対する比)。 */
+private const val FOCUS_RADIUS_RATIO = 0.5f
 
 /**
  * 標高の区分ごとの山アイコン。形は同じ丸みのある山で、色と大きさを変え、2000m 以上には頂に雪を載せる。
@@ -565,10 +709,60 @@ private enum class PeakIcon(val halfWidthDp: Float, val heightDp: Float, val col
 }
 
 /**
- * 山アイコンを描く。白い縁と影で地面の色から浮かせ、右の斜面を少し暗くして立体に見せる。
+ * 山アイコンを [p](底辺の中点)に描く。[sprites] に覚えた画像を、濃さ([alpha])を変えて貼る。
+ * 1 画面に数百のアイコンを描くことがあるので、毎回形を作って描くより軽くする。
+ * 位置は画素にそろえて貼り、画像がにじまないようにする。
+ */
+private fun DrawScope.drawPeakIcon(sprites: PeakIconSprites, p: Offset, icon: PeakIcon, alpha: Float = 1f, shadow: Boolean = true) {
+    val sprite = sprites.get(this, icon, shadow)
+    drawImage(
+        sprite.image,
+        dstOffset = IntOffset(p.x.roundToInt() - sprite.anchor.x, p.y.roundToInt() - sprite.anchor.y),
+        dstSize = IntSize(sprite.image.width, sprite.image.height),
+        alpha = alpha,
+    )
+}
+
+/**
+ * 山アイコンの画像。標高の区分と影の有無ごとに一度だけ描いて覚え、画面の画素の細かさが変わったら描き直す。
+ * 画像にしておくと、薄く描いたときもアイコン全体が一様に薄くなる(縁や斜面が本体から透けない)。
+ */
+private class PeakIconSprites {
+    class Sprite(val image: ImageBitmap, val anchor: IntOffset)
+
+    private var density = 0f
+    private val sprites = HashMap<Pair<PeakIcon, Boolean>, Sprite>()
+
+    fun get(scope: DrawScope, icon: PeakIcon, shadow: Boolean): Sprite {
+        if (scope.density != density) {
+            sprites.clear()
+            density = scope.density
+        }
+        return sprites.getOrPut(icon to shadow) {
+            with(scope) {
+                // 白い縁と影がはみ出す分の余白をとる。山の頂は高さの 1.07 倍まで膨らむ。
+                val pad = 3.dp.toPx()
+                val halfWidth = icon.halfWidthDp.dp.toPx()
+                val height = icon.heightDp.dp.toPx()
+                val anchor = IntOffset((pad + halfWidth).roundToInt(), (pad + height * 1.1f).roundToInt())
+                val image = ImageBitmap((anchor.x * 2), (anchor.y + pad + 1.5.dp.toPx()).roundToInt())
+                CanvasDrawScope().draw(
+                    Density(scope.density, scope.fontScale), LayoutDirection.Ltr, GraphicsCanvas(image),
+                    Size(image.width.toFloat(), image.height.toFloat()),
+                ) {
+                    drawPeakIconShape(Offset(anchor.x.toFloat(), anchor.y.toFloat()), icon, shadow)
+                }
+                Sprite(image, anchor)
+            }
+        }
+    }
+}
+
+/**
+ * 山アイコンの形を描く。白い縁と影で地面の色から浮かせ、右の斜面を少し暗くして立体に見せる。
  * 形の点は、底辺の中点を原点に、横は半幅、縦は高さを 1 とした割合で決める(iOS と同じ)。
  */
-private fun DrawScope.drawPeakIcon(p: Offset, icon: PeakIcon, alpha: Float = 1f, shadow: Boolean = true) {
+private fun DrawScope.drawPeakIconShape(p: Offset, icon: PeakIcon, shadow: Boolean, alpha: Float = 1f) {
     val w = icon.halfWidthDp.dp.toPx()
     val h = icon.heightDp.dp.toPx()
     fun x(f: Float) = p.x + f * w

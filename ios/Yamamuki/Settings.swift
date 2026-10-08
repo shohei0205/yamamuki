@@ -7,8 +7,8 @@ struct Settings: Codable, Equatable {
     var minElevationM = 0
     /// 方位盤を表示している間は画面を消さない。
     var keepScreenOn = false
-    /// 方位盤に一度に出す山の上限。
-    var maxPeaks = 40
+    /// 方位盤の 1 画面に出す山名の上限。山名を出さない山はアイコンだけで描く。
+    var maxPeaks = 15
     /// 方位盤の文字の大きさ(標準 = 1.0 に対する倍率)。
     var textScale = 1.0
     /// 起動時の表示範囲(現在地から画面上端までの距離)。
@@ -20,7 +20,7 @@ struct Settings: Codable, Equatable {
 
     static let textScales = [0.85, 1.0, 1.2, 1.4]
     static let initialRangesKm = [5, 10, 15, 20, 30, 50]
-    static let maxPeaksRange = 10...100
+    static let maxPeaksRange = 5...30
 
     init() {}
 
@@ -30,7 +30,9 @@ struct Settings: Codable, Equatable {
         let d = Settings()
         minElevationM = try c.decodeIfPresent(Int.self, forKey: .minElevationM) ?? d.minElevationM
         keepScreenOn = try c.decodeIfPresent(Bool.self, forKey: .keepScreenOn) ?? d.keepScreenOn
-        maxPeaks = try c.decodeIfPresent(Int.self, forKey: .maxPeaks) ?? d.maxPeaks
+        // 以前は山の数(10〜100)だった。山名の数に変えたので、今の範囲に収める。
+        let savedMaxPeaks = try c.decodeIfPresent(Int.self, forKey: .maxPeaks) ?? d.maxPeaks
+        maxPeaks = min(max(savedMaxPeaks, Settings.maxPeaksRange.lowerBound), Settings.maxPeaksRange.upperBound)
         textScale = try c.decodeIfPresent(Double.self, forKey: .textScale) ?? d.textScale
         initialRangeKm = try c.decodeIfPresent(Int.self, forKey: .initialRangeKm) ?? d.initialRangeKm
         sensorPrecision = (try? c.decodeIfPresent(SensorPrecision.self, forKey: .sensorPrecision)) ?? d.sensorPrecision

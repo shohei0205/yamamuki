@@ -55,7 +55,7 @@ import kotlin.math.roundToInt
 private const val MAX_MIN_ELEVATION_M = 3000
 private const val MIN_ELEVATION_STEP_M = 100
 
-private const val MAX_PEAKS_STEP = 10
+private const val MAX_PEAKS_STEP = 5
 
 /** 設定画面。方位盤の左下の設定ボタンで開く。 */
 @Composable

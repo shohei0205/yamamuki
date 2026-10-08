@@ -1,3 +1,4 @@
+import QuartzCore
 import SwiftUI
 import YamamukiCore
 
@@ -58,7 +59,7 @@ struct DialCanvasView: View, Animatable {
     let summit: NearbyMountain?
     /// 現在地の標高(海抜)。方位の表示の後ろに添え、山の仰角の計算にも使う。nil なら出さない(仰角は 0m とみなす)。
     let altitudeM: Double?
-    /// 一度に表示する山の上限。
+    /// 1 画面に出す山名の上限。山名を出さない山はアイコンだけで描く。
     let maxPeaks: Int
     /// 文字の大きさ(標準 = 1.0 に対する倍率)。
     let textScale: Double
@@ -81,6 +82,8 @@ struct DialCanvasView: View, Animatable {
 
     @State private var hitTargets = HitTargets()
     @State private var peakSelection = PeakSelection()
+    /// 山名やアイコンの濃さを変えている途中か。途中の間は毎フレーム描き直す。
+    @State private var animating = false
 
     /// モードを切り替えるときに、目盛りの出し入れと視野の扇の濃さを少しずつ変えて描き直す。
     var animatableData: AnimatablePair<Double, Double> {
@@ -93,8 +96,14 @@ struct DialCanvasView: View, Animatable {
 
     var body: some View {
         // 距離の帯と視野の扇だけを画面下端の余白まで描くので、Canvas を余白の分だけ下へ広げ、それ以外は元の範囲で描く。
-        Canvas { context, size in
-            draw(context, size: CGSize(width: size.width, height: size.height - bottomBleed))
+        TimelineView(.animation(minimumInterval: nil, paused: !animating)) { timeline in
+            Canvas { context, size in
+                // 時刻を読むことで、濃さを変えている間は TimelineView の刻みごとに描き直される。
+                peakSelection.frameDate = timeline.date
+                draw(context, size: CGSize(width: size.width, height: size.height - bottomBleed))
+            } symbols: {
+                ForEach(PeakIconSymbol.all, id: \.id) { $0 }
+            }
         }
         .padding(.bottom, -bottomBleed)
         .overlay {
@@ -230,12 +239,29 @@ struct DialCanvasView: View, Animatable {
         }
     }
 
+    /// 方位盤に山を描く。表示の優先度は、現在地から見上げる角度(仰角、[displayScore])に、モードごとに次の値を上乗せして決める。
+    ///
+    /// ヘディングアップ(端末を向けた方向が上):
+    /// - 正面に近い山ほど優先する。正面で +1°、視野の扇の端(左右 30°)で 0([PeakLayout.forwardBonus])。
+    /// - 表示範囲を広げるほど高い山を優先する。表示範囲 20km から 60km にかけて、標高 1000m あたり 0° から 2° まで増やす
+    ///   ([PeakLayout.heightBonus])。遠くまで表示しているときは、近くの低い山より遠くの高い山の名前を知りたいことが多いため。
+    /// - 視野の扇の中の山は、山名を出さない山もアイコンだけで描く。扇の端の 8° では、外へ行くほど薄くする。
+    ///
+    /// 手動位置モード(地図を指で動かす):
+    /// - 仰角だけで決める(向きと表示範囲による上乗せはしない)。
+    /// - 画面の中央の円(直径は画面の幅)の中の山は、山名を出さない山もアイコンだけで描く。円の縁では、外へ行くほど薄くする。
+    ///
+    /// どちらのモードでも:
+    /// - 前回描いた山は少し優先する([PeakLayout.keptBonusDeg])。
+    /// - 画面に入る山を優先度の高い順に置き、山名を [maxPeaks] 件まで出す。重なる山は山名を省き、代表の山の「ほか 3 山」にまとめる。
+    ///   すぐそばの山どうし([PeakLayout.neighborKm] 以内)は、優先度によらず標高の高い山を代表にする。
+    /// - 山名を出さない山のアイコンは、優先度が低いほど薄くする。山名や「ほか 3 山」にかかるアイコンは一番薄くする。
+    /// - 山名とアイコンの濃さは時間をかけて変え、向きを変えたときに急に出たり消えたりしないようにする。
     private func drawPeaks(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, pxPerKm: CGFloat, chartTop: CGFloat, styles: TextStyles) -> [PlacedPeak] {
         let gap: CGFloat = 2
         let chartBottom = size.height - originBottom
 
-        // 候補は、画面より一回り大きい、画面の周りの円から選ぶ。現在地の周り全体から選ぶと、ほかの方角の山に候補の数を取られ、
-        // 向けた先に山が出なかったり、拡大率のわずかな違いで画面の山が候補から外れたり戻ったりする。
+        // 山は、画面より一回り大きい、画面の周りの円から集める。地図を少し動かしたり向きを少し変えたりしただけでは集め直さない。
         let halfDiagonal = hypot(size.width, chartBottom - chartTop) / 2
         let reach = halfDiagonal + reachStep
         // 画面の中央の位置(現在地からの距離と方角)。画面の中央を軸に回しても変わらない。
@@ -245,59 +271,70 @@ struct DialCanvasView: View, Animatable {
 
         // ヘディングアップでは、正面に近い山を優先する(向けた先の山が、横の山に押し出されにくくする)。
         let forwardHeading: Double? = headingUp ? headingDeg : nil
+        // ヘディングアップでは、表示範囲を広げるほど高い山を優先する(遠くの高い山の名前を知りたいことが多いため)。
+        let headingUpRangeKm: Double? = headingUp ? Double((chartBottom - chartTop) / pxPerKm) : nil
+        func score(_ m: NearbyMountain) -> Double {
+            m.displayScore(observerAltitudeM: altitudeM)
+                + (headingUpRangeKm.map { PeakLayout.heightBonus(elevationM: m.mountain.elevationM, rangeKm: $0) } ?? 0)
+        }
 
         let key = PeakSelection.Key(mountains: mountains, pxPerKm: pxPerKm, observerAltitudeM: altitudeM,
             textScale: textScale, maxPeaks: maxPeaks, width: size.width, chartHeight: chartBottom - chartTop, headingUp: headingUp)
         let selection = peakSelection
-        // 選んだあとは、向きを変えたり地図を動かしたりして、画面の角が円からはみ出すまで選び直さない。
+        // 集めたあとは、向きを変えたり地図を動かしたりして、画面の角が円からはみ出すまで集め直さない。
         let outOfCircle = PeakLayout.planeDistanceKm(centerKm, centerBearingDeg, selection.centerKm, selection.centerBearingDeg)
             + Double(halfDiagonal / pxPerKm) > selection.radiusKm
         if selection.key != key || outOfCircle {
-            let viewArea = Double(size.width * (chartBottom - chartTop))
             selection.centerKm = centerKm
             selection.centerBearingDeg = centerBearingDeg
             selection.radiusKm = Double(reach / pxPerKm)
-            selection.selected = PeakLayout.candidates(
-                mountains, observerAltitudeM: altitudeM, keptIds: selection.selectedIds,
-                reachKm: selection.radiusKm,
-                limit: PeakLayout.aroundLimit(maxPeaks: maxPeaks, reach: Double(reach), viewArea: viewArea),
-                centerKm: centerKm,
-                centerBearingDeg: centerBearingDeg,
-                drawnIds: selection.drawnIds,
-                headingDeg: forwardHeading
-            ).map { m in
+            selection.around = mountains.filter {
+                PeakLayout.planeDistanceKm($0.distanceKm, $0.bearingDeg, centerKm, centerBearingDeg) <= selection.radiusKm
+            }
+            if selection.labelTextScale != textScale {
+                selection.labels.removeAll()
+                selection.labelTextScale = textScale
+            }
+            selection.key = key
+        }
+
+        // 画面に入る山すべてを、優先順に並べて山名の候補にする。山名の数は [maxPeaks] までにする。
+        // 上端では、描いている山(アイコンだけの山を含む)は山の位置が上端を越えるまで残し、新しく出す山はアイコン全体が入ってから出す。
+        // 正面の少し先の山は、向きをわずかに変えるだけで上端を出入りするため(正面に向けたときが最も上に来る)。
+        var positions: [Int64: CGPoint] = [:]
+        var onScreen: [NearbyMountain] = []
+        for m in selection.around {
+            let o = DialGeometry.project(distanceKm: m.distanceKm, bearingDeg: m.bearingDeg, headingDeg: headingDeg)
+            let p = CGPoint(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
+            let top = selection.shownIds.contains(m.mountain.osmId) ? chartTop : chartTop + PeakIcon.maxHeight
+            guard p.x >= 0, p.x <= size.width, p.y >= top, p.y < chartBottom else { continue }
+            positions[m.mountain.osmId] = p
+            onScreen.append(m)
+        }
+        let visible: [PlacedPeak] = PeakLayout.priorityOrder(onScreen, observerAltitudeM: altitudeM, keptIds: selection.drawnIds,
+            headingDeg: forwardHeading, rangeKm: headingUpRangeKm).map { m in
+            let id = m.mountain.osmId
+            let p = positions[id] ?? .zero
+            // 山名の大きさは山ごとに一度だけ測る(画面に入る山が多いと、毎回測ると重い)。
+            let measured: (text: MeasuredText, box: ScreenBox)
+            if let cached = selection.labels[id] {
+                measured = cached
+            } else {
                 let icon = PeakIcon.of(m.mountain.elevationClass)
                 let label = measuredText(ctx, m.mountain.name, size: styles.label, color: tapeInk)
                 let labelHalf = label.size.width / 2 + labelPadX
-                let box = ScreenBox(
+                measured = (label, ScreenBox(
                     left: Double(min(-icon.halfWidth, -labelHalf)),
                     top: Double(-icon.height),
                     right: Double(max(icon.halfWidth, labelHalf)),
                     bottom: Double(gap + label.size.height + labelPadY * 2)
-                )
-                return SelectedPeak(mountain: m, box: box)
+                ))
+                selection.labels[id] = measured
             }
-            selection.selectedIds = Set(selection.selected.map { $0.mountain.mountain.osmId })
-            selection.key = key
-        }
-
-        var visible: [PlacedPeak] = selection.selected.compactMap { s -> PlacedPeak? in
-            let o = DialGeometry.project(distanceKm: s.mountain.distanceKm, bearingDeg: s.mountain.bearingDeg, headingDeg: headingDeg)
-            let p = CGPoint(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
-            // 上端では、描いている山(アイコンだけの山を含む)は山の位置が上端を越えるまで残し、新しく出す山はアイコン全体が入ってから出す。
-            // 正面の少し先の山は、向きをわずかに変えるだけで上端を出入りするため(正面に向けたときが最も上に来る)。
-            let top = selection.shownIds.contains(s.mountain.mountain.osmId) ? chartTop : chartTop + PeakIcon.maxHeight
-            guard p.x >= 0, p.x <= size.width, p.y >= top, p.y < chartBottom else { return nil }
-            return PlacedPeak(mountain: s.mountain, position: p, box: ScreenBox(
-                left: Double(p.x) + s.box.left, top: Double(p.y) + s.box.top,
-                right: Double(p.x) + s.box.right, bottom: Double(p.y) + s.box.bottom))
-        }
-        if let forwardHeading {
-            // ヘディングアップでは、今の向きで正面に近い山を先に置く。
-            let order = PeakLayout.priorityOrder(visible.map(\.mountain), observerAltitudeM: altitudeM,
-                keptIds: selection.selectedIds, headingDeg: forwardHeading)
-            let rank = Dictionary(order.enumerated().map { ($1.mountain.osmId, $0) }, uniquingKeysWith: { a, _ in a })
-            visible.sort { (rank[$0.mountain.mountain.osmId] ?? 0) < (rank[$1.mountain.mountain.osmId] ?? 0) }
+            let rel = measured.box
+            return PlacedPeak(mountain: m, position: p, box: ScreenBox(
+                left: Double(p.x) + rel.left, top: Double(p.y) + rel.top,
+                right: Double(p.x) + rel.right, bottom: Double(p.y) + rel.bottom), label: measured.text)
         }
         let groups = PeakLayout.placeVisible(
             visible,
@@ -311,16 +348,35 @@ struct DialCanvasView: View, Animatable {
         selection.drawnIds = Set(groups.map { $0.peak.mountain.mountain.osmId })
         selection.shownIds = selection.drawnIds.union(groups.flatMap { $0.members.map(\.mountain.mountain.osmId) })
 
-        // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
-        let placedBoxes = groups.map(\.peak.box)
-        let labels = groups.map { measuredText(ctx, $0.peak.mountain.mountain.name, size: styles.label, color: tapeInk) }
-        // 山名の札の範囲。
-        let labelBoxes = groups.indices.map { i -> ScreenBox in
-            let p = groups[i].peak.position
-            let half = Double(labels[i].size.width / 2 + labelPadX)
-            return ScreenBox(left: Double(p.x) - half, top: Double(p.y + gap), right: Double(p.x) + half,
-                bottom: Double(p.y + gap + labels[i].size.height + labelPadY * 2))
+        // 山名は、出すときも外すときも [labelFadeSeconds] かけて濃さを変える。外した山名は、薄くなりきるまでその場に描く。
+        let now = CACurrentMediaTime()
+        let dt = (!selection.fading || selection.lastTime == 0) ? 1.0 / 60 : min(max(now - selection.lastTime, 0), 0.1)
+        selection.lastTime = now
+        let fadeStep = dt / labelFadeSeconds
+        for id in selection.drawnIds { selection.labelAlpha[id] = min(1, (selection.labelAlpha[id] ?? 0) + fadeStep) }
+        let visibleById = Dictionary(visible.map { ($0.mountain.mountain.osmId, $0) }, uniquingKeysWith: { a, _ in a })
+        var fadingOut: [(peak: PlacedPeak, alpha: Double)] = []
+        for (id, value) in selection.labelAlpha where !selection.drawnIds.contains(id) {
+            let alpha = value - fadeStep
+            if let peak = visibleById[id], alpha > 0 {
+                selection.labelAlpha[id] = alpha
+                fadingOut.append((peak, alpha))
+            } else {
+                selection.labelAlpha[id] = nil
+            }
         }
+        let fadingOutIds = Set(fadingOut.map { $0.peak.mountain.mountain.osmId })
+
+        // 代表の山の山名と「ほか 3 山」の場所を先に決め、アイコンだけの山はそこを避けて描く。
+        let placedBoxes = groups.map(\.peak.box)
+        func labelBox(_ peak: PlacedPeak) -> ScreenBox {
+            let p = peak.position
+            let size = peak.label?.size ?? .zero
+            let half = Double(size.width / 2 + labelPadX)
+            return ScreenBox(left: Double(p.x) - half, top: Double(p.y + gap), right: Double(p.x) + half,
+                bottom: Double(p.y + gap + size.height + labelPadY * 2))
+        }
+        let labelBoxes = groups.map { labelBox($0.peak) }
         let othersLabels: [(text: MeasuredText, box: ScreenBox)?] = groups.indices.map { i -> (text: MeasuredText, box: ScreenBox)? in
             let group = groups[i]
             guard !group.members.isEmpty else { return nil }
@@ -336,76 +392,112 @@ struct DialCanvasView: View, Animatable {
         }
         let textBoxes = labelBoxes + othersLabels.compactMap { $0?.box }
 
-        // まとめた山のアイコンは薄く描き、代表の山のアイコンと山名を上に重ねる。標高が不明な山と、
-        // どれかの山名や「ほか 3 山」にかかる山は描かない(一覧には残る)。描いたアイコンを押すと一覧を開く。
-        var faded = ctx
-        faded.opacity = memberIconAlpha
-        var memberTargets: [PlacedPeak] = []
-        for group in groups {
-            let members = group.members.map(\.mountain)
-            for member in group.members where member.mountain.mountain.elevationM != nil {
-                let icon = PeakIcon.of(member.mountain.mountain.elevationClass)
-                let p = member.position
-                let iconBox = ScreenBox(left: Double(p.x - icon.halfWidth), top: Double(p.y - icon.height),
-                    right: Double(p.x + icon.halfWidth), bottom: Double(p.y))
-                if textBoxes.contains(where: { $0.intersects(iconBox) }) { continue }
-                drawPeakIcon(faded, at: p, icon: icon, shadow: false)
-                memberTargets.append(PlacedPeak(mountain: group.peak.mountain, position: p, box: iconBox, members: members))
+        // 山名を出さない山のアイコンを描く。描くのは次の 2 つ。標高が不明な山は描かない(一覧には残る)。
+        // - まとめた山(「ほか 3 山」に数えた山)。押すと、まとめた山の一覧を開く。
+        // - 視界の正面(手動位置モードでは画面の中央)の山。山の多い方角から少ない方角へ向けたときに、
+        //   山が急に現れたように見えないようにする。範囲の縁では、外へ行くほど薄くする。
+        // 濃さは優先度のスコアが低いほど薄くし、山名や「ほか 3 山」にかかる山は一番薄くして、押しても反応しない(山名を押しやすくする)。
+        // 濃さは [iconFadeSeconds] かけて変え、まとめた山でなくなった山や範囲を出た山も、急に消さずにだんだん薄くする。
+        let focusCenter = CGPoint(x: size.width / 2, y: (chartTop + chartBottom) / 2)
+        let focusRadius = size.width * focusRadiusRatio
+        var owners: [Int64: PeakGroup<PlacedPeak>] = [:]
+        for group in groups { for member in group.members { owners[member.mountain.mountain.osmId] = group } }
+        let iconStep = dt / iconFadeSeconds
+        var iconTargets: [PlacedPeak] = []
+        var iconFading = false
+        for peak in visible {
+            let m = peak.mountain
+            let id = m.mountain.osmId
+            if m.mountain.elevationM == nil { continue }
+            if selection.drawnIds.contains(id) || fadingOutIds.contains(id) {
+                // 山名を出している間は山名と一緒に描く。山名を外し終えたら、アイコンだけの濃さから続ける。
+                selection.iconAlpha[id] = scoreAlpha(score(m))
+                continue
             }
+            let p = peak.position
+            let icon = PeakIcon.of(m.mountain.elevationClass)
+            let iconBox = ScreenBox(left: Double(p.x - icon.halfWidth), top: Double(p.y - icon.height),
+                right: Double(p.x + icon.halfWidth), bottom: Double(p.y))
+            let owner = owners[id]
+            let focus: Double
+            if headingUp {
+                focus = (tapeSpanDeg / 2 - abs(Heading.delta(headingDeg, m.bearingDeg))) / fanEdgeFadeDeg
+            } else {
+                focus = Double((focusRadius - hypot(p.x - focusCenter.x, p.y - focusCenter.y)) / (focusRadius * focusEdgeFadeRatio))
+            }
+            let weight = owner != nil ? 1 : min(max(focus, 0), 1)
+            let underText = textBoxes.contains(where: { $0.intersects(iconBox) })
+            let target = (weight <= 0 || p.y < chartTop + PeakIcon.maxHeight) ? 0
+                : (underText ? minIconAlpha : scoreAlpha(score(m))) * weight
+            let current = selection.iconAlpha[id] ?? 0
+            let alpha = current < target ? min(target, current + iconStep) : max(target, current - iconStep)
+            if alpha != target { iconFading = true }
+            if alpha <= 0 {
+                selection.iconAlpha[id] = nil
+                continue
+            }
+            selection.iconAlpha[id] = alpha
+            var faded = ctx
+            faded.opacity = alpha
+            drawPeakIcon(faded, at: p, icon: icon, shadow: false)
+            if underText || target <= 0 { continue }
+            if let owner {
+                iconTargets.append(PlacedPeak(mountain: owner.peak.mountain, position: p, box: iconBox, members: owner.members.map(\.mountain)))
+            } else {
+                iconTargets.append(PlacedPeak(mountain: m, position: p, box: iconBox))
+            }
+        }
+        // 画面の外へ出た山は忘れる。
+        selection.iconAlpha = selection.iconAlpha.filter { visibleById[$0.key] != nil }
+        let fading = selection.labelAlpha.values.contains { $0 < 1 } || iconFading
+        if fading != selection.fading {
+            selection.fading = fading
+            // 濃さを変えている間だけ、毎フレーム描き直す(描画の途中では状態を変えられないので、描き終えてから切り替える)。
+            DispatchQueue.main.async { animating = fading }
+        }
+
+        // 山名を外した山は、アイコンをアイコンだけの濃さへ、山名を透明へ近づけながら描く。
+        for (peak, alpha) in fadingOut {
+            guard let label = peak.label else { continue }
+            let icon = PeakIcon.of(peak.mountain.mountain.elevationClass)
+            var faded = ctx
+            faded.opacity = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha)
+            drawPeakIcon(faded, at: peak.position, icon: icon, shadow: false)
+            var chip = ctx
+            chip.opacity = alpha
+            drawNameChip(chip, label: label, at: peak.position, box: labelBox(peak), edge: icon.color)
         }
         let reps = groups.indices.map { i -> PlacedPeak in
             let group = groups[i]
             let peak = group.peak
             let p = peak.position
-            let label = labels[i]
             let icon = PeakIcon.of(peak.mountain.mountain.elevationClass)
-            drawPeakIcon(ctx, at: p, icon: icon)
-            drawNameChip(ctx, label: label, at: p, box: labelBoxes[i], edge: icon.color)
+            let alpha = selection.labelAlpha[peak.mountain.mountain.osmId] ?? 1
+            var faded = ctx
+            faded.opacity = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha)
+            drawPeakIcon(faded, at: p, icon: icon, shadow: alpha >= 1)
+            var chip = ctx
+            chip.opacity = alpha
+            if let label = peak.label {
+                drawNameChip(chip, label: label, at: p, box: labelBoxes[i], edge: icon.color)
+            }
             var box = peak.box
             if let others = othersLabels[i] {
-                ctx.draw(others.text.text, at: CGPoint(x: p.x - others.text.size.width / 2, y: CGFloat(others.box.top)), anchor: .topLeading)
+                chip.draw(others.text.text, at: CGPoint(x: p.x - others.text.size.width / 2, y: CGFloat(others.box.top)), anchor: .topLeading)
                 box = ScreenBox(left: min(box.left, others.box.left), top: box.top,
                     right: max(box.right, others.box.right), bottom: others.box.bottom)
             }
             return PlacedPeak(mountain: peak.mountain, position: p, box: box, members: group.members.map(\.mountain))
         }
-        return reps + memberTargets
+        return reps + iconTargets
     }
 
-    /// 山アイコンを描く。白い縁と影で地面の色から浮かせ、右の斜面を少し暗くして立体に見せる。
-    /// 形の点は、底辺の中点を原点に、横は半幅、縦は高さを 1 とした割合で決める(Android と同じ)。
+    /// 山アイコンを [p](底辺の中点)に描く。標高の区分と影の有無ごとに一度だけ描いた図([PeakIconSymbol])を貼る。
+    /// 1 画面に数百のアイコンを描くことがあるので、毎回形を作って描くより軽くする。濃さは [ctx] の不透明度で変える。
     private func drawPeakIcon(_ ctx: GraphicsContext, at p: CGPoint, icon: PeakIcon, shadow: Bool = true) {
-        let w = icon.halfWidth
-        let h = icon.height
-        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: p.x + x * w, y: p.y - y * h) }
-        var body = Path()
-        body.move(to: pt(-1, 0))
-        body.addQuadCurve(to: pt(-0.154, 0.93), control: pt(-0.615, 0.419))
-        body.addQuadCurve(to: pt(0.154, 0.93), control: pt(0, 1.07))
-        body.addQuadCurve(to: pt(1, 0), control: pt(0.615, 0.419))
-        body.closeSubpath()
-        if shadow {
-            ctx.fill(body.offsetBy(dx: 0, dy: 1.5), with: .color(shadowColor))
-        }
-        ctx.stroke(body, with: .color(.white), style: StrokeStyle(lineWidth: 2.5, lineJoin: .round))
-        ctx.fill(body, with: .color(icon.color))
-        var slope = Path()
-        slope.move(to: pt(0.077, 0.884))
-        slope.addQuadCurve(to: pt(0.769, 0.093), control: pt(0.462, 0.465))
-        slope.addLine(to: pt(0.231, 0.093))
-        slope.closeSubpath()
-        ctx.fill(slope, with: .color(icon.shade.opacity(0.35)))
-        if icon.snow {
-            var snow = Path()
-            snow.move(to: pt(-0.423, 0.605))
-            snow.addQuadCurve(to: pt(0, 1), control: pt(-0.154, 0.977))
-            snow.addQuadCurve(to: pt(0.423, 0.605), control: pt(0.154, 0.977))
-            snow.addLine(to: pt(0.192, 0.512))
-            snow.addLine(to: pt(0, 0.628))
-            snow.addLine(to: pt(-0.192, 0.512))
-            snow.closeSubpath()
-            ctx.fill(snow, with: .color(.white))
-        }
+        let symbol = PeakIconSymbol(icon: icon, shadow: shadow)
+        guard let resolved = ctx.resolveSymbol(id: symbol.id) else { return }
+        ctx.draw(resolved, at: p, anchor: symbol.anchor)
     }
 
     /// 山名を白い札に載せ、札の縁をアイコンと同じ標高の色([edge])にする。どの山が高いかがひと目で分かるようにする。
@@ -663,11 +755,6 @@ private func measuredText(_ ctx: GraphicsContext, _ string: String, size: CGFloa
 }
 
 /// 選んだ山の 1 件。範囲は山の位置を原点にしたアイコンと山名の範囲。
-private struct SelectedPeak {
-    let mountain: NearbyMountain
-    let box: ScreenBox
-}
-
 /// 候補を選ぶ円を、画面の角(画面の中央から対角線の半分)より広く取る幅。
 /// 地図を少し動かしたり向きを少し変えたりしただけでは選び直さない(ヘディングアップでは、向きを 10〜15° ほど変えるごとに選び直す)。
 private let reachStep: CGFloat = 64
@@ -675,8 +762,38 @@ private let reachStep: CGFloat = 64
 /// 新しく画面に出す山に求める、ほかの山との余白(pt)。境目で出たり消えたりしないようにする。
 private let newPeakMargin = 4.0
 
-/// 代表の山にまとめた山のアイコンの濃さ。代表の山と見分けられるように薄くする。
-private let memberIconAlpha = 0.45
+/// アイコンだけで描く山(まとめた山と、視界の正面の山名を出さない山)の濃さの範囲。山名を出す山と見分けられるように薄くする。
+private let minIconAlpha = 0.15
+private let maxIconAlpha = 0.6
+
+/// アイコンを最も濃く描く仰角(°)。
+private let scoreAlphaFullDeg = 3.0
+
+/// 手動位置モードで、山名を出さない山もアイコンで描く画面の中央の円の半径(画面の幅に対する比)。
+private let focusRadiusRatio: CGFloat = 0.5
+
+/// 山名を出し入れするときに、濃さを変える時間(秒)。
+private let labelFadeSeconds = 0.25
+
+/// 山名を出さない山のアイコンの濃さを、0 から 1 まで変えるのにかける時間(秒)。
+private let iconFadeSeconds = 0.5
+
+/// ヘディングアップで、視野の扇の端からこの角度(°)の内側まで、アイコンをだんだん薄くする。
+private let fanEdgeFadeDeg = 8.0
+
+/// 手動位置モードで、画面の中央の円の縁から半径のこの割合の内側まで、アイコンをだんだん薄くする。
+private let focusEdgeFadeRatio: CGFloat = 0.2
+
+/// アイコンだけで描く山の濃さ。優先度のスコア(仰角、°)が低いほど薄くする。
+/// [scoreAlphaFullDeg] 以上で [maxIconAlpha]、0° 以下で [minIconAlpha]。
+private func scoreAlpha(_ scoreDeg: Double) -> Double {
+    minIconAlpha + (maxIconAlpha - minIconAlpha) * min(max(scoreDeg / scoreAlphaFullDeg, 0), 1)
+}
+
+/// 山名を出す山のアイコンの濃さ。山名の濃さ([labelAlpha])に合わせて、アイコンだけの濃さ([base])から 1 へ近づける。
+private func labeledIconAlpha(_ base: Double, _ labelAlpha: Double) -> Double {
+    base + (1 - base) * labelAlpha
+}
 
 /// 方位盤に出す山の候補。画面より一回り大きい、画面の周りの円から選び、山の一覧・表示範囲などが変わったときと、
 /// 画面がその円からはみ出したときだけ選び直す。
@@ -694,15 +811,28 @@ private final class PeakSelection {
     }
 
     var key: Key?
-    var selected: [SelectedPeak] = []
-    var selectedIds: Set<Int64> = []
     var drawnIds: Set<Int64> = []
     /// 前回描いた山と、そこにまとめてアイコンだけを描いた山。
     var shownIds: Set<Int64> = []
-    /// 候補を選んだ円の中心(現在地からの距離と方角)と半径(km)。
+    /// 山を集めた円の中心(現在地からの距離と方角)と半径(km)。
     var centerKm = 0.0
     var centerBearingDeg = 0.0
     var radiusKm = 0.0
+    /// 円の中にある、すべての山。
+    var around: [NearbyMountain] = []
+    /// 山ごとの山名と、山の位置を原点にしたアイコンと山名の範囲。文字の大きさが変わったら測り直す。
+    var labels: [Int64: (text: MeasuredText, box: ScreenBox)] = [:]
+    var labelTextScale: Double?
+    /// 山名の濃さ(0〜1)。山名を出す山は 1 へ、山名を外した山は 0 へ近づける。0 になったら除く。
+    var labelAlpha: [Int64: Double] = [:]
+    /// 山名を出さない山のアイコンの濃さ。画面の外へ出た山は除く。
+    var iconAlpha: [Int64: Double] = [:]
+    /// 前回描いた時刻(秒)。山名とアイコンの濃さを時間に合わせて変える。
+    var lastTime: CFTimeInterval = 0
+    /// 山名かアイコンの濃さを変えている途中か。
+    var fading = false
+    /// 直近に描いた TimelineView の時刻。
+    var frameDate = Date.distantPast
 }
 
 private struct PlacedPeak {
@@ -712,6 +842,8 @@ private struct PlacedPeak {
     let box: ScreenBox
     /// 重なるので山名を省き、この山にまとめた山(優先順)。
     var members: [NearbyMountain] = []
+    /// 山名。タップの当たり判定だけに使う山は nil。
+    var label: MeasuredText? = nil
 }
 
 /// 直近に描いた山。描画のたびに差し替え、タップ位置から山を引く。
@@ -755,7 +887,7 @@ private final class HitTargets {
 
 /// 標高の区分ごとの山アイコン。形は同じ丸みのある山で、色と大きさを変え、2000m 以上には頂に雪を載せる。
 /// 色だけに頼らず、高さと雪の有無でも区別できるようにする。底辺の中点が山の位置に来る。
-private enum PeakIcon {
+private enum PeakIcon: CaseIterable {
     /// 1000m 未満(標高不明を含む): 緑の低い山。
     case low
     /// 1000m 以上 2000m 未満: 橙の山。
@@ -838,5 +970,68 @@ private extension View {
                 }
             })
         }
+    }
+}
+
+/// 山アイコンの形を描く。白い縁と影で地面の色から浮かせ、右の斜面を少し暗くして立体に見せる。
+/// 形の点は、底辺の中点を原点に、横は半幅、縦は高さを 1 とした割合で決める(Android と同じ)。
+private func drawPeakIconShape(_ ctx: GraphicsContext, at p: CGPoint, icon: PeakIcon, shadow: Bool) {
+    let w = icon.halfWidth
+    let h = icon.height
+    func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: p.x + x * w, y: p.y - y * h) }
+    var body = Path()
+    body.move(to: pt(-1, 0))
+    body.addQuadCurve(to: pt(-0.154, 0.93), control: pt(-0.615, 0.419))
+    body.addQuadCurve(to: pt(0.154, 0.93), control: pt(0, 1.07))
+    body.addQuadCurve(to: pt(1, 0), control: pt(0.615, 0.419))
+    body.closeSubpath()
+    if shadow {
+        ctx.fill(body.offsetBy(dx: 0, dy: 1.5), with: .color(shadowColor))
+    }
+    ctx.stroke(body, with: .color(.white), style: StrokeStyle(lineWidth: 2.5, lineJoin: .round))
+    ctx.fill(body, with: .color(icon.color))
+    var slope = Path()
+    slope.move(to: pt(0.077, 0.884))
+    slope.addQuadCurve(to: pt(0.769, 0.093), control: pt(0.462, 0.465))
+    slope.addLine(to: pt(0.231, 0.093))
+    slope.closeSubpath()
+    ctx.fill(slope, with: .color(icon.shade.opacity(0.35)))
+    if icon.snow {
+        var snow = Path()
+        snow.move(to: pt(-0.423, 0.605))
+        snow.addQuadCurve(to: pt(0, 1), control: pt(-0.154, 0.977))
+        snow.addQuadCurve(to: pt(0.423, 0.605), control: pt(0.154, 0.977))
+        snow.addLine(to: pt(0.192, 0.512))
+        snow.addLine(to: pt(0, 0.628))
+        snow.addLine(to: pt(-0.192, 0.512))
+        snow.closeSubpath()
+        ctx.fill(snow, with: .color(.white))
+    }
+}
+
+/// 山アイコンを一度だけ描いておく図。方位盤の [Canvas] に symbols として渡し、描くときは貼るだけにする。
+/// 図にしておくと、薄く描いたときもアイコン全体が一様に薄くなる(縁や斜面が本体から透けない)。
+private struct PeakIconSymbol: View {
+    let icon: PeakIcon
+    let shadow: Bool
+
+    /// 白い縁と影がはみ出す分の余白。山の頂は高さの 1.07 倍まで膨らむ。
+    private static let pad: CGFloat = 3
+    private static let shadowOffset: CGFloat = 1.5
+
+    static let all = PeakIcon.allCases.flatMap { icon in [true, false].map { PeakIconSymbol(icon: icon, shadow: $0) } }
+
+    var id: Int { (PeakIcon.allCases.firstIndex(of: icon) ?? 0) * 2 + (shadow ? 1 : 0) }
+    private var bottom: CGFloat { Self.pad + icon.height * 1.1 }
+    private var size: CGSize { CGSize(width: (Self.pad + icon.halfWidth) * 2, height: bottom + Self.pad + Self.shadowOffset) }
+    /// 図の中で、山の位置(底辺の中点)に当たる点。
+    var anchor: UnitPoint { UnitPoint(x: 0.5, y: bottom / size.height) }
+
+    var body: some View {
+        Canvas { ctx, _ in
+            drawPeakIconShape(ctx, at: CGPoint(x: size.width / 2, y: bottom), icon: icon, shadow: shadow)
+        }
+        .frame(width: size.width, height: size.height)
+        .tag(id)
     }
 }
