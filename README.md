@@ -174,7 +174,15 @@ open Yamamuki.xcodeproj
 - manifest は前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「もう一度取得」で取り直せる)。
 - 0.6.0 からは、配布用のビルドが読む manifest を yamamuki 側で決める予定（まだアプリは読んでいない）。そのための参照先ファイルを `site/data/osm-peaks/` に置いている。
   - `current.json`: 配布用のビルドが最初に読むファイル（https://shohei0205.github.io/yamamuki/data/osm-peaks/current.json ）。`stable` に、読ませる manifest の URL と SHA-256 を書く。
+  - `current.json`: `dev` も書ける（省略可能）。開発用のビルドが読む manifest で、配布版の `stable` を変えずに新しい版のデータを試すときに使う。
   - `manifests/<タグ>.json`: yamamuki-data の Release の `manifest.json` を書き換えずにコピーしたもの。差し替えるたびに 1 つ増やし、一度置いたファイルは上書きも削除もしない（前の版に戻すとき、そのまま使えるようにするため）。データ本体は yamamuki-data の Release のものを使う。
+- 参照先ファイルは手で書き換えず、Actions の「山データの差し替え PR を作る」を main で手動で動かして、差し替えの PR を作る（実行できるのは書き込み権限のある人だけ）。
+  - 差し替える先（`dev`・`stable`・`dev` を外す `remove-dev`）と Release のタグ（空なら最新）を選ぶ。`stable` には正式版の Release（タグ `osm-peaks-…`、manifest の版 5）だけを置ける。
+  - PR は GitHub App のトークンで作る（標準のトークンで作った PR では CI が動かないため）。App の ID と鍵は、main だけが使える環境 `data-swap` の変数 `APP_ID` とシークレット `APP_PRIVATE_KEY` に置いている。
+  - PR の CI「山データの確認」が、コピーが Release と同じか、`manifests/` が追加だけか、データ本体の大きさと SHA-256、`stable` の件数が 5% より多く減っていないかを確かめる。件数が減るのを確かめたうえで通すときは、PR にラベル「山データの件数減を確認済み」を付ける。
+  - core の単体テスト（`SitePeakDataTest`）が、`current.json` の指す manifest をアプリの読み込み処理で読めるかを確かめる。
+  - マージ後は Pages の公開のあとに、公開中の内容が git と同じかを確かめる。公開中の `current.json` から manifest とデータ本体までたどれるかは、「山データの見張り」で毎日確かめ、失敗したら Issue で知らせる。
+  - 確認の処理は `.github/scripts/peak_data.py` にある。
 - 対応する manifest の形式は schemaVersion 4 と 5。版 5 では、データ本体の版(`dataSchemaVersion`)が 5 のときだけ取り込む。知らない版や、データ本体の版が書かれていないときは取り込まず、アプリの更新を促す。
 - 版 5 のデータ本体(地点データ)は、山ごとの項目が版 4 までと同じなので、同じ読み方で読む。山頂以外の種別(`type`)の地点と、`osmId` の無い地点は飛ばす。
 - 取り込みと取り込み済みの版の記録は `android/core/.../PeakData.kt` と `ios/YamamukiCore/.../PeakData.swift` にある。
