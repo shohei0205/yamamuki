@@ -44,6 +44,10 @@ data class InstalledPeakData(
      */
     val manifestEtag: String?,
     val installedAtMillis: Long,
+    /** 保存データを作った読み込み処理の版([PeakData.READER_VERSION])。記録が無い古い版のアプリで取り込んだときは 0。 */
+    val readerVersion: Int = 0,
+    /** 取り込んだデータ本体(gz)の SHA-256。端末に残した gz がこの版のものかを確かめる。 */
+    val dataSha256: String? = null,
 )
 
 /** 配信データが壊れている、または読めない形式だった。 */
@@ -156,6 +160,12 @@ object PeakData {
      * longitude・elevationM)が版 4 までと同じで、読み仮名などの項目が増えただけなので、そのまま読める。
      */
     val SUPPORTED_DATA_SCHEMA_VERSIONS = setOf(5)
+
+    /**
+     * 保存データを作る読み込み処理の版。[parseMountains] で読む項目を増やしたり、保存の形を変えたりしたら上げる。
+     * 上がると、端末に残した gz から保存データを作り直す([PeakDataUpdater.rebuild])。gz が無ければ、次の確認で取り直す。
+     */
+    const val READER_VERSION = 1
 
     /** これより大きいデータは受け取らない。今は約 0.45 MB で、yamamuki-data も 5 MB を超えたら公開を止める。 */
     const val MAX_SIZE_BYTES = 20_000_000L
@@ -294,10 +304,12 @@ object PeakData {
 /**
  * 配信データの最新版を確かめ、新しければ取得・検証してキャッシュに取り込む。
  * 取り込む前に失敗したら、キャッシュの内容はそのまま残る。
+ * 取り込んだデータ本体は [archive] に残し、読み込み処理の版が上がったら、そこから作り直す。
  */
 class PeakDataUpdater(
     private val source: PeakDataSource,
     private val cache: MountainCache,
+    private val archive: PeakDataArchive? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     sealed interface Result {
@@ -309,15 +321,19 @@ class PeakDataUpdater(
         data class Updated(override val installed: InstalledPeakData) : Result
     }
 
-    /** @param installed 取り込み済みの版。null なら manifest の版によらず取得する。 */
+    /**
+     * @param installed 取り込み済みの版。null なら manifest の版によらず取得する。
+     * 古い読み込み処理で作った保存データ([rebuild] で作り直せなかったもの)も、版によらず取り直す。
+     */
     suspend fun update(installed: InstalledPeakData?): Result {
-        val response = source.fetchManifest(installed?.manifestEtag)
-        if (response is ManifestResponse.NotModified && installed != null) return Result.UpToDate(installed)
+        val current = installed?.takeIf { it.readerVersion >= PeakData.READER_VERSION }
+        val response = source.fetchManifest(current?.manifestEtag)
+        if (response is ManifestResponse.NotModified && current != null) return Result.UpToDate(current)
         val fetched = response as? ManifestResponse.Fetched
             ?: throw PeakDataException("manifest が返ってきませんでした")
         val manifest = PeakData.parseManifest(fetched.body)
-        if (installed != null && installed.version == manifest.version) {
-            return Result.UpToDate(installed.copy(manifestEtag = fetched.etag))
+        if (current != null && current.version == manifest.version) {
+            return Result.UpToDate(current.copy(manifestEtag = fetched.etag))
         }
 
         val data = source.fetchData(manifest.downloadUrl)
@@ -325,6 +341,8 @@ class PeakDataUpdater(
         val mountains = PeakData.parseMountains(data)
         if (mountains.isEmpty()) throw PeakDataException("山データが空です")
         cache.replaceTiles(PeakData.tilesOf(mountains), mountains, clock())
+        // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の gz が残る。
+        archive?.write(data)
         return Result.Updated(
             InstalledPeakData(
                 version = manifest.version,
@@ -332,8 +350,29 @@ class PeakDataUpdater(
                 mountainCount = mountains.size,
                 manifestEtag = fetched.etag,
                 installedAtMillis = clock(),
+                readerVersion = PeakData.READER_VERSION,
+                dataSha256 = manifest.sha256,
             ),
         )
+    }
+
+    /**
+     * [installed] が古い読み込み処理で作った保存データなら、端末に残した gz から通信せずに作り直す。
+     * 作り直したら新しい記録を、作り直す必要が無いか、gz が無い・SHA-256 が合わない・読めないときは null を返す。
+     * null のときに作り直しが必要なら、次の [update] で取り直す。
+     */
+    suspend fun rebuild(installed: InstalledPeakData?): InstalledPeakData? {
+        if (installed == null || installed.readerVersion >= PeakData.READER_VERSION) return null
+        val data = archive?.read() ?: return null
+        if (installed.dataSha256 == null || PeakData.sha256Hex(data) != installed.dataSha256) return null
+        val mountains = try {
+            PeakData.parseMountains(data)
+        } catch (e: PeakDataException) {
+            return null
+        }
+        if (mountains.isEmpty()) return null
+        cache.replaceTiles(PeakData.tilesOf(mountains), mountains, clock())
+        return installed.copy(mountainCount = mountains.size, readerVersion = PeakData.READER_VERSION)
     }
 }
 

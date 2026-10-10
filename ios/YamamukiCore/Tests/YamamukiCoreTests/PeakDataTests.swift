@@ -44,6 +44,18 @@ private final class MemoryCache: MountainCache, @unchecked Sendable {
     }
 }
 
+private final class MemoryArchive: PeakDataArchive, @unchecked Sendable {
+    var data: Data?
+
+    init(_ data: Data? = nil) {
+        self.data = data
+    }
+
+    func read() async -> Data? { data }
+    func write(_ data: Data) async { self.data = data }
+    func delete() async { data = nil }
+}
+
 final class PeakDataTests: XCTestCase {
     /// yamamuki-data の peaks/README.md の例と同じ形の 2 件(2 件目は標高もふりがなも無い)を、
     /// Python の gzip.compress(mtime=0) で圧縮したもの。Swift には gzip の圧縮が無いので、出来上がりを埋め込む。
@@ -227,5 +239,103 @@ final class PeakDataTests: XCTestCase {
 
         guard case .updated = result else { return XCTFail("新しい版は取り込むはず") }
         XCTAssertNil(cache.mountains[99], "配信範囲の古い山はキャッシュから消す")
+    }
+
+    func testKeepsImportedGzAndRecordsReaderVersion() async throws {
+        let archive = MemoryArchive()
+        let installed = try await PeakDataUpdater(source: FakeSource(manifest: manifest(), data: gzip), cache: MemoryCache(), archive: archive)
+            .update(installed: nil).installed
+        XCTAssertEqual(archive.data, gzip, "読まない項目も含めて、受け取った gz をそのまま残す")
+        XCTAssertEqual(installed.readerVersion, PeakData.readerVersion)
+        XCTAssertEqual(installed.dataSha256, gzipSha256)
+    }
+
+    func testBrokenDataKeepsPreviousGz() async {
+        let archive = MemoryArchive(Data([1, 2, 3]))
+        let source = FakeSource(manifest: manifest(), data: gzip.dropLast())
+        _ = try? await PeakDataUpdater(source: source, cache: MemoryCache(), archive: archive).update(installed: nil)
+        XCTAssertEqual(archive.data, Data([1, 2, 3]))
+    }
+
+    /// 古い読み込み処理で gz を取り込んだときの記録。
+    private func oldInstalled(sha256: String?? = .none, readerVersion: Int = PeakData.readerVersion - 1) -> InstalledPeakData {
+        InstalledPeakData(version: "v1", sourceTimestamp: "", mountainCount: 1, manifestEtag: "\"e1\"",
+                          installedAt: Date(timeIntervalSince1970: 0), readerVersion: readerVersion,
+                          dataSha256: sha256 ?? gzipSha256)
+    }
+
+    func testRebuildsFromKeptGzWithoutNetwork() async throws {
+        let source = FakeSource(manifest: manifest(), data: gzip)
+        let cache = MemoryCache()
+        let now = Date(timeIntervalSince1970: 2_000)
+        let updater = PeakDataUpdater(source: source, cache: cache, archive: MemoryArchive(gzip), clock: { now })
+
+        let rebuilt = try await updater.rebuild(installed: oldInstalled())
+        var expected = oldInstalled()
+        expected.mountainCount = 2
+        expected.readerVersion = PeakData.readerVersion
+        XCTAssertEqual(rebuilt, expected)
+        XCTAssertEqual(Set(cache.mountains.keys), [3_403_990_450, 12])
+        XCTAssertEqual(cache.tiles[Tile.of(40.0, 141.0)], now)
+        XCTAssertTrue(source.sentEtags.isEmpty && source.dataCalls == 0, "通信しない")
+
+        // 作り直したあとは、同じ版なら取り直さない。
+        let again = try await updater.rebuild(installed: rebuilt)
+        XCTAssertNil(again)
+        guard case .upToDate = try await updater.update(installed: rebuilt) else { return XCTFail("最新のはず") }
+        XCTAssertEqual(source.dataCalls, 0)
+    }
+
+    func testRefetchesSameVersionWhenKeptGzIsMissing() async throws {
+        let cases: [(MemoryArchive, InstalledPeakData)] = [
+            (MemoryArchive(), oldInstalled()),
+            (MemoryArchive(gzip), oldInstalled(sha256: String(repeating: "0", count: 64))),
+            (MemoryArchive(gzip), oldInstalled(sha256: .some(nil))),
+            (MemoryArchive(gzip), oldInstalled(readerVersion: 0)),
+        ]
+        for (archive, installed) in cases {
+            let source = FakeSource(manifest: manifest(), data: gzip)
+            let cache = MemoryCache()
+            let updater = PeakDataUpdater(source: source, cache: cache, archive: archive)
+            if installed.dataSha256 != gzipSha256 || archive.data == nil {
+                let rebuilt = try await updater.rebuild(installed: installed)
+                XCTAssertNil(rebuilt)
+                XCTAssertTrue(cache.mountains.isEmpty)
+            }
+            // 作り直せなかったら、データの版が同じでも ETag を送らずに取り直す。
+            guard case .updated(let result) = try await updater.update(installed: installed) else { return XCTFail("取り直すはず") }
+            XCTAssertEqual(source.sentEtags, [nil])
+            XCTAssertEqual(source.dataCalls, 1)
+            XCTAssertEqual(result.readerVersion, PeakData.readerVersion)
+        }
+    }
+
+    func testFileArchiveReplacesAndDeletesGz() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let archive = FilePeakDataArchive(url: dir.appendingPathComponent("data/osm-peaks.json.gz"))
+        let empty = await archive.read()
+        XCTAssertNil(empty)
+        await archive.write(Data([1, 2]))
+        await archive.write(gzip)
+        let kept = await archive.read()
+        XCTAssertEqual(kept, gzip, "前の gz は置き換える")
+        let files = try FileManager.default.contentsOfDirectory(atPath: dir.appendingPathComponent("data").path)
+        XCTAssertEqual(files, ["osm-peaks.json.gz"], "一時ファイルを残さない")
+        await archive.delete()
+        let deleted = await archive.read()
+        XCTAssertNil(deleted)
+    }
+
+    func testDecodesInstalledRecordWithoutReaderVersion() throws {
+        // 読み込み処理の版を記録していない、古い版のアプリが保存した記録。
+        let old = InstalledPeakData(version: "v1", sourceTimestamp: "", mountainCount: 1, manifestEtag: nil,
+                                    installedAt: Date(timeIntervalSince1970: 0))
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as! [String: Any]
+        json.removeValue(forKey: "readerVersion")
+        json.removeValue(forKey: "dataSha256")
+        let decoded = try JSONDecoder().decode(InstalledPeakData.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(decoded, old)
+        XCTAssertEqual(decoded.readerVersion, 0)
     }
 }

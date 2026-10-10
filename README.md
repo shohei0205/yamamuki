@@ -184,7 +184,11 @@ open Yamamuki.xcodeproj
   - 確認の処理は `.github/scripts/peak_data.py` にある。
 - 対応する manifest の形式は schemaVersion 4 と 5。版 5 では、データ本体の版(`dataSchemaVersion`)が 5 のときだけ取り込む。知らない版や、データ本体の版が書かれていないときは取り込まず、アプリの更新を促す。
 - 版 5 のデータ本体(地点データ)は、山ごとの項目が版 4 までと同じなので、同じ読み方で読む。山頂以外の種別(`type`)の地点と、`osmId` の無い地点は飛ばす。
-- 取り込みと取り込み済みの版の記録は `android/core/.../PeakData.kt` と `ios/YamamukiCore/.../PeakData.swift` にある。
+- 取り込んだデータ本体(gz)は、保存データに取り込み終えてから端末に 1 つだけ残す。新しい版を取り込むと置き換えるので溜まらない(今は約 0.5 MB)。取り込みに失敗したときは、前の gz をそのまま残す。アプリが読まない項目(読み仮名・`tags` など)も、この gz には残る。
+  - 取り込み済みの記録には、保存データを作った読み込み処理の版(`PeakData.READER_VERSION` / `PeakData.readerVersion`)と、gz の SHA-256 も書く。読む項目を増やしたら、この版を上げる。
+  - アプリの更新で読み込み処理の版が上がっていたら、起動時に残した gz から通信せずに保存データを作り直す。gz が無いか SHA-256 が合わないときは、次に更新を確かめたときに、データの版が同じでも取り直す。gz を残す前の版のアプリから更新したときも、最初の確認で一度だけ取り直す。
+  - 置き場所は、Android がアプリの `noBackupFilesDir/peak-data/`、iOS が Application Support の `peak-data/`(バックアップから除外)。設定の「キャッシュを消去」では記録と一緒に消す(Android は、古い版のアプリでキャッシュを作り直したときも消す)。
+- 取り込みと取り込み済みの版の記録は `android/core/.../PeakData.kt` と `ios/YamamukiCore/.../PeakData.swift`、gz の保存は `PeakDataArchive.kt` / `PeakDataArchive.swift` にある。
 - OpenStreetMap の Overpass API から取得していたころに分かったことは [docs/peak-data-notes.md](docs/peak-data-notes.md) にまとめた。
 
 以前の都道府県単位の事前ダウンロード(Overpass から取得)は、`Features.AREA_DOWNLOAD`(Android、`android/app/.../Features.kt`)と `Features.areaDownload`(iOS、`ios/Yamamuki/Features.swift`)を false にして隠している。コードは残してある。

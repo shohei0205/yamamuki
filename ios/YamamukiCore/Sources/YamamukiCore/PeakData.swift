@@ -36,13 +36,36 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
     /// 参照先ファイルから読んだときは manifest の SHA-256、manifest を直接読んだときは HTTP の ETag。
     public var manifestEtag: String?
     public var installedAt: Date
+    /// 保存データを作った読み込み処理の版(`PeakData.readerVersion`)。記録が無い古い版のアプリで取り込んだときは 0。
+    public var readerVersion: Int
+    /// 取り込んだデータ本体(gz)の SHA-256。端末に残した gz がこの版のものかを確かめる。
+    public var dataSha256: String?
 
-    public init(version: String, sourceTimestamp: String, mountainCount: Int, manifestEtag: String?, installedAt: Date) {
+    public init(version: String, sourceTimestamp: String, mountainCount: Int, manifestEtag: String?, installedAt: Date,
+                readerVersion: Int = 0, dataSha256: String? = nil) {
         self.version = version
         self.sourceTimestamp = sourceTimestamp
         self.mountainCount = mountainCount
         self.manifestEtag = manifestEtag
         self.installedAt = installedAt
+        self.readerVersion = readerVersion
+        self.dataSha256 = dataSha256
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version, sourceTimestamp, mountainCount, manifestEtag, installedAt, readerVersion, dataSha256
+    }
+
+    /// 読み込み処理の版と SHA-256 を記録していない、古い版のアプリが保存した記録も読む。
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(String.self, forKey: .version)
+        sourceTimestamp = try c.decode(String.self, forKey: .sourceTimestamp)
+        mountainCount = try c.decode(Int.self, forKey: .mountainCount)
+        manifestEtag = try c.decodeIfPresent(String.self, forKey: .manifestEtag)
+        installedAt = try c.decode(Date.self, forKey: .installedAt)
+        readerVersion = try c.decodeIfPresent(Int.self, forKey: .readerVersion) ?? 0
+        dataSha256 = try c.decodeIfPresent(String.self, forKey: .dataSha256)
     }
 }
 
@@ -153,6 +176,10 @@ public enum PeakData {
 
     /// 地点データ版 5 の、山頂の種別。
     static let peakType = "peak"
+
+    /// 保存データを作る読み込み処理の版。`parseMountains` で読む項目を増やしたり、保存の形を変えたりしたら上げる。
+    /// 上がると、端末に残した gz から保存データを作り直す(`PeakDataUpdater.rebuild`)。gz が無ければ、次の確認で取り直す。
+    public static let readerVersion = 1
 
     /// これより大きいデータは受け取らない。今は約 0.45 MB で、yamamuki-data も 5 MB を超えたら公開を止める。
     public static let maxSizeBytes = 20_000_000
@@ -332,6 +359,7 @@ public enum PeakData {
 
 /// 配信データの最新版を確かめ、新しければ取得・検証してキャッシュに取り込む。
 /// 取り込む前に失敗したら、キャッシュの内容はそのまま残る。
+/// 取り込んだデータ本体は `archive` に残し、読み込み処理の版が上がったら、そこから作り直す。
 public struct PeakDataUpdater: Sendable {
     public enum Result: Equatable, Sendable {
         /// 取り込み済みの版が最新だった。
@@ -347,16 +375,21 @@ public struct PeakDataUpdater: Sendable {
 
     private let source: PeakDataSource
     private let cache: MountainCache
+    private let archive: PeakDataArchive?
     private let clock: @Sendable () -> Date
 
-    public init(source: PeakDataSource, cache: MountainCache, clock: @escaping @Sendable () -> Date = { Date() }) {
+    public init(source: PeakDataSource, cache: MountainCache, archive: PeakDataArchive? = nil,
+                clock: @escaping @Sendable () -> Date = { Date() }) {
         self.source = source
         self.cache = cache
+        self.archive = archive
         self.clock = clock
     }
 
     /// - Parameter installed: 取り込み済みの版。nil なら manifest の版によらず取得する。
+    ///   古い読み込み処理で作った保存データ(`rebuild` で作り直せなかったもの)も、版によらず取り直す。
     public func update(installed: InstalledPeakData?) async throws -> Result {
+        let installed = installed.flatMap { $0.readerVersion >= PeakData.readerVersion ? $0 : nil }
         let response = try await source.fetchManifest(etag: installed?.manifestEtag)
         let body: Data
         let etag: String?
@@ -379,13 +412,30 @@ public struct PeakDataUpdater: Sendable {
         let mountains = try PeakData.parseMountains(data)
         guard !mountains.isEmpty else { throw PeakDataError("山データが空です") }
         try await cache.replaceTiles(PeakData.tiles(of: mountains), mountains: mountains, fetchedAt: clock())
+        // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の gz が残る。
+        await archive?.write(data)
         return .updated(InstalledPeakData(
             version: manifest.version,
             sourceTimestamp: manifest.sourceTimestamp,
             mountainCount: mountains.count,
             manifestEtag: etag,
-            installedAt: clock()
+            installedAt: clock(),
+            readerVersion: PeakData.readerVersion,
+            dataSha256: manifest.sha256
         ))
+    }
+
+    /// `installed` が古い読み込み処理で作った保存データなら、端末に残した gz から通信せずに作り直す。
+    /// 作り直したら新しい記録を、作り直す必要が無いか、gz が無い・SHA-256 が合わない・読めないときは nil を返す。
+    /// nil のときに作り直しが必要なら、次の `update` で取り直す。
+    public func rebuild(installed: InstalledPeakData?) async throws -> InstalledPeakData? {
+        guard var installed, installed.readerVersion < PeakData.readerVersion,
+              let data = await archive?.read(), let sha256 = installed.dataSha256, PeakData.sha256Hex(data) == sha256,
+              let mountains = try? PeakData.parseMountains(data), !mountains.isEmpty else { return nil }
+        try await cache.replaceTiles(PeakData.tiles(of: mountains), mountains: mountains, fetchedAt: clock())
+        installed.mountainCount = mountains.count
+        installed.readerVersion = PeakData.readerVersion
+        return installed
     }
 }
 

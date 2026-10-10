@@ -8,6 +8,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.security.MessageDigest
 import java.util.zip.GZIPOutputStream
 import kotlin.test.Test
@@ -228,6 +229,94 @@ class PeakDataTest {
         assertFailsWith<PeakDataException> { PeakDataUpdater(source, cache).update(null) }
         assertTrue(cache.mountains.isEmpty())
         assertTrue(cache.tiles.isEmpty())
+    }
+
+    private class InMemoryArchive(var data: ByteArray? = null) : PeakDataArchive {
+        override suspend fun read() = data
+        override suspend fun write(data: ByteArray) { this.data = data }
+        override suspend fun delete() { data = null }
+    }
+
+    @Test
+    fun keepsImportedGzAndRecordsReaderVersion() = runTest {
+        val archive = InMemoryArchive()
+        val installed = PeakDataUpdater(FakeSource(manifest(), gzip), InMemoryMountainCache(), archive).update(null).installed
+        assertTrue(archive.data!!.contentEquals(gzip), "読まない項目も含めて、受け取った gz をそのまま残す")
+        assertEquals(PeakData.READER_VERSION, installed.readerVersion)
+        assertEquals(sha256(gzip), installed.dataSha256)
+    }
+
+    @Test
+    fun brokenDataKeepsPreviousGz() = runTest {
+        val archive = InMemoryArchive(byteArrayOf(1, 2, 3))
+        val source = FakeSource(manifest(), gzip.copyOf(gzip.size - 1))
+        assertFailsWith<PeakDataException> { PeakDataUpdater(source, InMemoryMountainCache(), archive).update(null) }
+        assertTrue(archive.data!!.contentEquals(byteArrayOf(1, 2, 3)))
+    }
+
+    /** 古い読み込み処理で gz を取り込んだときの記録。 */
+    private fun oldInstalled(sha256: String? = sha256(gzip)) = InstalledPeakData(
+        version = "v1", sourceTimestamp = "", mountainCount = 1, manifestEtag = "\"e1\"", installedAtMillis = 0,
+        readerVersion = PeakData.READER_VERSION - 1, dataSha256 = sha256,
+    )
+
+    @Test
+    fun rebuildsFromKeptGzWithoutNetwork() = runTest {
+        val source = FakeSource(manifest(), gzip)
+        val cache = InMemoryMountainCache()
+        val updater = PeakDataUpdater(source, cache, InMemoryArchive(gzip), clock = { 2_000L })
+
+        val rebuilt = updater.rebuild(oldInstalled())
+        assertEquals(oldInstalled().copy(mountainCount = 2, readerVersion = PeakData.READER_VERSION), rebuilt)
+        assertEquals(setOf(3403990450L, 12L), cache.mountains.keys)
+        assertEquals(2_000L, cache.tiles[Tile.of(40.0, 141.0)])
+        assertTrue(source.sentEtags.isEmpty() && source.dataCalls == 0, "通信しない")
+
+        // 作り直したあとは、同じ版なら取り直さない。
+        assertNull(updater.rebuild(rebuilt))
+        assertIs<PeakDataUpdater.Result.UpToDate>(updater.update(rebuilt))
+        assertEquals(0, source.dataCalls)
+    }
+
+    @Test
+    fun refetchesSameVersionWhenKeptGzIsMissing() = runTest {
+        for ((archive, installed) in listOf(
+            InMemoryArchive() to oldInstalled(),
+            InMemoryArchive(gzip) to oldInstalled(sha256 = "0".repeat(64)),
+            InMemoryArchive(gzip) to oldInstalled(sha256 = null),
+            InMemoryArchive(gzip) to oldInstalled().copy(readerVersion = 0),
+        )) {
+            val source = FakeSource(manifest(), gzip)
+            val cache = InMemoryMountainCache()
+            val updater = PeakDataUpdater(source, cache, archive)
+            if (installed.dataSha256 != sha256(gzip) || archive.data == null) {
+                assertNull(updater.rebuild(installed))
+                assertTrue(cache.mountains.isEmpty())
+            }
+            // 作り直せなかったら、データの版が同じでも ETag を送らずに取り直す。
+            val result = updater.update(installed)
+            assertIs<PeakDataUpdater.Result.Updated>(result)
+            assertNull(source.sentEtags.single())
+            assertEquals(1, source.dataCalls)
+            assertEquals(PeakData.READER_VERSION, result.installed.readerVersion)
+        }
+    }
+
+    @Test
+    fun fileArchiveReplacesAndDeletesGz() = runTest {
+        val dir = kotlin.io.path.createTempDirectory("peak-data").toFile()
+        try {
+            val archive = FilePeakDataArchive(File(dir, "data/osm-peaks.json.gz"))
+            assertNull(archive.read())
+            archive.write(byteArrayOf(1, 2))
+            archive.write(gzip)
+            assertTrue(archive.read()!!.contentEquals(gzip), "前の gz は置き換える")
+            assertEquals(listOf("osm-peaks.json.gz"), File(dir, "data").list()!!.toList(), "一時ファイルを残さない")
+            archive.delete()
+            assertNull(archive.read())
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     @Test
