@@ -163,18 +163,17 @@ open Yamamuki.xcodeproj
 
 - 初回起動時に「山データを取得」を聞く。「取得する」を選ぶとすぐに取得し、「あとで」を選んだときは設定画面の「山データ」から取得できる。位置情報の許可はこのあとに聞く。
 - 設定画面の「山データを更新」(取得済みなら「更新を確認」)で取り直せる。新しい版がなければ確認だけで終わる。
-- 取得先の manifest は 2 つある。URL は core の `PeakData` にある。
-  - 正式版: `https://shohei0205.github.io/yamamuki-data/peaks/manifest.json`(yamamuki-data の main が公開する。配布済みのアプリのために残している置き場所で、manifest は版 4)
-  - 開発版: `https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json`(yamamuki-data の dev が公開する。manifest は版 5)
-- 配布用のビルド(Android の release、iOS の Release)は、いつも正式版を読む。
-- 開発用のビルド(Android の debug、iOS の Debug)も、既定では正式版を読む。開発版のデータを試すときだけ、ビルドのときに取得先を切り替える。画面からは切り替えられない。
-  - Android: Gradle のプロパティ `peakDataSource=dev` を付ける(例: `./gradlew :app:installDebug -PpeakDataSource=dev`。`~/.gradle/gradle.properties` に書いてもよい)。`android/app/build.gradle.kts` で `BuildConfig.PEAK_DATA_DEV` になる。
-  - iOS: ビルド設定 `PEAK_DATA_SOURCE` を `dev` にする(例: `xcodebuild ... PEAK_DATA_SOURCE=dev`。Xcode ではターゲットの Build Settings の User-Defined で変える。`xcodegen generate` で `stable` に戻る)。`ios/project.yml` で `PEAK_DATA_DEV` の条件が付く。
-  - 取得先を切り替えた開発版は、前の取得先の版と違えば取り直し、保存している山データを入れ替える。
-- manifest は前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「もう一度取得」で取り直せる)。
-- 0.6.0 からは、配布用のビルドが読む manifest を yamamuki 側で決める予定（まだアプリは読んでいない）。そのための参照先ファイルを `site/data/osm-peaks/` に置いている。
-  - `current.json`: 配布用のビルドが最初に読むファイル（https://shohei0205.github.io/yamamuki/data/osm-peaks/current.json ）。`stable` に、読ませる manifest の URL と SHA-256 を書く。
-  - `current.json`: `dev` も書ける（省略可能）。開発用のビルドが読む manifest で、配布版の `stable` を変えずに新しい版のデータを試すときに使う。
+- 読む manifest は、yamamuki の Pages に置いた参照先ファイル `current.json`（https://shohei0205.github.io/yamamuki/data/osm-peaks/current.json ）で決める。URL は core の `PeakData` にある。
+  - 配布用のビルド(Android の release、iOS の Release)は、`current.json` の `stable` が指す manifest を読む。
+  - 開発用のビルド(Android の debug、iOS の Debug)は、既定では `current.json` の `dev` が指す manifest を読む(`dev` が無ければ `stable`)。配布版の `stable` を変えずに、新しい版のデータを試せる。
+  - 開発用のビルドで取得先を `dev` にすると、yamamuki-data の dev が公開する最新の開発版 `https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json` を直接読む。画面からは切り替えられず、ビルドのときに選ぶ。
+    - Android: Gradle のプロパティ `peakDataSource=dev` を付ける(例: `./gradlew :app:installDebug -PpeakDataSource=dev`。`~/.gradle/gradle.properties` に書いてもよい。既定は `current`)。`android/app/build.gradle.kts` で `BuildConfig.PEAK_DATA_DEV` になる。
+    - iOS: ビルド設定 `PEAK_DATA_SOURCE` を `dev` にする(例: `xcodebuild ... PEAK_DATA_SOURCE=dev`。Xcode ではターゲットの Build Settings の User-Defined で変える。`xcodegen generate` で既定の `current` に戻る)。`ios/project.yml` で `PEAK_DATA_DEV` の条件が付く。
+  - 読み先を切り替えたビルドは、前の読み先の版と違えば取り直し、保存している山データを入れ替える。
+- `current.json` は毎回取り直す(数百バイト)。指す manifest の SHA-256 が前回と同じなら、manifest は取り直さない。違えば manifest を取り、SHA-256 が `current.json` と合うかを確かめる。`current.json` が yamamuki の `manifests/` 以外を指しているときは読まない。yamamuki-data の開発版を直接読むときは、manifest に前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。
+- 版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「もう一度取得」で取り直せる)。
+- 参照先ファイルは `site/data/osm-peaks/` にある。
+  - `current.json`: `stable`(必須)と `dev`(省略可能)に、読ませる manifest の URL と SHA-256 を書く。
   - `manifests/<タグ>.json`: yamamuki-data の Release の `manifest.json` を書き換えずにコピーしたもの。差し替えるたびに 1 つ増やし、一度置いたファイルは上書きも削除もしない（前の版に戻すとき、そのまま使えるようにするため）。データ本体は yamamuki-data の Release のものを使う。
 - 参照先ファイルは手で書き換えず、Actions の「山データの差し替え PR を作る」を main で手動で動かして、差し替えの PR を作る（実行できるのは書き込み権限のある人だけ）。
   - 差し替える先（`dev`・`stable`・`dev` を外す `remove-dev`）と Release のタグ（空なら最新）を選ぶ。`stable` には正式版の Release（タグ `osm-peaks-…`、manifest の版 5）だけを置ける。

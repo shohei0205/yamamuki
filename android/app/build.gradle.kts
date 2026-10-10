@@ -28,11 +28,12 @@ android {
         .takeIf { it.exists() }
     val signingProps = signingPropsFile?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 
-    // 開発版が読む山データの取得先。既定は正式版(yamamuki-data の main が公開する peaks/、配布版と同じ)。
-    // 開発版のデータ(dev が公開する points/osm-peaks-dev/)を試すときは、Gradle のプロパティ peakDataSource=dev を付ける
+    // 開発版が読む山データの取得先。既定(current)は、yamamuki の参照先ファイル(current.json)の dev が指す manifest
+    // (dev が無ければ配布版と同じ stable)。yamamuki-data の dev が公開する最新の開発版(points/osm-peaks-dev/)を直接試すときは、
+    // Gradle のプロパティ peakDataSource=dev を付ける
     // (例: ./gradlew :app:installDebug -PpeakDataSource=dev。~/.gradle/gradle.properties に書いてもよい)。
-    val peakDataSource = providers.gradleProperty("peakDataSource").getOrElse("stable")
-    require(peakDataSource in setOf("stable", "dev")) { "peakDataSource は stable か dev を指定してください: $peakDataSource" }
+    val peakDataSource = providers.gradleProperty("peakDataSource").getOrElse("current")
+    require(peakDataSource in setOf("current", "dev")) { "peakDataSource は current か dev を指定してください: $peakDataSource" }
 
     signingConfigs {
         if (signingPropsFile != null && signingProps != null) {
@@ -46,7 +47,7 @@ android {
     }
 
     buildTypes {
-        // 山データの manifest は、配布版は正式版、開発版は peakDataSource で選んだほうを読む(core の PeakData.manifestUrl)。
+        // 山データは、配布版は参照先ファイルの stable、開発版は peakDataSource で選んだほうを読む(YamamukiApp.peakDataChannel)。
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
