@@ -32,7 +32,8 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
     public var version: String
     public var sourceTimestamp: String
     public var mountainCount: Int
-    /// manifest を取ったときの ETag。次の確認で送り、変わっていなければ manifest も取り直さない。
+    /// manifest を取ったときの目印。次の確認で送り、変わっていなければ manifest も取り直さない。
+    /// 参照先ファイルから読んだときは manifest の SHA-256、manifest を直接読んだときは HTTP の ETag。
     public var manifestEtag: String?
     public var installedAt: Date
 
@@ -59,6 +60,22 @@ public enum ManifestResponse: Sendable {
     case fetched(body: Data, etag: String?)
 }
 
+/// 山データをどこから読むか。ビルドの種類と、開発用のビルドの取得先の設定で決まる。
+public enum PeakDataChannel: Sendable {
+    /// 配布用のビルド: yamamuki の参照先ファイル(current.json)の stable が指す manifest。
+    case stable
+    /// 開発用のビルドの既定: 参照先ファイルの dev が指す manifest。dev が無ければ stable。
+    case dev
+    /// 開発用のビルドで取得先を dev にしたとき: yamamuki-data の dev が公開する最新の manifest を直接。
+    case dataDev
+}
+
+/// 参照先ファイル(current.json)の、読む manifest の場所と SHA-256。
+public struct PeakDataPointer: Equatable, Sendable {
+    public let manifestUrl: URL
+    public let manifestSha256: String
+}
+
 /// 配信データの取得元。テストではフェイクに差し替える。
 public protocol PeakDataSource: Sendable {
     /// - Parameter etag: 前回の ETag。nil なら必ず取得する。
@@ -67,17 +84,64 @@ public protocol PeakDataSource: Sendable {
 }
 
 public enum PeakData {
-    /// 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先に開発版を選んだときに読む。
-    /// 開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
-    /// yamamuki-data の新しい置き場所(points/osm-peaks-dev/)で、manifest は版 5。
+    /// 山データの参照先ファイル。読ませる manifest を yamamuki 側で決めるため、yamamuki の Pages に置いている。
+    /// stable(配布用)と dev(開発用、省略可能)に、manifest の URL と SHA-256 が書いてある。
+    /// 書き換えは「山データの差し替え PR を作る」ワークフローの PR で行う。
+    public static let pointerUrl = URL(string: "https://shohei0205.github.io/yamamuki/data/osm-peaks/current.json")!
+
+    /// 参照先ファイルが指してよい manifest の置き場所。Release の manifest を書き換えずにコピーしたもの。
+    public static let pointerManifestUrlPrefix = "https://shohei0205.github.io/yamamuki/data/osm-peaks/manifests/"
+
+    /// 読める参照先ファイルの形式の版。
+    public static let pointerSchemaVersion = 1
+
+    /// 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先を dev にしたときに直接読む
+    /// (`PeakDataChannel.dataDev`)。開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
+    /// yamamuki-data の dev が公開する置き場所(points/osm-peaks-dev/)で、manifest は版 5。
     public static let devManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json")!
 
-    /// 正式版の最新版の manifest の URL。配布用のビルド(Release)と、取得先を選ばなかった開発用のビルドはこれを読む。
-    /// 配布済みのアプリ(0.5.0 まで)のために yamamuki-data が残している置き場所で、manifest は版 4。
-    public static let stableManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/peaks/manifest.json")!
+    /// `channel` から山データを読む取得元。
+    public static func source(_ channel: PeakDataChannel, session: URLSession = .shared, userAgent: String) -> PeakDataSource {
+        switch channel {
+        case .stable: return PointerPeakDataSource(session: session, useDev: false, userAgent: userAgent)
+        case .dev: return PointerPeakDataSource(session: session, useDev: true, userAgent: userAgent)
+        case .dataDev: return HTTPPeakDataSource(session: session, manifestUrl: devManifestUrl, userAgent: userAgent)
+        }
+    }
 
-    /// ビルドの種類に合う manifest の URL。
-    public static func manifestUrl(dev: Bool) -> URL { dev ? devManifestUrl : stableManifestUrl }
+    /// 参照先ファイルを読み、読む manifest の場所を返す。`useDev` なら dev を、dev が無ければ stable を読む。
+    /// よその URL を指していたり、SHA-256 の形がおかしかったりしたら読まない。
+    public static func parsePointer(_ body: Data, useDev: Bool) throws -> PeakDataPointer {
+        guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
+            throw PeakDataError("山データの参照先ファイルを読めません")
+        }
+        // JSONSerialization は true / false も NSNumber で返すので、整数だけを通す。
+        let number = root["schemaVersion"] as? NSNumber
+        let schemaVersion = number.flatMap { CFGetTypeID($0) == CFBooleanGetTypeID() ? nil : $0 }
+            .flatMap { $0.doubleValue == $0.doubleValue.rounded() ? $0.intValue : nil }
+        guard schemaVersion == pointerSchemaVersion else {
+            throw PeakDataError("このアプリが読めない形式の山データの参照先です(形式の版 \(schemaVersion.map(String.init) ?? "不明"))。アプリを更新してください。")
+        }
+        let channel = useDev && root["dev"] != nil && !(root["dev"] is NSNull) ? "dev" : "stable"
+        guard let entry = root[channel] as? [String: Any] else {
+            throw PeakDataError("山データの参照先ファイルに \(channel) がありません")
+        }
+        guard let url = entry["manifestUrl"] as? String, url.hasPrefix(pointerManifestUrlPrefix),
+              isManifestName(String(url.dropFirst(pointerManifestUrlPrefix.count))), let manifestUrl = URL(string: url) else {
+            throw PeakDataError("山データの参照先ファイルの \(channel) が、決まった置き場所の manifest を指していません")
+        }
+        guard let sha256 = entry["manifestSha256"] as? String, sha256.count == 64,
+              sha256.allSatisfy({ "0123456789abcdef".contains($0) }) else {
+            throw PeakDataError("山データの参照先ファイルの \(channel) の manifestSha256 が SHA-256 ではありません")
+        }
+        return PeakDataPointer(manifestUrl: manifestUrl, manifestSha256: sha256)
+    }
+
+    /// 参照先ファイルが指してよい manifest のファイル名(Release のタグ + .json)か。
+    static func isManifestName(_ name: String) -> Bool {
+        guard name.hasSuffix(".json"), let first = name.first, first.isASCII, first.isLetter || first.isNumber else { return false }
+        return name.dropLast(".json".count).allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }
+    }
 
     /// 読める manifest の形式の版。版 4 で downloadUrl が入った。版 5 で件数が pointCount になり、
     /// データ本体の版(dataSchemaVersion)が別に書かれるようになった。
@@ -325,7 +389,49 @@ public struct PeakDataUpdater: Sendable {
     }
 }
 
-/// HTTP で配信データを取得する。
+/// yamamuki の参照先ファイル(current.json)から manifest をたどって、配信データを取得する。
+/// 参照先ファイルは毎回取り直し(数百バイト)、指す manifest の SHA-256 が前回と同じなら manifest は取り直さない。
+/// manifest のコピーは書き換えない決まりなので、SHA-256 を ETag の代わりに使う。
+public struct PointerPeakDataSource: PeakDataSource {
+    private let session: URLSession
+    private let useDev: Bool
+    private let pointerUrl: URL
+    private let userAgent: String
+
+    public init(session: URLSession = .shared, useDev: Bool, pointerUrl: URL = PeakData.pointerUrl, userAgent: String = "yamamuki-ios") {
+        self.session = session
+        self.useDev = useDev
+        self.pointerUrl = pointerUrl
+        self.userAgent = userAgent
+    }
+
+    public func fetchManifest(etag: String?) async throws -> ManifestResponse {
+        let pointer = try PeakData.parsePointer(try await get(pointerUrl), useDev: useDev)
+        if pointer.manifestSha256 == etag { return .notModified }
+        let manifest = try await get(pointer.manifestUrl)
+        guard PeakData.sha256Hex(manifest) == pointer.manifestSha256 else {
+            throw PeakDataError("山データの manifest の SHA-256 が参照先ファイルと合いません")
+        }
+        return .fetched(body: manifest, etag: pointer.manifestSha256)
+    }
+
+    public func fetchData(_ url: URL) async throws -> Data { try await get(url) }
+
+    private func get(_ url: URL) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        // 差し替えたばかりの参照先ファイルを古いまま読まないよう、端末の HTTP キャッシュは使わない。
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, response) = try await session.data(for: request)
+        let http = response as? HTTPURLResponse
+        guard let status = http?.statusCode, (200..<300).contains(status) else {
+            throw PeakDataError("サーバーが HTTP \(http.map { "\($0.statusCode)" } ?? "-") を返しました(\(url.lastPathComponent))。")
+        }
+        return data
+    }
+}
+
+/// HTTP で manifest を直接読んで、配信データを取得する。
 public struct HTTPPeakDataSource: PeakDataSource {
     private let session: URLSession
     private let manifestUrl: URL

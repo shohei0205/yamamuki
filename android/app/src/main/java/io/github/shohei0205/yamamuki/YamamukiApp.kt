@@ -1,10 +1,10 @@
 package io.github.shohei0205.yamamuki
 
 import android.app.Application
-import io.github.shohei0205.yamamuki.core.HttpPeakDataSource
 import io.github.shohei0205.yamamuki.core.MountainRepository
 import io.github.shohei0205.yamamuki.core.OverpassClient
 import io.github.shohei0205.yamamuki.core.PeakData
+import io.github.shohei0205.yamamuki.core.PeakDataChannel
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
 import io.github.shohei0205.yamamuki.data.CacheManager
 import io.github.shohei0205.yamamuki.data.MountainDatabase
@@ -57,13 +57,22 @@ class YamamukiApp : Application() {
         MountainRepository(remote = OverpassClient(http, userAgent = USER_AGENT), cache = cache)
     }
 
-    /** yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。開発版のビルドは開発版の manifest を読む。 */
+    /** yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。どこから読むかは [peakDataChannel]。 */
     val peakDataUpdater: PeakDataUpdater by lazy {
-        val manifestUrl = PeakData.manifestUrl(dev = BuildConfig.PEAK_DATA_DEV)
-        PeakDataUpdater(HttpPeakDataSource(http, manifestUrl, userAgent = USER_AGENT), cache)
+        PeakDataUpdater(PeakData.source(peakDataChannel, http, userAgent = USER_AGENT), cache)
     }
 
     private companion object {
         const val USER_AGENT = "yamamuki-android/0.1 (+https://github.com/shohei0205/yamamuki)"
+
+        /**
+         * 山データの読み先。配布版は参照先ファイルの stable、開発版は既定で参照先ファイルの dev(無ければ stable)、
+         * Gradle のプロパティ peakDataSource=dev で作った開発版は yamamuki-data の開発版を直接読む。
+         */
+        val peakDataChannel = when {
+            BuildConfig.PEAK_DATA_DEV -> PeakDataChannel.DATA_DEV
+            BuildConfig.DEBUG -> PeakDataChannel.DEV
+            else -> PeakDataChannel.STABLE
+        }
     }
 }

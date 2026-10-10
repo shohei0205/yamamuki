@@ -80,11 +80,14 @@ final class DialModel: ObservableObject {
     /// これ以上移動したら、保存済みのデータを読み直す。
     private static let refetchDistanceKm = 1.0
 
-    /// 開発版の山データを読むか。Debug のビルドで PEAK_DATA_SOURCE を dev にしたときだけ、project.yml で PEAK_DATA_DEV が付く。
+    /// 山データの読み先。Release は参照先ファイルの stable、Debug は既定で参照先ファイルの dev(無ければ stable)。
+    /// Debug のビルドで PEAK_DATA_SOURCE を dev にしたときだけ、project.yml で PEAK_DATA_DEV が付き、yamamuki-data の開発版を直接読む。
     #if PEAK_DATA_DEV
-    private static let peakDataDev = true
+    private static let peakDataChannel = PeakDataChannel.dataDev
+    #elseif DEBUG
+    private static let peakDataChannel = PeakDataChannel.dev
     #else
-    private static let peakDataDev = false
+    private static let peakDataChannel = PeakDataChannel.stable
     #endif
 
     init() {
@@ -94,7 +97,7 @@ final class DialModel: ObservableObject {
         let userAgent = "yamamuki-ios/0.1 (+https://github.com/shohei0205/yamamuki)"
         repository = MountainRepository(remote: OverpassClient(userAgent: userAgent), cache: cache)
         peakDataUpdater = PeakDataUpdater(
-            source: HTTPPeakDataSource(manifestUrl: PeakData.manifestUrl(dev: Self.peakDataDev), userAgent: userAgent),
+            source: PeakData.source(Self.peakDataChannel, userAgent: userAgent),
             cache: cache
         )
         peakData = peakDataStore.load()

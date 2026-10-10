@@ -253,10 +253,85 @@ class PeakDataTest {
         assertTrue(source.fetchData("https://example.com/japan-mountains.json.gz").contentEquals(gzip))
     }
 
+    private val stableUrl = PeakData.POINTER_MANIFEST_URL_PREFIX + "osm-peaks-20261007T071401Z-37585754546-1.json"
+    private val devUrl = PeakData.POINTER_MANIFEST_URL_PREFIX + "osm-peaks-dev-20261010T022253Z-38016527834-1.json"
+
+    private fun entry(url: String, sha256: String) = """{"manifestUrl":"$url","manifestSha256":"$sha256"}"""
+
+    private fun pointer(stable: String? = entry(stableUrl, "a".repeat(64)), dev: String? = null, schemaVersion: Int = 1) =
+        listOfNotNull("\"schemaVersion\":$schemaVersion", stable?.let { "\"stable\":$it" }, dev?.let { "\"dev\":$it" })
+            .joinToString(",", "{", "}")
+
     @Test
-    fun manifestUrlFollowsBuildType() {
-        assertEquals("https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json", PeakData.manifestUrl(dev = true))
-        assertEquals("https://shohei0205.github.io/yamamuki-data/peaks/manifest.json", PeakData.manifestUrl(dev = false))
+    fun pointerPicksStableOrDev() {
+        val withDev = pointer(dev = entry(devUrl, "b".repeat(64)))
+        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parsePointer(withDev, useDev = false))
+        assertEquals(PeakDataPointer(devUrl, "b".repeat(64)), PeakData.parsePointer(withDev, useDev = true))
+        // dev が無ければ、開発用のビルドも stable を読む。
+        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parsePointer(pointer(), useDev = true))
+    }
+
+    @Test
+    fun pointerRejectsUnexpectedContent() {
+        val bad = listOf(
+            pointer(schemaVersion = 2),
+            pointer(stable = null),
+            pointer(stable = null, dev = entry(devUrl, "b".repeat(64))),
+            pointer(stable = entry("https://shohei0205.github.io/yamamuki-data/peaks/manifest.json", "a".repeat(64))),
+            pointer(stable = entry(PeakData.POINTER_MANIFEST_URL_PREFIX + "sub/x.json", "a".repeat(64))),
+            pointer(stable = entry(PeakData.POINTER_MANIFEST_URL_PREFIX + "x.txt", "a".repeat(64))),
+            pointer(stable = entry(stableUrl, "A".repeat(64))),
+            pointer(stable = entry(stableUrl, "a".repeat(63))),
+            "[]",
+            "{",
+        )
+        for (body in bad) {
+            assertFailsWith<PeakDataException>(body) { PeakData.parsePointer(body, useDev = false) }
+        }
+        // 開発用のビルドは、dev が壊れていても stable に切り替えない。
+        assertFailsWith<PeakDataException> { PeakData.parsePointer(pointer(dev = entry(devUrl, "x")), useDev = true) }
+    }
+
+    @Test
+    fun pointerSourceFollowsPointerAndSkipsSameManifest() = runTest {
+        val manifest = manifest(schemaVersion = 4)
+        val requests = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            val url = request.url.toString()
+            requests += url
+            when (url) {
+                PeakData.POINTER_URL -> respond(pointer(stable = entry(stableUrl, sha256(manifest.toByteArray()))))
+                stableUrl -> respond(manifest)
+                else -> respond(gzip)
+            }
+        }
+        val source = PeakData.source(PeakDataChannel.STABLE, HttpClient(engine), userAgent = "test")
+
+        val fetched = source.fetchManifest(null)
+        assertIs<ManifestResponse.Fetched>(fetched)
+        assertEquals(manifest, fetched.body)
+        assertEquals(sha256(manifest.toByteArray()), fetched.etag)
+        // 指す manifest が前回と同じなら、manifest は取り直さない。
+        assertIs<ManifestResponse.NotModified>(source.fetchManifest(fetched.etag))
+        assertEquals(listOf(PeakData.POINTER_URL, stableUrl, PeakData.POINTER_URL), requests)
+    }
+
+    @Test
+    fun pointerSourceRejectsManifestWithWrongSha256() = runTest {
+        val engine = MockEngine { request ->
+            when (request.url.toString()) {
+                PeakData.POINTER_URL -> respond(pointer(stable = entry(stableUrl, "a".repeat(64))))
+                else -> respond(manifest())
+            }
+        }
+        val source = PointerPeakDataSource(HttpClient(engine), useDev = false)
+        assertFailsWith<PeakDataException> { source.fetchManifest(null) }
+    }
+
+    @Test
+    fun pointerSourceReportsHttpError() = runTest {
+        val source = PointerPeakDataSource(HttpClient(MockEngine { respond("", HttpStatusCode.NotFound) }), useDev = true)
+        assertFailsWith<PeakDataException> { source.fetchManifest(null) }
     }
 
     @Test
