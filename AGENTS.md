@@ -138,6 +138,10 @@ Android 版の山データの DB（Room）は、配布したあとも端末に�
 (cd android && ./gradlew :app:testDebugUnitTest)
 git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
 
+# 山データの参照先ファイル（site/data/osm-peaks/）: スクリプトの単体テストと、Release と合っているかの確認
+python3 -m unittest discover -s .github/scripts/tests
+git fetch origin main && .github/scripts/peak_data.py check --base origin/main
+
 # iOS: core の単体テスト（Mac または Swift の入った環境）
 (cd ios/YamamukiCore && swift test)
 
@@ -149,7 +153,8 @@ git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
 - iOS の画面を変えたら、手元で UI テストも動かす（手順は README の「iOS 版」）。CI では UI テストのビルドだけを確かめ、実行はしない。
 - CI の「Build」（Android）は、アプリの単体テストと DB のスキーマの確認（スキーマのコミット漏れと、既にある版のスキーマの書き換え）も行う。
 - CI の「Text format」は、画面の文言の確認（コードに直接書いた日本語、iOS のキーの過不足、両 OS のキーと文言のずれ）も行う。
-- CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで動く。
+- CI の「山データの確認」は、参照先ファイルと manifest のコピーが yamamuki-data の Release と合っているか（コピーが Release と同じか、`manifests/` が追加だけか、データ本体の大きさと SHA-256、`stable` の件数の減り方）を確かめる。参照先の manifest をアプリの読み込み処理で読めるかは、core の単体テスト（`SitePeakDataTest`）で確かめる。
+- CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで、「山データの確認」は `site/data/` か山データのスクリプト・ワークフローを変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
 - ロジックを変えたら単体テストを足す。テストを消したり飛ばしたりして通すことはしない。
 - 画面を変えたら、変更前と変更後のスクリーンショットを PR に貼る（撮れないときはそう書く）。

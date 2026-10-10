@@ -1,0 +1,31 @@
+name: 山データの確認
+
+# 山データの参照先ファイル（site/data/osm-peaks/）を変える PR で、
+# 参照先と manifest のコピーが yamamuki-data の Release と合っているかを確かめる。
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - "site/data/**"
+      - ".github/scripts/peak_data.py"
+      - ".github/scripts/tests/**"
+      - ".github/workflows/peak-data-*.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: スクリプトの単体テスト
+        run: python3 -m unittest discover -s .github/scripts/tests
+      - name: 参照先ファイルと manifest のコピーの確認
+        env:
+          # stable の件数が 5% より多く減るときは、確かめたうえでこのラベルを付けると通る。
+          ALLOW_COUNT_DROP: ${{ contains(github.event.pull_request.labels.*.name, '山データの件数減を確認済み') }}
+          BASE_REF: ${{ github.base_ref }}
+        run: .github/scripts/peak_data.py check --base "origin/$BASE_REF"

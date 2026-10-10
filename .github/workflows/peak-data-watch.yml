@@ -1,0 +1,35 @@
+name: 山データの見張り
+
+# 公開中の current.json から manifest とデータ本体までたどれるかを毎日確かめる。
+# 失敗したら Issue で知らせる（開いている同じ Issue があれば、そこにコメントする）。
+on:
+  schedule:
+    - cron: "17 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: 公開中の山データをたどる
+        run: .github/scripts/peak_data.py watch
+      - name: 失敗を Issue で知らせる
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: 公開中の山データを取得できない
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          body="「山データの見張り」が失敗した: $RUN_URL"
+          number=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title \
+            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty")
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$TITLE" --body "$body"
+          fi

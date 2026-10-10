@@ -34,3 +34,14 @@ jobs:
           path: site
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  # 公開した山データの参照先ファイルと manifest が、git の中身と同じになったかを確かめる。
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: 公開中の山データの確認
+        run: .github/scripts/peak_data.py verify-live
