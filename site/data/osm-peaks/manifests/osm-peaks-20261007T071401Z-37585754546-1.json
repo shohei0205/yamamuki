@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 5,
+  "dataSchemaVersion": 5,
+  "name": "山頂",
+  "version": "20261007T071401Z-37585754546-1",
+  "fileName": "osm-peaks.json.gz",
+  "downloadUrl": "https://github.com/shohei0205/yamamuki-data/releases/download/osm-peaks-20261007T071401Z-37585754546-1/osm-peaks.json.gz",
+  "sha256": "01c732e53edd96840111cd17361f2a4d5484e1c2887606663c554377047ee7ee",
+  "sizeBytes": 505256,
+  "uncompressedSizeBytes": 3203003,
+  "pointCount": 14035,
+  "sourceTimestamp": "2026-10-06T20:21:06Z",
+  "latestPointTimestamp": "2026-10-06T19:13:49Z",
+  "sourceUrl": "https://download.geofabrik.de/asia/japan-261006.osm.pbf",
+  "license": "ODbL-1.0",
+  "attribution": "© OpenStreetMap contributors"
+}

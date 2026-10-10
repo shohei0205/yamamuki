@@ -18,7 +18,7 @@
 | `ios/Yamamuki/` | iOS アプリ（画面、位置と方位の取得、設定） |
 | `ios/YamamukiUITests/` | iOS アプリの画面を操作する UI テスト（XCUITest） |
 | `ios/project.yml` | XcodeGen の設定。`ios/Yamamuki.xcodeproj` はここから生成する |
-| `site/` | GitHub Pages で公開するページ（プライバシーポリシー）。main に入ると `.github/workflows/pages.yml` で公開する |
+| `site/` | GitHub Pages で公開するページ（プライバシーポリシー、山データの参照先ファイル `data/osm-peaks/`）。main に入ると `.github/workflows/pages.yml` で公開する |
 
 ## 言葉づかい
 
