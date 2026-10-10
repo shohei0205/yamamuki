@@ -197,14 +197,14 @@ private fun StepSlider(
     description: String,
     onChange: (Int) -> Unit,
 ) {
-    var dragging by remember(value) { mutableFloatStateOf(value.toFloat()) }
-    val snapped = (dragging / step).roundToInt() * step
+    val state = remember(value, step) { StepSliderState(value, step) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label(snapped), style = MaterialTheme.typography.bodyLarge)
+        Text(label(state.snapped), style = MaterialTheme.typography.bodyLarge)
         Slider(
-            value = dragging,
-            onValueChange = { dragging = it },
-            onValueChangeFinished = { onChange(snapped) },
+            value = state.dragging,
+            onValueChange = { state.dragging = it },
+            // タップでは再描画より先に呼ばれるので、その時点の最新値を読む。
+            onValueChangeFinished = { onChange(state.snapped) },
             valueRange = range.first.toFloat()..range.last.toFloat(),
             steps = (range.last - range.first) / step - 1,
             // つまみを端まで寄せたとき、OS の「戻る」スワイプ(画面端から)に取られないよう、
@@ -215,6 +215,12 @@ private fun StepSlider(
         )
         Text(description, style = MaterialTheme.typography.bodySmall)
     }
+}
+
+/** 再描画を待たず、最後に操作した値を保存できるようにする。 */
+internal class StepSliderState(value: Int, private val step: Int) {
+    var dragging by mutableFloatStateOf(value.toFloat())
+    val snapped: Int get() = (dragging / step).roundToInt() * step
 }
 
 @Composable
