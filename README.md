@@ -19,7 +19,7 @@
 - `ios/Yamamuki/` iOS アプリ。方位盤の描画（`DialCanvasView`）、画面（`DialView`）、設定（`SettingsView`）、現在地と方位の取得（`LocationService`）。画面の文言は `Localizable.xcstrings` にまとめ、Android の `android/app/src/main/res/values/strings.xml` と同じキー名にしている。
 - `ios/YamamukiUITests/` iOS アプリの UI テスト（XCUITest）。アプリを起動して方位盤と設定の画面を開き、画面を撮る。
 - `ios/project.yml` Xcode プロジェクトの設定（[XcodeGen](https://github.com/yonaskolb/XcodeGen) 用）。`ios/Yamamuki.xcodeproj` はここから生成し、git には入れない。
-- `site/` GitHub Pages で公開するページ（プライバシーポリシー `site/privacy/index.html` → https://shohei0205.github.io/yamamuki/privacy/ ）。main に入ると `.github/workflows/pages.yml` で公開する（Settings → Pages の Source は「GitHub Actions」）。
+- `site/` GitHub Pages で公開するページ（プライバシーポリシー `site/privacy/index.html` → https://shohei0205.github.io/yamamuki/privacy/ ）と、山データの参照先ファイル（`site/data/osm-peaks/`）。main に入ると `.github/workflows/pages.yml` で公開する（Settings → Pages の Source は「GitHub Actions」）。
 
 ## 開発環境
 
@@ -172,6 +172,9 @@ open Yamamuki.xcodeproj
   - iOS: ビルド設定 `PEAK_DATA_SOURCE` を `dev` にする(例: `xcodebuild ... PEAK_DATA_SOURCE=dev`。Xcode ではターゲットの Build Settings の User-Defined で変える。`xcodegen generate` で `stable` に戻る)。`ios/project.yml` で `PEAK_DATA_DEV` の条件が付く。
   - 取得先を切り替えた開発版は、前の取得先の版と違えば取り直し、保存している山データを入れ替える。
 - manifest は前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「もう一度取得」で取り直せる)。
+- 0.6.0 からは、配布用のビルドが読む manifest を yamamuki 側で決める予定（まだアプリは読んでいない）。そのための参照先ファイルを `site/data/osm-peaks/` に置いている。
+  - `current.json`: 配布用のビルドが最初に読むファイル（https://shohei0205.github.io/yamamuki/data/osm-peaks/current.json ）。`stable` に、読ませる manifest の URL と SHA-256 を書く。
+  - `manifests/<タグ>.json`: yamamuki-data の Release の `manifest.json` を書き換えずにコピーしたもの。差し替えるたびに 1 つ増やし、一度置いたファイルは上書きも削除もしない（前の版に戻すとき、そのまま使えるようにするため）。データ本体は yamamuki-data の Release のものを使う。
 - 対応する manifest の形式は schemaVersion 4 と 5。版 5 では、データ本体の版(`dataSchemaVersion`)が 5 のときだけ取り込む。知らない版や、データ本体の版が書かれていないときは取り込まず、アプリの更新を促す。
 - 版 5 のデータ本体(地点データ)は、山ごとの項目が版 4 までと同じなので、同じ読み方で読む。山頂以外の種別(`type`)の地点と、`osmId` の無い地点は飛ばす。
 - 取り込みと取り込み済みの版の記録は `android/core/.../PeakData.kt` と `ios/YamamukiCore/.../PeakData.swift` にある。
