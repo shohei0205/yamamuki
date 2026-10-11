@@ -276,19 +276,24 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 検索位置モードをやめ、双眼鏡を実際の現在地に戻して手動位置モードにする。地図の向きはそのまま。
+     * 検索位置モードをやめ、双眼鏡を実際の現在地に置いて手動位置モードにする。
+     * 画面が急に切り替わらないよう、表示範囲と地図の向きは動かさない(山頂は画面の同じ所に残る)。
      * 現在地がまだ分からないときは、手動位置モードで動かす基準が無いのでヘディングアップにする。
      */
     fun leaveViewpoint() {
         northUpJob?.cancel()
-        peaks = emptyList()
-        fetchedCenter = null
-        _state.update {
-            val manual = it.gpsLocation != null
-            it.copy(viewpoint = null, location = it.gpsLocation, exploring = manual, returning = false,
-                lockedHeading = if (manual) it.lockedHeading else null, mountains = emptyList(), summit = null)
+        val gps = state.value.gpsLocation
+        if (gps == null) {
+            peaks = emptyList()
+            fetchedCenter = null
+            _state.update {
+                it.copy(viewpoint = null, location = null, exploring = false, returning = false,
+                    lockedHeading = null, mountains = emptyList(), summit = null)
+            }
+            return
         }
-        fetch()
+        // 表示範囲は変えないので、読み込んだ山はそのまま使い、距離と方位だけを現在地から測り直す。
+        _state.update { it.copy(viewpoint = null, exploring = true, returning = false).withPeaksAt(gps) }
     }
 
     /** 山の検索画面を開き、端末に保存している山を読み込む。 */
