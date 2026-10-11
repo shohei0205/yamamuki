@@ -192,4 +192,15 @@ final class PanGeometryTests: XCTestCase {
         XCTAssertEqual(PanGeometry.transformViewport(tokyo, viewport: tokyo, previous: zero, midpoint: zero,
             oldScale: 0, newScale: 10, oldHeading: 0, newHeading: 90), tokyo)
     }
+
+    func testCompassTapFacesDeviceOnlyWhenNorthIsUp() {
+        // 北が上なら端末の向きに合わせる。
+        XCTAssertTrue(PanGeometry.compassTapFacesDevice(heading: 0))
+        XCTAssertTrue(PanGeometry.compassTapFacesDevice(heading: 0.3))
+        XCTAssertTrue(PanGeometry.compassTapFacesDevice(heading: 359.8))
+        // 北が上でなければ北を上にする。
+        XCTAssertFalse(PanGeometry.compassTapFacesDevice(heading: 45))
+        XCTAssertFalse(PanGeometry.compassTapFacesDevice(heading: 180))
+        XCTAssertFalse(PanGeometry.compassTapFacesDevice(heading: 359))
+    }
 }

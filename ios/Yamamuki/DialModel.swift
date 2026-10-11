@@ -222,6 +222,38 @@ final class DialModel: ObservableObject {
         }
     }
 
+    /// 手動位置モードのまま、約0.5秒で地図を端末の向きに合わせる。合わせたあとは端末の向きに付いていかない。
+    /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に回す。
+    func faceDevice(canvasWidth: Double, canvasHeight: Double) {
+        guard exploring, let viewport = location, let startHeading = lockedHeading,
+              canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset else { return }
+        northUpTask?.cancel()
+        let observer = gpsLocation ?? viewport
+        let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
+            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
+            rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
+        let range = rangeKm
+        northUpTask = Task { @MainActor [weak self] in
+            let started = ProcessInfo.processInfo.systemUptime
+            while !Task.isCancelled {
+                guard let self else { return }
+                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
+                // 回している間も端末は動くので、行き先の向きは毎回読み直す。
+                let nextHeading = PanGeometry.returnHeading(startHeading, target: heading ?? startHeading,
+                    fraction: t * t * (3 - 2 * t))
+                let next = PanGeometry.rotateViewport(MapCenter(observer.latitude, observer.longitude),
+                    viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
+                    nextHeading: nextHeading, rangeKm: range, canvasHeight: canvasHeight, aroundCenter: aroundCenter)
+                location = next == MapCenter(viewport.latitude, viewport.longitude) ? viewport
+                    : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
+                lockedHeading = nextHeading
+                if t >= 1 { break }
+                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
+            }
+            if !Task.isCancelled { self?.fetchForViewport() }
+        }
+    }
+
     func onTransform(zoom: Double, rotation: Double, previous: PlanOffset, midpoint: PlanOffset, chartHeight: Double) {
         northUpTask?.cancel()
         guard exploring, let oldHeading = lockedHeading else { onZoom(zoom); return }

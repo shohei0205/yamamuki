@@ -5,6 +5,16 @@ import kotlin.math.*
 data class MapCenter(val latitude: Double, val longitude: Double)
 
 object PanGeometry {
+    /** 北が上とみなす角度の幅。 */
+    const val NORTH_UP_TOLERANCE_DEG = 0.5
+
+    /**
+     * 手動位置モードでコンパスをタップしたとき、地図を端末の向きに合わせるか。
+     * 北が上のときは端末の向きに合わせ、それ以外のときは北を上にする。合わせたあとは端末の向きに付いていかない。
+     */
+    fun compassTapFacesDevice(headingDeg: Double): Boolean =
+        abs(Heading.delta(headingDeg, 0.0)) < NORTH_UP_TOLERANCE_DEG
+
     /** 方角が変わっても双眼鏡を画面上の直線に沿って描画原点へ戻す。offsetはkm、yは上向き。 */
     fun returnViewport(observer: MapCenter, initialOffset: PlanOffset, heading: Double, fraction: Double): MapCenter {
         val remaining = 1.0 - fraction.coerceIn(0.0, 1.0)

@@ -10,6 +10,15 @@ public struct MapCenter: Equatable, Sendable {
 }
 
 public enum PanGeometry {
+    /// 北が上とみなす角度の幅。
+    public static let northUpToleranceDeg = 0.5
+
+    /// 手動位置モードでコンパスをタップしたとき、地図を端末の向きに合わせるか。
+    /// 北が上のときは端末の向きに合わせ、それ以外のときは北を上にする。合わせたあとは端末の向きに付いていかない。
+    public static func compassTapFacesDevice(heading: Double) -> Bool {
+        abs(Heading.delta(heading, 0)) < northUpToleranceDeg
+    }
+
     /// 方角が変わっても双眼鏡を画面上の直線に沿って描画原点へ戻す。offsetはkm、yは上向き。
     public static func returnViewport(_ observer: MapCenter, initialOffset: PlanOffset, heading: Double, fraction: Double) -> MapCenter {
         let remaining = 1 - min(1, max(0, fraction))

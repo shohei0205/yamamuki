@@ -254,6 +254,44 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 手動位置モードのまま、約0.5秒で地図を端末の向きに合わせる。合わせたあとは端末の向きに付いていかない。
+     * 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に回す。
+     */
+    fun faceDevice(compassHeading: () -> Double, canvasWidth: Double, canvasHeight: Double) {
+        if (!canvasHeight.isFinite() || canvasHeight <= DialGeometry.CHART_INSET_DP) return
+        northUpJob?.cancel()
+        val initial = state.value
+        if (!initial.exploring) return
+        val here = initial.location ?: return
+        val startHeading = initial.lockedHeading ?: return
+        val observer = initial.gpsLocation ?: here
+        val aroundCenter = !PanGeometry.isObserverVisible(
+            MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
+            startHeading, initial.rangeKm, canvasWidth, canvasHeight,
+        )
+        northUpJob = viewModelScope.launch {
+            val started = System.nanoTime()
+            do {
+                val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+                // 回している間も端末は動くので、行き先の向きは毎回読み直す。
+                val heading = PanGeometry.returnHeading(startHeading, compassHeading(), t * t * (3 - 2 * t))
+                val next = PanGeometry.rotateViewport(
+                    MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
+                    startHeading, heading, initial.rangeKm, canvasHeight, aroundCenter,
+                )
+                _state.update { it.copy(
+                    location = if (next.latitude == here.latitude && next.longitude == here.longitude) here
+                        else GeoPoint(next.latitude, next.longitude),
+                    lockedHeading = heading,
+                ) }
+                if (t >= 1.0) break
+                delay(16)
+            } while (true)
+            fetchForViewport()
+        }
+    }
+
     fun onTransform(zoom: Float, rotationDeg: Float, previousMidpoint: PlanOffset,
         midpoint: PlanOffset, chartHeightPx: Float) {
         northUpJob?.cancel()

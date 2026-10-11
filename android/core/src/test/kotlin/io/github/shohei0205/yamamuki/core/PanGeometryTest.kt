@@ -192,4 +192,15 @@ class PanGeometryTest {
         val p = PanGeometry.drag(MapCenter(0.0, 179.99), -100.0, 0.0, 10.0, 0.0)
         assertTrue(p.longitude < -179 && p.longitude >= -180)
     }
+
+    @Test fun compassTapFacesDeviceOnlyWhenNorthIsUp() {
+        // 北が上なら端末の向きに合わせる。
+        assertTrue(PanGeometry.compassTapFacesDevice(0.0))
+        assertTrue(PanGeometry.compassTapFacesDevice(0.3))
+        assertTrue(PanGeometry.compassTapFacesDevice(359.8))
+        // 北が上でなければ北を上にする。
+        assertFalse(PanGeometry.compassTapFacesDevice(45.0))
+        assertFalse(PanGeometry.compassTapFacesDevice(180.0))
+        assertFalse(PanGeometry.compassTapFacesDevice(359.0))
+    }
 }
