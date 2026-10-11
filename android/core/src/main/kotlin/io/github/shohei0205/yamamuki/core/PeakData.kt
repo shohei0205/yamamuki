@@ -159,7 +159,7 @@ object PeakData {
 
     /**
      * 読めるデータ本体の版(manifest 版 5 の dataSchemaVersion)。地点データ版 5 は、山ごとの項目(osmId・name・latitude・
-     * longitude・elevationM)が版 4 までと同じで、読み仮名などの項目が増えただけなので、そのまま読める。
+     * longitude・elevationM)が版 4 までと同じで、ID・種別・タグ・画像などの項目が増えただけなので、そのまま読める。
      */
     val SUPPORTED_DATA_SCHEMA_VERSIONS = setOf(5)
 
@@ -167,7 +167,7 @@ object PeakData {
      * 保存データを作る読み込み処理の版。[parseMountains] で読む項目を増やしたり、保存の形を変えたりしたら上げる。
      * 上がると、端末に残した gz から保存データを作り直す([PeakDataUpdater.rebuild])。gz が無ければ、次の確認で取り直す。
      */
-    const val READER_VERSION = 1
+    const val READER_VERSION = 2
 
     /** これより大きいデータは受け取らない。今は約 0.45 MB で、yamamuki-data も 5 MB を超えたら公開を止める。 */
     const val MAX_SIZE_BYTES = 20_000_000L
@@ -217,6 +217,8 @@ object PeakData {
     /**
      * gzip を展開し、JSON 配列の山を読む。名前・座標・osmId のない項目と、山頂以外の種別(type)の項目は飛ばす。
      * 種別の無い項目(版 4 までと、版 5 で種別不明のもの)は山頂として読む。
+     * 読み仮名・別名・Wikipedia と Wikidata の URL・タグ・画像も読む。形の合わない値は、無いものとして扱う。
+     * それ以外の知らない項目は読まない(端末に残した gz には残る)。
      */
     fun parseMountains(gzip: ByteArray): List<Mountain> {
         val json = try {
@@ -239,9 +241,38 @@ object PeakData {
                 latitude = (m["latitude"] as? Number)?.toDouble() ?: return@mapNotNull null,
                 longitude = (m["longitude"] as? Number)?.toDouble() ?: return@mapNotNull null,
                 elevationM = (m["elevationM"] as? Number)?.toDouble(),
+                pointId = trimmed(m["id"]),
+                nameReading = trimmed(m["nameReading"]),
+                aliases = names(m["aliases"]).filter { it != name },
+                wikipediaUrl = httpsUrl(m["wikipediaUrl"]),
+                wikidataUrl = httpsUrl(m["wikidataUrl"]),
+                tags = names(m["tags"]),
+                graphic = graphic(m["graphic"]),
             )
         }.distinctBy { it.osmId }
     }
+
+    /** 前後の空白を除いた文字列。文字列でないか空なら null。 */
+    private fun trimmed(value: Any?): String? = (value as? String)?.trim()?.ifEmpty { null }
+
+    /** 別名やタグの配列。文字列でない・空の要素と重複を除く。配列でなければ空。 */
+    private fun names(value: Any?): List<String> =
+        (value as? List<*>).orEmpty().mapNotNull(::trimmed).distinct()
+
+    /** https の URL だけを受け取る。 */
+    private fun httpsUrl(value: Any?): String? = trimmed(value)?.takeIf { it.startsWith("https://") }
+
+    /** 地点の画像。SVG が無いか大きすぎるときは画像なし、倍率が正の有限の数でないときは 1 倍とする。 */
+    private fun graphic(value: Any?): PointGraphic? {
+        val g = value as? Map<*, *> ?: return null
+        val svg = (g["svg"] as? String)?.takeIf { it.isNotBlank() && it.toByteArray(Charsets.UTF_8).size <= MAX_SVG_BYTES }
+            ?: return null
+        val scale = (g["scale"] as? Number)?.toDouble()?.takeIf { it.isFinite() && it > 0 } ?: 1.0
+        return PointGraphic(svg, scale)
+    }
+
+    /** 地点の画像の SVG の大きさの上限。yamamuki-data の決まり(100,000 バイト以内)と同じ。 */
+    private const val MAX_SVG_BYTES = 100_000
 
     /** 地点データ版 5 の、山頂の種別。 */
     private const val PEAK_TYPE = "peak"

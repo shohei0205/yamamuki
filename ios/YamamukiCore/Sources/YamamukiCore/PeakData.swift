@@ -175,7 +175,7 @@ public enum PeakData {
     public static let supportedSchemaVersions: Set<Int> = [4, 5]
 
     /// 読めるデータ本体の版(manifest 版 5 の dataSchemaVersion)。地点データ版 5 は、山ごとの項目(osmId・name・latitude・
-    /// longitude・elevationM)が版 4 までと同じで、読み仮名などの項目が増えただけなので、そのまま読める。
+    /// longitude・elevationM)が版 4 までと同じで、ID・種別・タグ・画像などの項目が増えただけなので、そのまま読める。
     public static let supportedDataSchemaVersions: Set<Int> = [5]
 
     /// 地点データ版 5 の、山頂の種別。
@@ -183,7 +183,7 @@ public enum PeakData {
 
     /// 保存データを作る読み込み処理の版。`parseMountains` で読む項目を増やしたり、保存の形を変えたりしたら上げる。
     /// 上がると、端末に残した gz から保存データを作り直す(`PeakDataUpdater.rebuild`)。gz が無ければ、次の確認で取り直す。
-    public static let readerVersion = 1
+    public static let readerVersion = 2
 
     /// これより大きいデータは受け取らない。今は約 0.45 MB で、yamamuki-data も 5 MB を超えたら公開を止める。
     public static let maxSizeBytes = 20_000_000
@@ -271,6 +271,8 @@ public enum PeakData {
 
     /// gzip を展開し、JSON 配列の山を読む。名前・座標・osmId のない項目と、山頂以外の種別(type)の項目は飛ばす。
     /// 種別の無い項目(版 4 までと、版 5 で種別不明のもの)は山頂として読む。
+    /// 読み仮名・別名・Wikipedia と Wikidata の URL・タグ・画像も読む。形の合わない値は、無いものとして扱う。
+    /// それ以外の知らない項目は読まない(端末に残した gz には残る)。
     public static func parseMountains(_ gzip: Data) throws -> [Mountain] {
         let json = try gunzip(gzip)
         guard let items = (try? JSONSerialization.jsonObject(with: json)) as? [Any] else {
@@ -287,9 +289,49 @@ public enum PeakData {
                   seen.insert(osmId).inserted
             else { return nil }
             return Mountain(osmId: osmId, name: name, latitude: latitude, longitude: longitude,
-                            elevationM: (m["elevationM"] as? NSNumber)?.doubleValue)
+                            elevationM: (m["elevationM"] as? NSNumber)?.doubleValue,
+                            pointId: trimmed(m["id"]),
+                            nameReading: trimmed(m["nameReading"]),
+                            aliases: names(m["aliases"]).filter { $0 != name },
+                            wikipediaUrl: httpsUrl(m["wikipediaUrl"]),
+                            wikidataUrl: httpsUrl(m["wikidataUrl"]),
+                            tags: names(m["tags"]),
+                            graphic: graphic(m["graphic"]))
         }
     }
+
+    /// 前後の空白を除いた文字列。文字列でないか空なら nil。
+    private static func trimmed(_ value: Any?) -> String? {
+        guard let text = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        return text
+    }
+
+    /// 別名やタグの配列。文字列でない・空の要素と重複を除く。配列でなければ空。
+    private static func names(_ value: Any?) -> [String] {
+        var seen = Set<String>()
+        return ((value as? [Any]) ?? []).compactMap(trimmed).filter { seen.insert($0).inserted }
+    }
+
+    /// https の URL だけを受け取る。
+    private static func httpsUrl(_ value: Any?) -> String? {
+        trimmed(value).flatMap { $0.hasPrefix("https://") ? $0 : nil }
+    }
+
+    /// 地点の画像。SVG が無いか大きすぎるときは画像なし、倍率が正の有限の数でないときは 1 倍とする。
+    private static func graphic(_ value: Any?) -> PointGraphic? {
+        guard let g = value as? [String: Any], let svg = g["svg"] as? String,
+              !svg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, svg.utf8.count <= maxSvgBytes else { return nil }
+        var scale = 1.0
+        // JSONSerialization は true / false も NSNumber で返すので、数だけを通す。
+        if let number = g["scale"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+           number.doubleValue.isFinite, number.doubleValue > 0 {
+            scale = number.doubleValue
+        }
+        return PointGraphic(svg: svg, scale: scale)
+    }
+
+    /// 地点の画像の SVG の大きさの上限。yamamuki-data の決まり(100,000 バイト以内)と同じ。
+    private static let maxSvgBytes = 100_000
 
     /// gzip(RFC 1952)を展開する。Foundation には gzip の展開が無いので、ヘッダーを読み飛ばして中身の deflate を
     /// Compression で展開する(COMPRESSION_ZLIB は zlib ヘッダーの無い deflate を読む)。

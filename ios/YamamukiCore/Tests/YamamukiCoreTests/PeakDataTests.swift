@@ -128,8 +128,25 @@ final class PeakDataTests: XCTestCase {
             "H4sIAAAAAAAC/4uuVspMUbJSUDJU0lFQKqksSAVxClITs0H8/OJcT5CsIZCdl5gLlnu6cePLBU0g2ZzEksyS0hSQqLGpngFIJD8vHSZkaGwBFkvNSS0DKszP8wUJGhiABUsS04uB3GilZ9OXPpuz5vnMfU8n9AJNVoqt1VGAOckI2QlGSE54vmLd046lT3b0PpvRh+kQQywOMUR4Lq80JwfJEmMUfycWZWfmpSPba4xk78vlE17s7nq6YAumpUZYLDVCssYEW/DCzPUP9lV43Lji5bRFLxsWP9k943HjxMeN6563LHzc2AIKFAzbjLHYZlwbCwDxOcQXzQEAAA=="
         )!
         XCTAssertEqual(try PeakData.parseMountains(v5), [
-            Mountain(osmId: 1, name: "山頂", latitude: 35.0, longitude: 138.0, elevationM: 100.0),
-            Mountain(osmId: 2, name: "種別不明", latitude: 35.1, longitude: 138.1, elevationM: nil),
+            Mountain(osmId: 1, name: "山頂", latitude: 35.0, longitude: 138.0, elevationM: 100.0, pointId: "1", tags: ["日本百名山"]),
+            Mountain(osmId: 2, name: "種別不明", latitude: 35.1, longitude: 138.1, elevationM: nil, pointId: "2"),
+        ])
+    }
+
+    func testParsesPointV5Fields() throws {
+        // 地点データ版 5 で増えた項目と、読み仮名・別名・URL。形の合わない値は無いものとして扱う。
+        // 中身は Android の PeakDataTest.parsesPointV5Fields と同じ 3 件を、Python の gzip.compress(mtime=0) で圧縮したもの。
+        let v5 = Data(base64Encoded:
+            "H4sIAAAAAAAC/5VRy0rDQBTd+xVh1nHSZmirQdy7cKHgqnQxNEMaO3nQpE2lZFF3SgtCES24E1cKWkQQF/5MmtrP8E5S7SMtIgQy99wz98w9p9xBpo40lEcy8s9cBkeX0TpUjmcdQCcvI5taAo+fe/H9YzwaQZNT3/SbOsCkgEkRAMc2Zkie7OCSKiPGWQtojn0IrFKpiHPyliQl044Z1U3bgKFS1H2LurdR9zo6H0gwmXKTesxDWhmN3/vjj14quCgOnzS9HE4HF/Hri7izQCSVRCQw66bLdJOeNDio1Hzf9TRFOaX4t4OdhqGISmnDCHHQqb/CD4IA/3Tm/COyqxIwTAj51EjeOrl5mNw9fQ0/46t++spVpCIjo0HdmllFWgd5LbH9HvyUfSB7VcqFdbgQyqhp120nsAWNAhaGoDSLSd0UkzqPKRtQLpPPmijsJucL9qflGh/BFtamlssZrjqWkvFOvDAxJeuJ0PzTg+2lhcmmhcl/F15STqXUMKx8A0BqkMUBAwAA"
+        )!
+        XCTAssertEqual(try PeakData.parseMountains(v5), [
+            Mountain(osmId: 1, name: "富士山", latitude: 35.36, longitude: 138.72, elevationM: 3776.0,
+                     pointId: "1", nameReading: "ふじさん", aliases: ["不二山", "芙蓉峰"],
+                     wikipediaUrl: "https://ja.wikipedia.org/wiki/x", wikidataUrl: "https://www.wikidata.org/wiki/Q39231",
+                     tags: ["日本百名山"], graphic: PointGraphic(svg: "<svg/>", scale: 1.5)),
+            Mountain(osmId: 2, name: "山", latitude: 35.0, longitude: 138.0, elevationM: nil,
+                     pointId: "2", graphic: PointGraphic(svg: "<svg/>", scale: 1.0)),
+            Mountain(osmId: 3, name: "山", latitude: 35.0, longitude: 138.0, elevationM: nil, pointId: "3"),
         ])
     }
 
@@ -150,8 +167,11 @@ final class PeakDataTests: XCTestCase {
 
     func testParsesMountains() throws {
         XCTAssertEqual(try PeakData.parseMountains(gzip), [
-            Mountain(osmId: 3_403_990_450, name: "万三郎岳", latitude: 34.8627963, longitude: 139.0018525, elevationM: 1405.6),
-            Mountain(osmId: 12, name: "名無し標高", latitude: 43.5, longitude: 142.9, elevationM: nil),
+            Mountain(osmId: 3_403_990_450, name: "万三郎岳", latitude: 34.8627963, longitude: 139.0018525, elevationM: 1405.6,
+                     nameReading: "ばんざぶろうだけ", aliases: ["天城山"],
+                     wikipediaUrl: "https://ja.wikipedia.org/wiki/%E5%A4%A9%E5%9F%8E%E5%B1%B1"),
+            Mountain(osmId: 12, name: "名無し標高", latitude: 43.5, longitude: 142.9, elevationM: nil,
+                     wikidataUrl: "https://www.wikidata.org/wiki/Q1"),
         ])
     }
 
