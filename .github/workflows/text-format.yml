@@ -16,3 +16,5 @@ jobs:
       - uses: actions/checkout@v7
       - name: 改行コードと BOM の確認
         run: .github/scripts/check-text-format.sh
+      - name: 画面の文言が文字列リソースにまとまっているかの確認
+        run: .github/scripts/check-ui-strings.py

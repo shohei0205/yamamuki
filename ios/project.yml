@@ -2,6 +2,8 @@
 name: Yamamuki
 options:
   bundleIdPrefix: io.github.shohei0205
+  # 画面の文言(Yamamuki/Localizable.xcstrings)は日本語で書くので、開発の言語を日本語にする。
+  developmentLanguage: ja
   deploymentTarget:
     iOS: "15.0"
 packages:
@@ -18,8 +20,8 @@ targets:
       base:
         PRODUCT_NAME: Yamamuki
         PRODUCT_BUNDLE_IDENTIFIER: io.github.shohei0205.yamamuki
-        MARKETING_VERSION: 0.3.0
-        CURRENT_PROJECT_VERSION: 3
+        MARKETING_VERSION: 0.6.0
+        CURRENT_PROJECT_VERSION: 6
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
@@ -30,6 +32,19 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        # 暗号は iOS 標準のもの(URLSession の HTTPS、CryptoKit の SHA-256)しか使わないので、輸出規制の対象外と宣言する。
+        # これで TestFlight へのアップロードのたびに輸出コンプライアンスを聞かれなくなる。
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+      # 山データは、Release は参照先ファイル(current.json)の stable、Debug は PEAK_DATA_SOURCE で選んだほうを読む
+      # (DialModel.peakDataChannel)。既定(current)は参照先ファイルの dev(無ければ配布版と同じ stable)。
+      # yamamuki-data の dev が公開する最新の開発版(points/osm-peaks-dev/)を直接試すときは、ビルド設定 PEAK_DATA_SOURCE を dev にする
+      # (例: xcodebuild ... PEAK_DATA_SOURCE=dev。Xcode ではターゲットの Build Settings の User-Defined で変える)。
+      configs:
+        Debug:
+          PEAK_DATA_SOURCE: current
+          PEAK_DATA_CONDITION_current: ""
+          PEAK_DATA_CONDITION_dev: PEAK_DATA_DEV
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(PEAK_DATA_CONDITION_$(PEAK_DATA_SOURCE))"
   # 画面を実際に操作する UI テスト(XCUITest)。実機でもシミュレータでも動く。
   YamamukiUITests:
     type: bundle.ui-testing

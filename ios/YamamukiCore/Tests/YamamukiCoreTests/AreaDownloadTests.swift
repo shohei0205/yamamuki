@@ -136,12 +136,12 @@ final class AreaDownloadTests: XCTestCase {
         XCTAssertEqual(OverpassClient.defaultEndpoints.map(\.absoluteString), ["https://overpass-api.de/api/interpreter"])
     }
 
-    func testStatusTextCountsWaitingSeconds() {
-        XCTAssertEqual(DownloadProgress(doneTiles: 3, totalTiles: 10).statusText(elapsed: 35.4), "サーバーの応答を待っています（35 秒）")
+    func testStatusCountsWaitingSeconds() {
+        XCTAssertEqual(DownloadProgress(doneTiles: 3, totalTiles: 10).status(elapsed: 35.4), .waiting(seconds: 35, retry: 0))
         let retrying = DownloadProgress(doneTiles: 3, totalTiles: 10, retry: 2, retryWait: 15)
-        XCTAssertEqual(retrying.statusText(elapsed: 0), "通信に失敗したため、15 秒後に取り直します（2 回目）")
-        XCTAssertEqual(retrying.statusText(elapsed: 14.5), "通信に失敗したため、1 秒後に取り直します（2 回目）")
-        XCTAssertEqual(retrying.statusText(elapsed: 20), "サーバーの応答を待っています（5 秒・取り直し 2 回目）")
+        XCTAssertEqual(retrying.status(elapsed: 0), .retryingIn(seconds: 15, retry: 2))
+        XCTAssertEqual(retrying.status(elapsed: 14.5), .retryingIn(seconds: 1, retry: 2))
+        XCTAssertEqual(retrying.status(elapsed: 20), .waiting(seconds: 5, retry: 2))
     }
 
     func testRefreshRefetchesEvenFreshTiles() async throws {
@@ -202,5 +202,35 @@ final class AreaDownloadTests: XCTestCase {
         XCTAssertTrue(afterRemove.isEmpty)
         let reopened = try await FileMountainCache(directory: dir).fetchedAt([yariTile, fujiTile])
         XCTAssertTrue(reopened.isEmpty, "ファイルからも消えている")
+    }
+
+    func testFileCacheKeepsPointDataV5Fields() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let full = Mountain(osmId: 1, name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776.0,
+                            pointId: "1", nameReading: "ふじさん", aliases: ["不二山", "芙蓉峰"],
+                            wikipediaUrl: "https://ja.wikipedia.org/wiki/%E5%AF%8C%E5%A3%AB%E5%B1%B1",
+                            wikidataUrl: "https://www.wikidata.org/wiki/Q39231", tags: ["日本百名山"],
+                            graphic: PointGraphic(svg: #"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>"#, scale: 1.5))
+        let plain = Mountain(osmId: 2, name: "名無し", latitude: 35.4, longitude: 138.8, elevationM: nil)
+        let tile = Tile.of(full.latitude, full.longitude)
+        try await FileMountainCache(directory: dir).replaceTiles([tile], mountains: [full, plain], fetchedAt: Date())
+
+        let box = BoundingBox(south: 35.0, west: 138.5, north: 35.5, east: 139.0)
+        let read = try await FileMountainCache(directory: dir).mountains(in: box)
+        XCTAssertEqual(read.sorted { $0.osmId < $1.osmId }, [full, plain])
+    }
+
+    func testFileCacheReadsFilesWithoutPointDataV5Fields() async throws {
+        // 版 5 の項目を足す前のアプリが書いたタイルのファイルも読める。
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let tile = Tile.of(35.3606, 138.7274)
+        try Data(#"{"fetchedAt":0,"mountains":[{"osmId":1,"name":"富士山","latitude":35.3606,"longitude":138.7274,"elevationM":3776}]}"#.utf8)
+            .write(to: dir.appendingPathComponent("tile_\(tile.latIndex)_\(tile.lonIndex).json"))
+
+        let read = try await FileMountainCache(directory: dir).mountains(in: tile.bounds)
+        XCTAssertEqual(read, [Mountain(osmId: 1, name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776.0)])
     }
 }

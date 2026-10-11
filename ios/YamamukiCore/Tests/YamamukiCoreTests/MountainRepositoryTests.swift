@@ -170,6 +170,30 @@ final class MountainRepositoryTests: XCTestCase {
         XCTAssertTrue(empty.isEmpty)
     }
 
+    func testForeignTilesAreNotMissingNearTheBorder() async throws {
+        // 全国の山データを取り込んだ状態。対馬の山だけを持ち、朝鮮半島のタイルは取得済みにならない。
+        let tsushima = Mountain(osmId: 4, name: "白嶽", latitude: 34.42, longitude: 129.31, elevationM: 519)
+        let cache = InMemoryCache()
+        try await cache.replaceTiles(PeakData.tiles(of: [tsushima]), mountains: [tsushima], fetchedAt: clock.now)
+        let repo = repo(FakeRemote([]), cache)
+
+        // 対馬から 50km の範囲には釜山の周りも入る。外国のタイルは欠けたものとして数えない。
+        let fromTsushima = try await repo.mountainsAround(
+            latitude: 34.4, longitude: 129.3, radiusKm: 50, allowNetwork: false,
+            ignoreMissing: PeakData.ignoresMissing(latitude: 34.4, longitude: 129.3)
+        )
+        XCTAssertFalse(fromTsushima.incomplete)
+        let counted = try await repo.mountainsAround(latitude: 34.4, longitude: 129.3, radiusKm: 50, allowNetwork: false)
+        XCTAssertTrue(counted.incomplete)
+
+        // 釜山にいるときは「データがありません」と知らせる。
+        let fromBusan = try await repo.mountainsAround(
+            latitude: 35.1, longitude: 129.05, radiusKm: 20, allowNetwork: false,
+            ignoreMissing: PeakData.ignoresMissing(latitude: 35.1, longitude: 129.05)
+        )
+        XCTAssertTrue(fromBusan.incomplete)
+    }
+
     func testFileCacheIsExcludedFromBackup() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("yamamuki-test-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }

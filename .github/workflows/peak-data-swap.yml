@@ -1,0 +1,74 @@
+name: 山データの差し替え PR を作る
+
+# 山データの参照先ファイル（site/data/osm-peaks/current.json）の stable か dev を、
+# yamamuki-data の Release の manifest に差し替える PR を作る。人が必要なときに手動で動かす。
+# PR は GitHub App のトークンで作る（GITHUB_TOKEN で作った PR では CI が動かないため）。
+# App の鍵は main だけが使える環境 data-swap に置いてある。
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 差し替える先（remove-dev は dev の指定を外す）
+        type: choice
+        options: [dev, stable, remove-dev]
+        default: dev
+      tag:
+        description: Release のタグ（空なら、その種類の最新の Release）
+        type: string
+        default: ""
+      remove_dev:
+        description: stable を差し替えるとき、dev の指定も外す
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: peak-data-swap
+
+jobs:
+  swap:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: data-swap
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+      - name: 参照先ファイルと manifest のコピーを書き換える
+        id: swap
+        env:
+          TARGET: ${{ inputs.target }}
+          TAG: ${{ inputs.tag }}
+          REMOVE_DEV: ${{ inputs.remove_dev }}
+        run: |
+          args=(--target "$TARGET" --tag "$TAG")
+          if [ "$REMOVE_DEV" = "true" ]; then args+=(--remove-dev); fi
+          .github/scripts/peak_data.py swap "${args[@]}"
+      - name: PR を作る
+        if: steps.swap.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ steps.swap.outputs.branch }}
+          TITLE: ${{ steps.swap.outputs.title }}
+          BODY_FILE: ${{ steps.swap.outputs.body_file }}
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            echo "::error::ブランチ $BRANCH はもうあります。前に作った PR を確かめ、要らなければブランチを消してからやり直してください。"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add site/data/osm-peaks
+          git commit -q -m "$TITLE" -m "「山データの差し替え PR を作る」ワークフロー（run ${GITHUB_RUN_ID}）で作った。"
+          git push -q origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE"

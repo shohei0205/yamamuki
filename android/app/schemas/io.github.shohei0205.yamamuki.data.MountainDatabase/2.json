@@ -1,0 +1,163 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "939765cce24ee90f7d40b6c2454c9d07",
+    "entities": [
+      {
+        "tableName": "mountains",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`osmId` INTEGER NOT NULL, `name` TEXT NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `elevationM` REAL, `tileLat` INTEGER NOT NULL, `tileLon` INTEGER NOT NULL, `pointId` TEXT, `nameReading` TEXT, `aliases` TEXT NOT NULL DEFAULT '[]', `wikipediaUrl` TEXT, `wikidataUrl` TEXT, `tags` TEXT NOT NULL DEFAULT '[]', `graphicSvg` TEXT, `graphicScale` REAL, PRIMARY KEY(`osmId`))",
+        "fields": [
+          {
+            "fieldPath": "osmId",
+            "columnName": "osmId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "elevationM",
+            "columnName": "elevationM",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "tileLat",
+            "columnName": "tileLat",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tileLon",
+            "columnName": "tileLon",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pointId",
+            "columnName": "pointId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "nameReading",
+            "columnName": "nameReading",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "aliases",
+            "columnName": "aliases",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "wikipediaUrl",
+            "columnName": "wikipediaUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "wikidataUrl",
+            "columnName": "wikidataUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "graphicSvg",
+            "columnName": "graphicSvg",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "graphicScale",
+            "columnName": "graphicScale",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "osmId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_mountains_latitude_longitude",
+            "unique": false,
+            "columnNames": [
+              "latitude",
+              "longitude"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mountains_latitude_longitude` ON `${TABLE_NAME}` (`latitude`, `longitude`)"
+          },
+          {
+            "name": "index_mountains_tileLat_tileLon",
+            "unique": false,
+            "columnNames": [
+              "tileLat",
+              "tileLon"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mountains_tileLat_tileLon` ON `${TABLE_NAME}` (`tileLat`, `tileLon`)"
+          }
+        ]
+      },
+      {
+        "tableName": "fetched_tiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`tileLat` INTEGER NOT NULL, `tileLon` INTEGER NOT NULL, `fetchedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`tileLat`, `tileLon`))",
+        "fields": [
+          {
+            "fieldPath": "tileLat",
+            "columnName": "tileLat",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tileLon",
+            "columnName": "tileLon",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedAtMillis",
+            "columnName": "fetchedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "tileLat",
+            "tileLon"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '939765cce24ee90f7d40b6c2454c9d07')"
+    ]
+  }
+}

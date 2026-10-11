@@ -22,3 +22,6 @@ DerivedData/
 # AI ツールの個人のルール(AGENTS.md の「個人のルール」を参照)
 CLAUDE.local.md
 AGENTS.override.md
+
+# GitHub Actions の Python スクリプトを手元で動かしたときのキャッシュ
+__pycache__/

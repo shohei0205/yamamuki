@@ -3,9 +3,9 @@
 # iOS (ios/) は外部パッケージを使っていないので対象外。使い始めたら swift を追加する。
 version: 2
 updates:
-  # Android (app/ と core/)。バージョンは gradle/libs.versions.toml で共通管理している。
+  # Android (android/)。バージョンは android/gradle/libs.versions.toml で共通管理している。
   - package-ecosystem: gradle
-    directory: /
+    directory: /android
     schedule:
       interval: weekly
       timezone: Asia/Tokyo

@@ -1,6 +1,7 @@
 import Foundation
 
 /// OSM の山頂ノード1件。
+/// `pointId` から下は、yamamuki-data の地点データ版 5 の項目。版 4 までのデータと Overpass から取った山には無い。
 public struct Mountain: Codable, Hashable, Sendable {
     public let osmId: Int64
     public let name: String
@@ -8,13 +9,67 @@ public struct Mountain: Codable, Hashable, Sendable {
     public let longitude: Double
     /// 標高(m)。OSM に ele タグが無い、または解釈できない場合は nil。
     public let elevationM: Double?
+    /// データセット内で一意な地点の ID(地点データの id)。OSM 由来の山頂では osmId を文字列にしたもの。
+    public let pointId: String?
+    /// 山名の読み仮名。
+    public let nameReading: String?
+    /// 別名。
+    public let aliases: [String]
+    /// Wikipedia の記事の URL(https)。
+    public let wikipediaUrl: String?
+    /// Wikidata の項目の URL(https)。
+    public let wikidataUrl: String?
+    /// 「日本百名山」などの分類ラベル。
+    public let tags: [String]
+    /// 地点ごとの画像。
+    public let graphic: PointGraphic?
 
-    public init(osmId: Int64, name: String, latitude: Double, longitude: Double, elevationM: Double?) {
+    public init(osmId: Int64, name: String, latitude: Double, longitude: Double, elevationM: Double?,
+                pointId: String? = nil, nameReading: String? = nil, aliases: [String] = [],
+                wikipediaUrl: String? = nil, wikidataUrl: String? = nil, tags: [String] = [],
+                graphic: PointGraphic? = nil) {
         self.osmId = osmId
         self.name = name
         self.latitude = latitude
         self.longitude = longitude
         self.elevationM = elevationM
+        self.pointId = pointId
+        self.nameReading = nameReading
+        self.aliases = aliases
+        self.wikipediaUrl = wikipediaUrl
+        self.wikidataUrl = wikidataUrl
+        self.tags = tags
+        self.graphic = graphic
+    }
+
+    /// 版 5 の項目は省略可能にして、項目の無い古いキャッシュのファイルも読めるようにする。
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        osmId = try c.decode(Int64.self, forKey: .osmId)
+        name = try c.decode(String.self, forKey: .name)
+        latitude = try c.decode(Double.self, forKey: .latitude)
+        longitude = try c.decode(Double.self, forKey: .longitude)
+        elevationM = try c.decodeIfPresent(Double.self, forKey: .elevationM)
+        pointId = try c.decodeIfPresent(String.self, forKey: .pointId)
+        nameReading = try c.decodeIfPresent(String.self, forKey: .nameReading)
+        aliases = try c.decodeIfPresent([String].self, forKey: .aliases) ?? []
+        wikipediaUrl = try c.decodeIfPresent(String.self, forKey: .wikipediaUrl)
+        wikidataUrl = try c.decodeIfPresent(String.self, forKey: .wikidataUrl)
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        graphic = try c.decodeIfPresent(PointGraphic.self, forKey: .graphic)
+    }
+}
+
+/// 地点ごとの画像(地点データの graphic)。
+public struct PointGraphic: Codable, Hashable, Sendable {
+    /// SVG の本文。
+    public let svg: String
+    /// アプリの標準の大きさに対する表示倍率。
+    public let scale: Double
+
+    public init(svg: String, scale: Double = 1.0) {
+        self.svg = svg
+        self.scale = scale
     }
 }
 
@@ -60,11 +115,8 @@ extension Mountain {
         return .high
     }
 
-    /// 詳細表示の標高。「1,212 m」、不明なら「不明」。
-    public var elevationText: String { YamamukiCore.elevationText(elevationM) }
-
-    /// 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。
-    public var coordinateText: String { YamamukiCore.coordinateText(latitude: latitude, longitude: longitude) }
+    /// 詳細表示の標高。「1,212 m」。不明なら nil。
+    public var elevationText: String? { YamamukiCore.elevationText(elevationM) }
 
     /// 標高が [minElevationM] 以上か。0 以下なら絞り込まない。
     /// 絞り込むときは、標高が不明な山は基準を満たすか分からないので除く。
@@ -75,18 +127,16 @@ extension Mountain {
     }
 }
 
-/// 詳細表示の標高。「1,212 m」、不明なら「不明」。山と現在地で共通に使う。
-public func elevationText(_ elevationM: Double?) -> String {
-    guard let ele = elevationM else { return "不明" }
+/// 詳細表示の標高。「1,212 m」。不明なら nil で、「不明」の文言はアプリの文字列リソースで出す。
+/// 山と現在地で共通に使う。
+public func elevationText(_ elevationM: Double?) -> String? {
+    guard let ele = elevationM else { return nil }
     return "\(groupedInteger(Int(ele.rounded()))) m"
 }
 
-/// 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。山と現在地で共通に使う。
-public func coordinateText(latitude: Double, longitude: Double) -> String {
-    let lat = String(format: "%.5f°", abs(latitude))
-    let lon = String(format: "%.5f°", abs(longitude))
-    return "\(latitude >= 0 ? "北緯" : "南緯") \(lat)\n\(longitude >= 0 ? "東経" : "西経") \(lon)"
-}
+/// 詳細表示の緯度や経度の数値の部分。「35.36056°」。南緯・西経でも正の数にする。
+/// 「北緯」「東経」などの語はアプリの文字列リソースで付ける。
+public func degreeText(_ deg: Double) -> String { String(format: "%.5f°", abs(deg)) }
 
 /// 詳細表示の距離。1km 未満は「850 m」、以上は「12.3 km」。
 public func distanceText(_ distanceKm: Double) -> String {

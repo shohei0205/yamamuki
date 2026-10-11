@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- アプリアイコンの地のクリーム色。方位盤の地面(DialGround)と同じ。 -->
+    <color name="ic_launcher_background">#FFF4D8</color>
+</resources>

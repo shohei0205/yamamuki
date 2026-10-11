@@ -87,6 +87,9 @@ struct SavedAreaStore {
 /// 山データの事前ダウンロード(Android 版の AreaDownloadViewModel に相当)。
 /// 画面を閉じてもダウンロードは続くよう、方位盤の DialModel が持つ。同時に進めるのは 1 地域だけ。
 final class AreaDownloadModel: ObservableObject {
+    /// 取得済みのタイルを取り直さずに使う期間(30 日)。設定の「取得したデータを使う期間」をなくしたので固定にした。
+    static let maxAge: TimeInterval = 30 * 24 * 60 * 60
+
     @Published private(set) var savedAreas: [SavedArea]
     @Published private(set) var running: RunningDownload?
     @Published private(set) var notice: DownloadNotice?
@@ -111,7 +114,7 @@ final class AreaDownloadModel: ObservableObject {
         // 前回アプリを閉じたときなどに途中で終わっていたら、続きから再開できるよう知らせる。
         if let pending = store.pending {
             notice = DownloadNotice(
-                message: "\(pending.prefecture.name)のダウンロードが途中で終わっています。「続きから再開」で残りを取得します。",
+                message: Strings.format("area_notice_pending", pending.prefecture.name),
                 resume: pending.prefecture,
                 resumeRefresh: pending.refresh
             )
@@ -150,7 +153,7 @@ final class AreaDownloadModel: ObservableObject {
                 store.put(SavedArea(prefecture: prefecture, downloadedAt: Date(), mountainCount: count))
                 savedAreas = store.load()
                 running = nil
-                notice = DownloadNotice(message: "\(prefecture.name)のダウンロードが完了しました（山 \(groupedInteger(count)) 件）。")
+                notice = DownloadNotice(message: Strings.format("area_notice_done", prefecture.name, groupedInteger(count)))
             } catch {
                 // 中断したときは cancel() が知らせを出している。
                 if error is CancellationError || Task.isCancelled || generation != id { return }
@@ -158,9 +161,9 @@ final class AreaDownloadModel: ObservableObject {
                 let done = running?.progress
                 running = nil
                 notice = DownloadNotice(
-                    message: "\(prefecture.name)のダウンロード中に通信に失敗しました"
-                        + (done.map { "（\($0.doneTiles) / \($0.totalTiles) 区画まで保存済み）" } ?? "")
-                        + "。サーバーが混み合っているか、電波が弱い可能性があります。",
+                    message: done.map {
+                        Strings.format("area_notice_failed_progress", prefecture.name, $0.doneTiles, $0.totalTiles)
+                    } ?? Strings.format("area_notice_failed", prefecture.name),
                     resume: prefecture,
                     resumeRefresh: refresh
                 )
@@ -175,7 +178,9 @@ final class AreaDownloadModel: ObservableObject {
         task?.cancel()
         self.running = nil
         notice = DownloadNotice(
-            message: "\(running.prefecture.name)のダウンロードを中断しました（\(running.progress.doneTiles) / \(running.progress.totalTiles) 区画まで保存済み）。",
+            message: Strings.format(
+                "area_notice_canceled", running.prefecture.name, running.progress.doneTiles, running.progress.totalTiles
+            ),
             resume: running.prefecture,
             resumeRefresh: store.pending?.refresh ?? false
         )

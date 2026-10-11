@@ -11,7 +11,8 @@ struct GeoPoint: Equatable {
     let mslAltitudeM: Double?
 }
 
-/// 現在地と表示範囲に応じて山データを取得し、方位盤に出す山の一覧を保つ(Android 版の DialViewModel に相当)。
+/// 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ
+/// (Android 版の DialViewModel に相当)。
 final class DialModel: ObservableObject {
     /// 表示範囲の基準の地点。ヘディングアップ中は現在地、手動位置モードでは利用者が動かした地点。
     @Published private(set) var location: GeoPoint?
@@ -21,30 +22,33 @@ final class DialModel: ObservableObject {
     /// 右下のボタンで現在地へ戻っている途中。[exploring] は戻り終わるまで true のまま。
     @Published private(set) var returning = false
     @Published private(set) var lockedHeading: Double?
-    /// 手動位置モードで、地図の向きを端末の向きに合わせ続けている(右上のコンパスで切り替える)。
-    @Published private(set) var followingCompass = false
     var displayHeading: Double { lockedHeading ?? heading ?? 0 }
 
-    /// 現在地から見た山。最低標高で絞り込み、表示の優先順(標高の高い順)に並べたもの。現在地が変わるたびに計算し直す。
+    /// 現在地から見た山。最低標高で絞り込んだもの。表示する山の選び方と順は方位盤で決める。現在地が変わるたびに計算し直す。
     @Published private(set) var mountains: [NearbyMountain] = []
     /// 現在地がほぼ山頂([summitRadiusKm] 以内)のとき、その山。
     /// 最低標高の絞り込みとは関係なく探し、[mountains] からは除く(現在地の位置に別のアイコンで出す)。
     @Published private(set) var summit: NearbyMountain?
     /// 端末を向けている方位(真北基準)。センサーの値が届くまでは nil。
     @Published private(set) var heading: Double?
+    /// 方位センサーの精度が低く、方位がずれているかもしれない。
+    @Published private(set) var headingAccuracyLow = false
     /// 現在地から画面上端までの距離。
     @Published private(set) var rangeKm: Double
+    /// 保存済みのデータから山を読み込んでいる。
     @Published private(set) var loading = false
-    /// 通信に失敗し、キャッシュだけで表示している。
-    @Published private(set) var offline = false
-    /// 端末が通信できる状態か。圏外や機内モードでは false になり、取得を控えて保存済みのデータで表示する。
+    /// 端末が通信できる状態か。圏外や機内モードでは false になり、山データの取得を試さない。
     @Published private(set) var isConnected = true
-    /// 通信に失敗したときに画面中央で知らせる文言。閉じるまで保つ。
+    /// 取り込み済みの全国の山データ。まだ取得していなければ nil。
+    @Published private(set) var peakData: InstalledPeakData?
+    /// 全国の山データを取得している。
+    @Published private(set) var peakDataUpdating = false
+    /// 設定画面に出す、山データの取得の結果(「山データは最新です」など)。
+    @Published private(set) var peakDataNotice: String?
+    /// 山データの取得に失敗したときに画面中央で知らせる文言。閉じるまで保つ。
     @Published private(set) var fetchErrorMessage: String?
     /// 範囲内に一度も取得できていない地域がある。
     @Published private(set) var incomplete = false
-    /// 手動取得モードのため、未取得または古い地域があっても通信しなかった。
-    @Published private(set) var networkSkipped = false
     @Published private(set) var settings: Settings
     /// 設定画面に出すキャッシュの状況。読み込むまでは nil。
     @Published private(set) var cacheInfo: CacheInfo?
@@ -56,6 +60,9 @@ final class DialModel: ObservableObject {
 
     private let cache: FileMountainCache
     private let repository: MountainRepository
+    /// yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。
+    private let peakDataUpdater: PeakDataUpdater
+    private let peakDataStore = PeakDataStore()
     /// 山データの事前ダウンロード。画面を閉じても続くよう、ここで持つ。
     let areaDownload: AreaDownloadModel
     private let settingsStore = SettingsStore()
@@ -68,31 +75,43 @@ final class DialModel: ObservableObject {
     private var fetchedRadiusKm = 0.0
     private var fetchTask: Task<Void, Never>?
     private var northUpTask: Task<Void, Never>?
-    /// 端末の向きに合わせ続けるときに使う画面の大きさ(pt)。
-    private var followCanvas = (width: 0.0, height: 0.0)
-    /// 圏外のため取得を控えた。値は手動の取得だったか。つながったらその続きを取得する。
-    private var skippedWhileDisconnected: Bool?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "DialModel")
 
-    /// これ以上移動したら取り直す。取得済みの地域ならキャッシュから読むだけで通信しない。
+    /// これ以上移動したら、保存済みのデータを読み直す。
     private static let refetchDistanceKm = 1.0
+
+    /// 山データの読み先。Release は参照先ファイルの stable、Debug は既定で参照先ファイルの dev(無ければ stable)。
+    /// Debug のビルドで PEAK_DATA_SOURCE を dev にしたときだけ、project.yml で PEAK_DATA_DEV が付き、yamamuki-data の開発版を直接読む。
+    #if PEAK_DATA_DEV
+    private static let peakDataChannel = PeakDataChannel.dataDev
+    #elseif DEBUG
+    private static let peakDataChannel = PeakDataChannel.dev
+    #else
+    private static let peakDataChannel = PeakDataChannel.stable
+    #endif
 
     init() {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("mountains", isDirectory: true)
         cache = FileMountainCache(directory: directory)
-        repository = MountainRepository(
-            remote: OverpassClient(userAgent: "yamamuki-ios/0.1 (+https://github.com/shohei0205/yamamuki)"),
-            cache: cache
+        let userAgent = "yamamuki-ios/0.1 (+https://github.com/shohei0205/yamamuki)"
+        repository = MountainRepository(remote: OverpassClient(userAgent: userAgent), cache: cache)
+        peakDataUpdater = PeakDataUpdater(
+            source: PeakData.source(Self.peakDataChannel, userAgent: userAgent),
+            cache: cache,
+            archive: peakDataStore.archive
         )
+        peakData = peakDataStore.load()
         areaDownload = AreaDownloadModel(repository: repository, cache: cache)
         let saved = SettingsStore().load()
         settings = saved
         rangeKm = Double(saved.initialRangeKm)
         authorization = locationService.authorization
+        locationService.apply(saved.sensorPrecision)
 
         locationService.onLocation = { [weak self] in self?.onLocation($0) }
-        locationService.onHeading = { [weak self] in self?.onHeading($0) }
+        locationService.onHeading = { [weak self] in self?.heading = $0 }
+        locationService.onHeadingAccuracyLow = { [weak self] in self?.headingAccuracyLow = $0 }
         networkMonitor.onChange = { [weak self] in self?.onConnectivity($0) }
         // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
         areaDownload.onCacheChanged = { [weak self] in self?.reloadFromCache() }
@@ -101,11 +120,12 @@ final class DialModel: ObservableObject {
             authorization = status
             if hasLocationPermission { locationService.start() }
         }
+        rebuildPeakData()
     }
 
-    /// 画面が前面に出たとき。初回は「山データを取得してよいか」に答えてから位置情報の許可を求める(ダイアログを重ねない)。
+    /// 画面が前面に出たとき。初回は「山データを取得しますか」に答えてから位置情報の許可を求める(ダイアログを重ねない)。
     func start() {
-        if settings.networkConsentAsked && authorization == .notDetermined {
+        if settings.peakDataAsked && authorization == .notDetermined {
             locationService.requestAuthorization()
         }
         locationService.start()
@@ -140,11 +160,6 @@ final class DialModel: ObservableObject {
     private func onConnectivity(_ connected: Bool) {
         guard connected != isConnected else { return }
         isConnected = connected
-        // 圏外で控えていた取得を、つながったところで行う。
-        if connected, let manual = skippedWhileDisconnected {
-            skippedWhileDisconnected = nil
-            fetch(manual: manual)
-        }
     }
 
     /// ピンチの倍率(前回からの変化分)。
@@ -171,32 +186,12 @@ final class DialModel: ObservableObject {
     func enterManual() {
         northUpTask?.cancel()
         guard location != nil else { return }
-        followingCompass = false
         beginExploring()
     }
 
     private func beginExploring() {
         lockedHeading = displayHeading
         exploring = true
-    }
-
-    private func onHeading(_ newHeading: Double) {
-        heading = newHeading
-        // 手動位置モードで端末の向きに合わせ続けているときは、端末の向きが変わるたびに地図を回す。
-        guard followingCompass, exploring, !returning, let oldHeading = lockedHeading, let viewport = location,
-              followCanvas.height > DialGeometry.chartInset else { return }
-        let observer = gpsLocation ?? viewport
-        let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
-            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: oldHeading,
-            rangeKm: rangeKm, canvasWidth: followCanvas.width, canvasHeight: followCanvas.height)
-        let next = PanGeometry.rotateViewport(MapCenter(observer.latitude, observer.longitude),
-            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: oldHeading, nextHeading: newHeading,
-            rangeKm: rangeKm, canvasHeight: followCanvas.height, aroundCenter: aroundCenter)
-        if next != MapCenter(viewport.latitude, viewport.longitude) {
-            location = GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
-        }
-        lockedHeading = newHeading
-        fetchForViewport()
     }
 
     /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。
@@ -209,7 +204,6 @@ final class DialModel: ObservableObject {
             viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
             rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
         let range = rangeKm
-        followingCompass = false
         beginExploring()
         northUpTask = Task { @MainActor [weak self] in
             let started = ProcessInfo.processInfo.systemUptime
@@ -222,43 +216,6 @@ final class DialModel: ObservableObject {
                     : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
                 self?.lockedHeading = PanGeometry.northUpHeading(startHeading, progress: progress)
                 if progress >= 1 { break }
-                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
-            }
-            if !Task.isCancelled { self?.fetchForViewport() }
-        }
-    }
-
-    /// 手動位置モードのまま、約0.5秒で地図を端末の向きに合わせ、その後も端末の向きに付いていく。
-    /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に回す。
-    func followCompass(canvasWidth: Double, canvasHeight: Double) {
-        guard exploring, let viewport = location, let startHeading = lockedHeading,
-              canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset else { return }
-        northUpTask?.cancel()
-        followCanvas = (canvasWidth, canvasHeight)
-        let observer = gpsLocation ?? viewport
-        let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
-            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
-            rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
-        let range = rangeKm
-        followingCompass = false
-        northUpTask = Task { @MainActor [weak self] in
-            let started = ProcessInfo.processInfo.systemUptime
-            while !Task.isCancelled {
-                guard let self else { return }
-                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
-                // 回している間も端末は動くので、行き先の向きは毎回読み直す。
-                let nextHeading = PanGeometry.returnHeading(startHeading, target: heading ?? startHeading,
-                    fraction: t * t * (3 - 2 * t))
-                let next = PanGeometry.rotateViewport(MapCenter(observer.latitude, observer.longitude),
-                    viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
-                    nextHeading: nextHeading, rangeKm: range, canvasHeight: canvasHeight, aroundCenter: aroundCenter)
-                location = next == MapCenter(viewport.latitude, viewport.longitude) ? viewport
-                    : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
-                lockedHeading = nextHeading
-                if t >= 1 {
-                    followingCompass = true
-                    break
-                }
                 do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
             }
             if !Task.isCancelled { self?.fetchForViewport() }
@@ -279,8 +236,6 @@ final class DialModel: ObservableObject {
         location = GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
         rangeKm = range
         lockedHeading = nextHeading
-        // 二本指で回したら、端末の向きに合わせるのをやめる。拡大縮小と移動だけなら続ける。
-        if rotation != 0 { followingCompass = false }
         fetchForViewport()
     }
 
@@ -294,7 +249,6 @@ final class DialModel: ObservableObject {
         returnGeneration += 1
         let generation = returnGeneration
         returning = true
-        followingCompass = false
         northUpTask = Task { @MainActor [weak self] in
             defer { if self?.returnGeneration == generation { self?.returning = false } }
             let started = ProcessInfo.processInfo.systemUptime
@@ -323,28 +277,13 @@ final class DialModel: ObservableObject {
         fetch()
     }
 
-    func retry() { fetch(forceRefresh: true) }
-
     /// 通信エラーの知らせを閉じる。
     func dismissFetchError() { fetchErrorMessage = nil }
 
-    /// 通信エラーの知らせから取り直す。利用者が求めたので、手動取得モードでも通信する。
+    /// 通信エラーの知らせから、山データを取り直す。
     func retryAfterFetchError() {
         fetchErrorMessage = nil
-        fetch(manual: true)
-    }
-
-    /// 左下の更新ボタン(山データを取得)。今の表示範囲のうち、未取得または古い地域を取得する。
-    func fetchManually() { fetch(manual: true) }
-
-    /// 初回起動時の「山データを自動で取得してよいか」への答え。いいえなら手動取得モードにする。
-    func answerNetworkConsent(allow: Bool) {
-        updateSettings {
-            $0.networkConsentAsked = true
-            $0.manualFetch = !allow
-        }
-        if allow { fetch() }
-        if authorization == .notDetermined { locationService.requestAuthorization() }
+        updatePeakData()
     }
 
     func updateSettings(_ transform: (inout Settings) -> Void) {
@@ -354,6 +293,9 @@ final class DialModel: ObservableObject {
         settings = after
         settingsStore.save(after)
 
+        if after.sensorPrecision != before.sensorPrecision {
+            locationService.apply(after.sensorPrecision)
+        }
         if after.minElevationM != before.minElevationM, let here = gpsLocation {
             updatePeaks(at: here)
         }
@@ -362,8 +304,6 @@ final class DialModel: ObservableObject {
             rangeKm = Double(after.initialRangeKm)
             if DialGeometry.fetchRadiusKm(rangeKm) > fetchedRadiusKm { fetch() }
         }
-        // 手動取得をやめたら、控えていた分をすぐ取得する。
-        if before.manualFetch && !after.manualFetch && networkSkipped { fetch() }
     }
 
     func refreshCacheInfo() {
@@ -372,12 +312,18 @@ final class DialModel: ObservableObject {
         }
     }
 
-    /// キャッシュを消して、現在地周辺を取り直す。事前ダウンロードした地域は残す。
+    /// 保存している山データを消して、現在地周辺を読み直す(通信はしない)。事前ダウンロードした地域は残す。
+    /// 全国の山データも消えるので、取り込み済みの記録も消し、設定画面から取り直せるようにする。
     func clearCache() {
         fetchTask?.cancel()
         let keep = areaDownload.savedTiles
         Task { @MainActor in
+            // 記録を先に消す。消している途中でアプリが終わっても、記録だけが残って「最新です」となり、
+            // 取り直せなくなることがないように。
+            peakDataStore.clear()
             await cache.clear(keeping: keep)
+            peakData = nil
+            peakDataNotice = nil
             peaks = []
             mountains = []
             summit = nil
@@ -395,7 +341,8 @@ final class DialModel: ObservableObject {
             guard let self else { return }
             do {
                 let result = try await repository.mountainsAround(
-                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false
+                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false,
+                    ignoreMissing: PeakData.ignoresMissing(latitude: here.latitude, longitude: here.longitude)
                 )
                 peaks = result.mountains.map(\.mountain)
                 updatePeaks(at: gpsLocation ?? here)
@@ -406,15 +353,11 @@ final class DialModel: ObservableObject {
         }
     }
 
-    private func fetch(forceRefresh: Bool = false, manual: Bool = false) {
+    /// 今の表示範囲の山を、保存済みのデータから読み込む。方位盤からは通信しない
+    /// (山データは初回の問い合わせか設定画面で、yamamuki-data から全国分をまとめて取得する)。
+    private func fetch() {
         guard let here = location else { return }
         let radius = DialGeometry.fetchRadiusKm(rangeKm)
-        let settings = self.settings
-        // 初回の問い合わせに答えるまでは、キャッシュだけで表示して通信しない。
-        let wantsNetwork = manual || (!settings.manualFetch && settings.networkConsentAsked)
-        // 圏外と分かっていれば通信を試さない(失敗を待たず、エラーの知らせも出さない)。
-        let connected = isConnected
-        let allowNetwork = wantsNetwork && connected
         fetchedCenter = here
         fetchedRadiusKm = radius
         fetchTask?.cancel()
@@ -422,40 +365,17 @@ final class DialModel: ObservableObject {
             guard let self else { return }
             loading = true
             do {
-                if exploring && !manual && !forceRefresh { try await Task.sleep(nanoseconds: 250_000_000) }
+                // 手動移動中の連続した読み込みをまとめる。
+                if exploring { try await Task.sleep(nanoseconds: 250_000_000) }
                 let result = try await repository.mountainsAround(
-                    latitude: here.latitude,
-                    longitude: here.longitude,
-                    radiusKm: radius,
-                    forceRefresh: forceRefresh,
-                    allowNetwork: allowNetwork,
-                    maxAge: settings.cacheMaxAge
+                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false,
+                    ignoreMissing: PeakData.ignoresMissing(latitude: here.latitude, longitude: here.longitude)
                 )
-                // 新しい取得に置き換わっていたら、古い結果で上書きしない。
+                // 新しい読み込みに置き換わっていたら、古い結果で上書きしない。
                 guard !Task.isCancelled else { return }
-                if let error = result.error {
-                    logger.warning("山データの取得に失敗: \(String(describing: error), privacy: .public)")
-                }
                 peaks = result.mountains.map(\.mountain)
                 updatePeaks(at: gpsLocation ?? here)
-                let skippedOffline = wantsNetwork && !connected && result.networkSkipped
-                if skippedOffline {
-                    skippedWhileDisconnected = manual
-                } else if allowNetwork {
-                    skippedWhileDisconnected = nil
-                }
-                offline = result.error != nil || skippedOffline
-                let hasCache = !peaks.isEmpty
-                if let error = result.error {
-                    fetchErrorMessage = Self.errorNotice(for: error, hasCache: hasCache)
-                } else if skippedOffline && manual {
-                    // 自分で取得を押したときだけ、圏外で取得できなかったことを知らせる。
-                    fetchErrorMessage = Self.offlineNotice(hasCache: hasCache)
-                } else if !skippedOffline {
-                    fetchErrorMessage = nil
-                }
                 incomplete = result.incomplete
-                networkSkipped = result.networkSkipped
                 loading = false
             } catch {
                 guard !Task.isCancelled else { return }
@@ -465,27 +385,88 @@ final class DialModel: ObservableObject {
         }
     }
 
+    /// アプリの更新で山データの読み込み処理が新しくなっていたら、残した gz から通信せずに保存データを作り直す。
+    /// 作り直せなければ何もしない(次に更新を確かめたときに取り直す)。
+    private func rebuildPeakData() {
+        guard let installed = peakData, installed.readerVersion < PeakData.readerVersion, !peakDataUpdating else { return }
+        peakDataUpdating = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { peakDataUpdating = false }
+            do {
+                guard let rebuilt = try await peakDataUpdater.rebuild(installed: installed) else { return }
+                peakDataStore.save(rebuilt)
+                peakData = rebuilt
+                reloadFromCache()
+                refreshCacheInfo()
+            } catch {
+                logger.warning("山データの作り直しに失敗: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// 全国の山データの最新版を確かめ、新しければ取得して取り込む。初回の問い合わせと設定画面のボタンから呼ぶ。
+    /// 圏外と分かっていれば通信を試さずに知らせる。失敗しても、取り込み済みのデータはそのまま残る。
+    func updatePeakData() {
+        guard !peakDataUpdating else { return }
+        guard isConnected else {
+            fetchErrorMessage = Self.offlineNotice(hasCache: !peaks.isEmpty)
+            peakDataNotice = nil
+            return
+        }
+        peakDataUpdating = true
+        peakDataNotice = nil
+        let installed = peakData
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { peakDataUpdating = false }
+            do {
+                // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
+                let hasMountains = await cache.info().mountainCount > 0
+                let result = try await peakDataUpdater.update(installed: hasMountains ? installed : nil)
+                peakDataStore.save(result.installed)
+                peakData = result.installed
+                if case .updated = result {
+                    peakDataNotice = Strings.text("peak_data_updated")
+                    reloadFromCache()
+                    refreshCacheInfo()
+                } else {
+                    peakDataNotice = Strings.text("peak_data_up_to_date")
+                }
+            } catch {
+                logger.warning("山データの取得に失敗: \(String(describing: error), privacy: .public)")
+                fetchErrorMessage = Self.errorNotice(for: error, hasCache: !peaks.isEmpty)
+            }
+        }
+    }
+
+    /// 初回起動時の「山データを取得しますか」への答え。いいえなら、あとで設定画面から取得できる。
+    func answerPeakDataPrompt(allow: Bool) {
+        updateSettings { $0.peakDataAsked = true }
+        if allow { updatePeakData() }
+        if authorization == .notDetermined { locationService.requestAuthorization() }
+    }
+
     /// 通信エラーの知らせの文言。端末がつながっていないのか、サーバー側の問題かで案内を変える。
     private static func errorNotice(for error: Error, hasCache: Bool) -> String {
         if isOffline(error) { return offlineNotice(hasCache: hasCache) }
-        let cause = "山データのサーバーが混み合っているか、応答がありません。しばらくしてから再取得してください。"
-        return hasCache ? cause + "\n\n保存済みのデータで表示しています。" : cause
+        let cause = (error as? PeakDataError).map { Strings.format("peak_data_error_invalid", $0.message) }
+            ?? Strings.text("peak_data_error_no_response")
+        return withCacheNote(cause, hasCache: hasCache)
     }
 
     private static func offlineNotice(hasCache: Bool) -> String {
-        let cause = "インターネットに接続されていません。電波の届く場所で再取得してください。"
-        return hasCache ? cause + "\n\n保存済みのデータで表示しています。" : cause
+        withCacheNote(Strings.text("peak_data_error_offline"), hasCache: hasCache)
     }
 
-    /// 端末が通信できない状態で失敗したか。Overpass はエンドポイントごとの原因をまとめて返すので、すべてを見る。
+    private static func withCacheNote(_ cause: String, hasCache: Bool) -> String {
+        hasCache ? Strings.format("peak_data_error_with_cache", cause) : cause
+    }
+
+    /// 端末が通信できない状態で失敗したか。
     private static func isOffline(_ error: Error) -> Bool {
-        if let e = error as? URLError {
-            return [.notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff].contains(e.code)
-        }
-        if let e = error as? OverpassError {
-            return !e.causes.isEmpty && e.causes.allSatisfy(isOffline)
-        }
-        return false
+        guard let e = error as? URLError else { return false }
+        return [.notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff].contains(e.code)
     }
 
     /// [p] から見た山の一覧と、山頂にいるならその山を入れ直す。
@@ -495,7 +476,6 @@ final class DialModel: ObservableObject {
         let minElevation = settings.minElevationM
         mountains = all
             .filter { $0.mountain.osmId != top?.mountain.osmId && $0.mountain.meetsMinElevation(minElevation) }
-            .sorted(by: displayPriority)
         summit = top
     }
 }

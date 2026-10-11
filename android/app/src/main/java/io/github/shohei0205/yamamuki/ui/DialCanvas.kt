@@ -1,0 +1,1112 @@
+package io.github.shohei0205.yamamuki.ui
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.github.shohei0205.yamamuki.core.Box
+import io.github.shohei0205.yamamuki.core.DialGeometry
+import io.github.shohei0205.yamamuki.core.ElevationClass
+import io.github.shohei0205.yamamuki.core.Heading
+import io.github.shohei0205.yamamuki.core.HeaderScenery
+import io.github.shohei0205.yamamuki.core.Mountain
+import io.github.shohei0205.yamamuki.core.NearbyMountain
+import io.github.shohei0205.yamamuki.core.PlanOffset
+import io.github.shohei0205.yamamuki.core.RingLabelGeometry
+import io.github.shohei0205.yamamuki.core.PanGeometry
+import io.github.shohei0205.yamamuki.core.MapCenter
+import io.github.shohei0205.yamamuki.core.PeakGroup
+import io.github.shohei0205.yamamuki.core.PeakLayout
+import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.core.displayScore
+import io.github.shohei0205.yamamuki.core.elevationClass
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+
+/** 方位盤の地面のクリーム色。 */
+val DialGround = Color(0xFFFFF4D8)
+
+/** 距離の円の間の帯。現在地に近い帯から順に塗り、ここにない遠くの帯は地面の色のままにする。 */
+private val GroundBands = listOf(Color(0xFFFFE7B0), Color(0xFFFFEDC2), Color(0xFFFFF1CF))
+private val RingLine = Color(0xFFE8C98F)
+private val NorthRed = Color(0xFFED1C24)
+private val BinocularBody = Color(0xFF333333)
+private val BinocularHinge = Color(0xFF777777)
+private val LensBlue = Color(0xFF5B8DB8)
+private val SummitRock = Color(0xFF5D6D7E)
+private val SummitRockLight = Color(0xFF8A99A8)
+private val FlagPole = Color(0xFF333333)
+private val FanShade = Color(0xFFB08D57)
+private val FanEdge = Color(0xFFF2A65A)
+private val ShadowColor = Color.Black.copy(alpha = 0.2f)
+internal val TapeInk = Color(0xFF2E3A40)
+internal val TapeSubtle = Color(0xFF6B7178)
+
+/** 方位目盛りの 10° ごとと 5° ごとの線の長さ。 */
+private const val TAPE_MAJOR_TICK_DP = 14f
+private const val TAPE_MINOR_TICK_DP = 8f
+
+/** 画面上部の方位目盛りに収める角度の幅。 */
+private const val TAPE_SPAN_DEG = DialGeometry.TAPE_SPAN_DEG
+
+/**
+ * 方位盤の文字。設定の文字サイズ([scale])を山名・距離の目盛り・方位の表示に掛ける。
+ * 上端の方位目盛りは高さが決まっているので倍率を掛けない。
+ */
+private class DialTextStyles(scale: Float) {
+    val label = TextStyle(color = TapeInk, fontSize = 13.sp * scale, fontWeight = FontWeight.Bold)
+    val others = TextStyle(color = TapeSubtle, fontSize = 11.sp * scale, fontWeight = FontWeight.Bold)
+    val ringLabel = TextStyle(color = TapeSubtle, fontSize = 11.sp * scale, fontWeight = FontWeight.Bold)
+    val readout = TextStyle(color = Color.Black, fontSize = 15.sp * scale, fontWeight = FontWeight.Bold)
+}
+
+/**
+ * 方位盤。現在地(画面下部の双眼鏡)から向いている方向を上にとり、山をアイコンと山名で描く。
+ * アイコンの色と形は標高の区分([ElevationClass])で変える。
+ * 表示する山は、現在地から見上げる角度(仰角)の大きい順に選び、すぐそばの山どうしは標高の高いほうを残す([PeakLayout])。
+ * 画面に描くときは前回描いた山を先に置くので、向きを変えても、描いている山は実際に重なるまで消えない。
+ * 重なって山名を省いた山はアイコンだけを描き、代表の山の山名の下に「ほか 3 山」と添える。
+ * 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。代表の山なら、まとめた山を含む一覧を [onGroupTap] に渡す。
+ * 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
+ * 現在地がほぼ山頂([summit] が非 null)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
+ */
+@Composable
+fun DialCanvas(
+    headingDeg: Double,
+    mountains: List<NearbyMountain>,
+    rangeKm: Double,
+    modifier: Modifier = Modifier,
+    onMountainTap: (NearbyMountain) -> Unit = {},
+    /** 重なる山をまとめた代表の山をタップしたとき。代表の山を先頭に、まとめた山を優先順に並べて渡す。 */
+    onGroupTap: (List<NearbyMountain>) -> Unit = {},
+    onObserverTap: () -> Unit = {},
+    /** 現在地がほぼ山頂のとき、その山。 */
+    summit: NearbyMountain? = null,
+    /** 現在地の標高(海抜)。方位の表示の後ろに添え、山の仰角の計算にも使う。null なら出さない(仰角は 0m とみなす)。 */
+    altitudeM: Double? = null,
+    /** 1 画面に出す山名の上限。山名を出さない山はアイコンだけで描く。 */
+    maxPeaks: Int = 40,
+    /** 文字の大きさ(標準 = 1.0 に対する倍率)。 */
+    textScale: Float = 1f,
+    latitude: Double? = null,
+    longitude: Double? = null,
+    viewportLatitude: Double? = latitude,
+    viewportLongitude: Double? = longitude,
+    compassHeadingDeg: Double = headingDeg,
+    headingUp: Boolean = true,
+    /** 上部の方位目盛りの引っ込み具合。0 で表示(ヘディングアップ)、1 でヘッダーの下端へ隠れる(手動位置モード)。 */
+    tapeHidden: Float = 0f,
+    /** 現在地から画面上部へ広がる視野の扇の濃さ(0〜1)。双眼鏡の短い視野は残りの (1 - 濃さ) で描く。 */
+    viewFanAlpha: Float = 1f,
+    /** 画面下端の余白(ジェスチャーバーなど)の高さ。視野の扇の外側の暗さだけを、ここまで描き足す。 */
+    bottomBleed: Dp = 0.dp,
+) {
+    val styles = remember(textScale) { DialTextStyles(textScale) }
+    val texts = rememberDialTexts()
+    val textMeasurer = rememberTextMeasurer(cacheSize = 512)
+    val hitTargets = remember { HitTargets() }
+    val peakSelection = remember { PeakSelection() }
+    // 山名をふわっと出し入れしている間だけ、毎フレーム描き直す。
+    var frameTick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(peakSelection.fading) {
+        if (peakSelection.fading) while (true) withFrameNanos { frameTick = it }
+    }
+    val currentOnTap by rememberUpdatedState(onMountainTap)
+    val currentOnGroupTap by rememberUpdatedState(onGroupTap)
+    val currentOnObserverTap by rememberUpdatedState(onObserverTap)
+    val tapModifier = Modifier.pointerInput(Unit) {
+        val slop = 8.dp.toPx()
+        detectTapGestures { tap ->
+            if (hitTargets.hitsObserver(tap, slop)) {
+                currentOnObserverTap()
+            } else {
+                hitTargets.find(tap, slop)?.let { peak ->
+                    if (peak.members.isEmpty()) currentOnTap(peak.mountain) else currentOnGroupTap(listOf(peak.mountain) + peak.members)
+                }
+            }
+        }
+    }
+    // 距離の帯と視野の扇だけを画面下端の余白まで描くので、全体では切り抜かず、それ以外を描く範囲で切り抜く。
+    Canvas(modifier.then(tapModifier)) {
+        // 読むだけで、山名の出し入れの間は毎フレーム描き直される。
+        peakSelection.frameTick = frameTick
+        val headerHeight = DialGeometry.HEADER_HEIGHT_DP.dp.toPx()
+        val tapeHeight = DialGeometry.TAPE_HEIGHT_DP.dp.toPx()
+        val chartTop = DialGeometry.CHART_TOP_DP.dp.toPx()
+        val origin = Offset(size.width / 2, size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx())
+        val pxPerKm = ((origin.y - chartTop) / rangeKm).toFloat()
+        val offset = if (latitude != null && longitude != null && viewportLatitude != null && viewportLongitude != null)
+            PanGeometry.observerOffset(MapCenter(latitude, longitude), MapCenter(viewportLatitude, viewportLongitude), headingDeg)
+        else PlanOffset(0.0, 0.0)
+        val observer = origin + Offset((offset.x * pxPerKm).toFloat(), (-offset.y * pxPerKm).toFloat())
+        val observerRotation = Heading.delta(headingDeg, compassHeadingDeg).toFloat()
+        // 距離の帯と視野の扇は、画面下端の余白まで描く。
+        clipRect(top = headerHeight + tapeHeight, bottom = size.height + bottomBleed.toPx()) {
+            if (pxPerKm > 0f) drawGroundBands(observer, pxPerKm, rangeKm)
+            if (viewFanAlpha > 0f) {
+                // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
+                drawViewFan(observer, viewFanAlpha)
+            }
+        }
+        clipRect {
+            val coneAlpha = 1f - viewFanAlpha
+            hitTargets.peaks = if (pxPerKm > 0f) {
+                val previousAngle = RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle, hitTargets.ringLabelHeading, headingDeg)
+                hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, previousAngle, headingUp)
+                hitTargets.ringLabelHeading = headingDeg
+                drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, texts, maxPeaks, peakSelection, headingUp)
+            } else {
+                emptyList()
+            }
+            if (summit != null) {
+                hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation, coneAlpha)
+                hitTargets.observer = null
+            } else {
+                hitTargets.observerCenter = observer
+                hitTargets.observerRotation = observerRotation
+                rotate(observerRotation, pivot = observer) {
+                    hitTargets.observer = drawBinoculars(observer, coneAlpha)
+                }
+                hitTargets.summit = null
+            }
+            // 上部の青空と山並みは、地図の上に重ねる。手動位置モードで地図を動かしても、双眼鏡などがヘッダーに重ならない。
+            drawHeaderScenery(DialGround)
+            if (tapeHidden < 1f) {
+                // 目盛りはヘッダーの下に置き、手動位置モードではヘッダーの下端で切って、ヘッダーに重ねずに消す。
+                // 方位の表示の文字は大きくできるので、目盛りの帯より長めに動かして隠しきる。
+                clipRect(top = headerHeight) {
+                    translate(top = headerHeight - tapeHidden * (chartTop - headerHeight) * 1.5f) {
+                        drawTape(headingDeg, tapeHeight, textMeasurer)
+                        drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles, texts)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 距離の円の間を、現在地に近いほど濃い淡い色で塗り分ける([GroundBands])。遠い帯から順に重ねる。 */
+private fun DrawScope.drawGroundBands(observer: Offset, pxPerKm: Float, rangeKm: Double) {
+    val step = DialGeometry.ringStepKm(rangeKm)
+    for (i in GroundBands.indices.reversed()) {
+        drawCircle(GroundBands[i], radius = (step * (i + 1) * pxPerKm).toFloat(), center = observer)
+    }
+}
+
+private fun DrawScope.drawRings(
+    observer: Offset,
+    pxPerKm: Float,
+    rangeKm: Double,
+    chartTop: Float,
+    textMeasurer: TextMeasurer,
+    styles: DialTextStyles,
+    previousAngle: Double?,
+    headingUp: Boolean,
+): Double {
+    val step = DialGeometry.ringStepKm(rangeKm)
+    val farthestPx = hypot(max(kotlin.math.abs(observer.x), kotlin.math.abs(size.width - observer.x)),
+        max(kotlin.math.abs(chartTop - observer.y), kotlin.math.abs(size.height - observer.y)))
+    val nearestPx = hypot(max(0f, max(-observer.x, observer.x - size.width)),
+        max(0f, max(chartTop - observer.y, observer.y - size.height)))
+    var i = max(1, (nearestPx / (step * pxPerKm)).toInt())
+    val rings = mutableListOf<Pair<Float, TextLayoutResult>>()
+    var angle = -Math.PI / 2
+    val pad = 3.dp.toPx()
+    val padX = 6.dp.toPx()
+    clipRect(top = chartTop, bottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()) {
+        while (step * i * pxPerKm <= farthestPx) {
+            val km = step * i
+            val radius = (km * pxPerKm).toFloat()
+            drawCircle(RingLine, radius = radius, center = observer, style = Stroke(width = 1.5.dp.toPx()))
+            val label = textMeasurer.measure(DialGeometry.ringLabel(km), styles.ringLabel)
+            rings += radius to label
+            i++
+        }
+        fun placements(direction: Double): List<Triple<TextLayoutResult, Offset, Box>> {
+            val labels = mutableListOf<Triple<TextLayoutResult, Offset, Box>>()
+            for ((radius, label) in rings) {
+            val anchor = RingLabelGeometry.place(observer.x.toDouble(), observer.y.toDouble(), radius.toDouble(),
+                0.0, chartTop.toDouble(), size.width.toDouble(), (size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()).toDouble(),
+                (label.size.width + padX * 2).toDouble(), (label.size.height + pad * 2).toDouble(),
+                direction)
+            if (anchor != null) {
+                val textOrigin = Offset(anchor.x.toFloat() - label.size.width / 2f, anchor.y.toFloat() - label.size.height / 2f)
+                val box = Box(textOrigin.x - padX, textOrigin.y - pad,
+                    textOrigin.x + label.size.width + padX, textOrigin.y + label.size.height + pad)
+                if (labels.none { it.third.intersects(box) }) labels += Triple(label, textOrigin, box)
+            }
+            }
+            return labels
+        }
+        if (!headingUp) angle = RingLabelGeometry.direction(observer.x.toDouble(), observer.y.toDouble(),
+            0.0, chartTop.toDouble(), size.width.toDouble(), (size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()).toDouble(),
+            previousAngle, visibleCount = { placements(it).size })
+        for ((label, origin, box) in placements(angle)) {
+            // 距離の数字は白い札に載せ、円や帯と重なっても読めるようにする。
+            val height = box.bottom - box.top
+            drawRoundRect(Color.White.copy(alpha = 0.9f), topLeft = Offset(box.left, box.top),
+                size = Size(box.right - box.left, height), cornerRadius = CornerRadius(height / 2))
+            drawText(label, topLeft = origin)
+        }
+    }
+    return angle
+}
+
+private class PlacedPeak(
+    val mountain: NearbyMountain,
+    val position: Offset,
+    val label: TextLayoutResult,
+    /** アイコンと山名を合わせた範囲。重なりの判定とタップの当たり判定に使う。 */
+    val box: Box,
+    /** 重なるので山名を省き、この山にまとめた山(優先順)。 */
+    val members: List<NearbyMountain> = emptyList(),
+)
+
+/** 直近に描いた山。描画のたびに差し替え、タップ位置から山を引く。 */
+private class HitTargets {
+    var ringLabelAngle: Double? = null
+    var ringLabelHeading: Double? = null
+    var peaks: List<PlacedPeak> = emptyList()
+
+    /** 現在地の山頂アイコンと山名。山と重なっても優先する。 */
+    var summit: PlacedPeak? = null
+
+    /** 双眼鏡の範囲。山頂アイコンを描いているときは null。山と重なっても優先する。 */
+    var observer: Box? = null
+    var observerCenter = Offset.Zero
+    var observerRotation = 0f
+
+    /** [tap] が双眼鏡に当たったか。枠を [slop] だけ広げて判定する。 */
+    fun hitsObserver(tap: Offset, slop: Float): Boolean {
+        val angle = Math.toRadians(-observerRotation.toDouble())
+        val delta = tap - observerCenter
+        val localTap = observerCenter + Offset(
+            (delta.x * kotlin.math.cos(angle) - delta.y * kotlin.math.sin(angle)).toFloat(),
+            (delta.x * kotlin.math.sin(angle) + delta.y * kotlin.math.cos(angle)).toFloat(),
+        )
+        return observer?.contains(localTap, slop) ?: false
+    }
+
+    /** [tap] を含む山のうち、アイコンが最も近いもの。枠を [slop] だけ広げて判定する。 */
+    fun find(tap: Offset, slop: Float): PlacedPeak? {
+        fun PlacedPeak.hit() = box.contains(tap, slop)
+        summit?.takeIf { it.hit() }?.let { return it }
+        return peaks.filter { it.hit() }.minByOrNull { (it.position - tap).getDistanceSquared() }
+    }
+}
+
+private fun Box.contains(p: Offset, slop: Float) =
+    p.x in left - slop..right + slop && p.y in top - slop..bottom + slop
+
+/**
+ * 方位盤に出す山の候補。画面より一回り大きい、画面の周りの円から選び、山の一覧・表示範囲などが変わったときと、
+ * 画面がその円からはみ出したときだけ選び直す。
+ * 前回選んだ山と前回描いた山を覚えておき、境目にある山が出たり消えたりしないようにする。
+ */
+private class PeakSelection {
+    var key: List<Any?>? = null
+    var drawnIds: Set<Long> = emptySet()
+    /** 前回描いた山と、そこにまとめてアイコンだけを描いた山。 */
+    var shownIds: Set<Long> = emptySet()
+    /** 候補を選んだ円の中にある、すべての山。 */
+    var around: List<NearbyMountain> = emptyList()
+    /** 山アイコンの画像。 */
+    val sprites = PeakIconSprites()
+    /** 山名の濃さ(0〜1)。山名を出す山は 1 へ、山名を外した山は 0 へ近づける。0 になったら除く。 */
+    val labelAlpha = HashMap<Long, Float>()
+    /** 山名を出さない山のアイコンの濃さ。画面の外へ出た山は除く。 */
+    val iconAlpha = HashMap<Long, Float>()
+    /** 前回描いた時刻(ns)。山名とアイコンの濃さを時間に合わせて変える。 */
+    var lastNanos = 0L
+    var frameTick = 0L
+    /** 山名かアイコンの濃さを変えている途中か。途中の間は毎フレーム描き直す。 */
+    var fading by mutableStateOf(false)
+    /** 山ごとの山名と、山の位置を原点にしたアイコンと山名の範囲。文字の大きさが変わったら測り直す。 */
+    val labels = HashMap<Long, Pair<TextLayoutResult, Box>>()
+    var labelStyles: DialTextStyles? = null
+    /** 候補を選んだ円の中心(現在地からの距離と方角)と半径(km)。 */
+    var centerKm = 0.0
+    var centerBearingDeg = 0.0
+    var radiusKm = 0.0
+}
+
+/**
+ * 候補を選ぶ円を、画面の角(画面の中央から対角線の半分)より広く取る幅。
+ * 地図を少し動かしたり向きを少し変えたりしただけでは選び直さない(ヘディングアップでは、向きを 10〜15° ほど変えるごとに選び直す)。
+ */
+private val REACH_STEP = 64.dp
+
+/** 新しく画面に出す山に求める、ほかの山との余白。境目で出たり消えたりしないようにする。 */
+private val NEW_PEAK_MARGIN = 4.dp
+
+/**
+ * 方位盤に山を描く。表示の優先度は、現在地から見上げる角度(仰角、[displayScore])に、モードごとに次の値を上乗せして決める。
+ *
+ * ヘディングアップ(端末を向けた方向が上):
+ * - 正面に近い山ほど優先する。正面で +1°、視野の扇の端(左右 30°)で 0([PeakLayout.forwardBonus])。
+ * - 表示範囲を広げるほど高い山を優先する。表示範囲 20km から 60km にかけて、標高 1000m あたり 0° から 2° まで増やす
+ *   ([PeakLayout.heightBonus])。遠くまで表示しているときは、近くの低い山より遠くの高い山の名前を知りたいことが多いため。
+ * - 視野の扇の中の山は、山名を出さない山もアイコンだけで描く。扇の端の 8° では、外へ行くほど薄くする。
+ *
+ * 手動位置モード(地図を指で動かす):
+ * - 仰角だけで決める(向きと表示範囲による上乗せはしない)。
+ * - 画面の中央の円(直径は画面の幅)の中の山は、山名を出さない山もアイコンだけで描く。円の縁では、外へ行くほど薄くする。
+ *
+ * どちらのモードでも:
+ * - 前回描いた山は少し優先する([PeakLayout.KEPT_BONUS_DEG])。
+ * - 画面に入る山を優先度の高い順に置き、山名を [maxPeaks] 件まで出す。重なる山は山名を省き、代表の山の「ほか 3 山」にまとめる。
+ *   すぐそばの山どうし([PeakLayout.NEIGHBOR_KM] 以内)は、優先度によらず標高の高い山を代表にする。
+ * - 山名を出さない山のアイコンは、優先度が低いほど薄くする。山名や「ほか 3 山」にかかるアイコンは一番薄くする。
+ * - 山名とアイコンの濃さは時間をかけて変え、向きを変えたときに急に出たり消えたりしないようにする。
+ */
+private fun DrawScope.drawPeaks(
+    observer: Offset,
+    pxPerKm: Float,
+    headingDeg: Double,
+    mountains: List<NearbyMountain>,
+    observerAltitudeM: Double?,
+    chartTop: Float,
+    textMeasurer: TextMeasurer,
+    styles: DialTextStyles,
+    texts: DialTexts,
+    maxPeaks: Int,
+    selection: PeakSelection,
+    headingUp: Boolean,
+): List<PlacedPeak> {
+    val gap = 2.dp.toPx()
+    val chartBottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()
+
+    // 候補は、画面より一回り大きい、画面の周りの円から選ぶ。現在地の周り全体から選ぶと、ほかの方角の山に候補の数を取られ、
+    // 向けた先に山が出なかったり、拡大率のわずかな違いで画面の山が候補から外れたり戻ったりする。
+    val halfDiagonal = hypot(size.width, chartBottom - chartTop) / 2
+    val reachPx = halfDiagonal + REACH_STEP.toPx()
+    // 画面の中央の位置(現在地からの距離と方角)。画面の中央を軸に回しても変わらない。
+    val center = Offset(size.width / 2, (chartTop + chartBottom) / 2) - observer
+    val centerKm = (center.getDistance() / pxPerKm).toDouble()
+    val centerBearingDeg = Heading.normalize(headingDeg + Math.toDegrees(atan2(center.x.toDouble(), -center.y.toDouble())))
+
+    val iconHeight = PeakIcon.MAX_HEIGHT_DP.dp.toPx()
+    // ヘディングアップでは、正面に近い山を優先する(向けた先の山が、横の山に押し出されにくくする)。
+    val forwardHeading = if (headingUp) headingDeg else null
+    // ヘディングアップでは、表示範囲を広げるほど高い山を優先する(遠くの高い山の名前を知りたいことが多いため)。
+    val headingUpRangeKm = if (headingUp) ((chartBottom - chartTop) / pxPerKm).toDouble() else null
+    fun score(m: NearbyMountain) =
+        m.displayScore(observerAltitudeM) + (headingUpRangeKm?.let { PeakLayout.heightBonus(m.mountain.elevationM, it) } ?: 0.0)
+
+    val key = listOf(mountains, pxPerKm, observerAltitudeM, styles, maxPeaks, size.width, chartBottom - chartTop, headingUp)
+    // 選んだあとは、向きを変えたり地図を動かしたりして、画面の角が円からはみ出すまで選び直さない。
+    val outOfCircle = PeakLayout.planeDistanceKm(centerKm, centerBearingDeg, selection.centerKm, selection.centerBearingDeg) +
+        halfDiagonal / pxPerKm > selection.radiusKm
+    if (selection.key != key || outOfCircle) {
+        selection.centerKm = centerKm
+        selection.centerBearingDeg = centerBearingDeg
+        selection.radiusKm = (reachPx / pxPerKm).toDouble()
+        selection.around = mountains.filter {
+            PeakLayout.planeDistanceKm(it.distanceKm, it.bearingDeg, centerKm, centerBearingDeg) <= selection.radiusKm
+        }
+        if (selection.labelStyles != styles) {
+            selection.labels.clear()
+            selection.labelStyles = styles
+        }
+        selection.key = key
+    }
+
+    // 画面に入る山すべてを、優先順に並べて山名の候補にする。山名の数は [maxPeaks] までにする。
+    // 上端では、描いている山(アイコンだけの山を含む)は山の位置が上端を越えるまで残し、新しく出す山はアイコン全体が入ってから出す。
+    // 正面の少し先の山は、向きをわずかに変えるだけで上端を出入りするため(正面に向けたときが最も上に来る)。
+    val onScreen = selection.around.mapNotNull { m ->
+        val o = DialGeometry.project(m.distanceKm, m.bearingDeg, headingDeg)
+        val p = Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
+        val top = if (m.mountain.osmId in selection.shownIds) chartTop else chartTop + iconHeight
+        if (p.x in 0f..size.width && p.y >= top && p.y < chartBottom) m to p else null
+    }
+    val positions = onScreen.associate { (m, p) -> m.mountain.osmId to p }
+    val visible = PeakLayout.priorityOrder(onScreen.map { it.first }, observerAltitudeM, selection.drawnIds, forwardHeading, headingUpRangeKm)
+        .map { m ->
+            val p = positions.getValue(m.mountain.osmId)
+            // 山名の大きさは山ごとに一度だけ測る(画面に入る山が多いと、毎回測ると重い)。
+            val (label, rel) = selection.labels.getOrPut(m.mountain.osmId) {
+                val icon = PeakIcon.of(m.mountain.elevationClass())
+                val halfWidth = icon.halfWidthDp.dp.toPx()
+                val label = textMeasurer.measure(m.mountain.name, styles.label)
+                val labelHalf = label.size.width / 2f + LABEL_PAD_X.toPx()
+                label to Box(
+                    left = min(-halfWidth, -labelHalf),
+                    top = -icon.heightDp.dp.toPx(),
+                    right = max(halfWidth, labelHalf),
+                    bottom = gap + label.size.height + LABEL_PAD_Y.toPx() * 2,
+                )
+            }
+            PlacedPeak(m, p, label, Box(p.x + rel.left, p.y + rel.top, p.x + rel.right, p.y + rel.bottom))
+        }
+    val groups = PeakLayout.placeVisible(
+        visible,
+        limit = maxPeaks,
+        box = { it.box },
+        drawnBefore = { it.mountain.mountain.osmId in selection.drawnIds },
+        neighbors = { a, b -> PeakLayout.areNeighbors(a.mountain, b.mountain) },
+        elevationM = { it.mountain.mountain.elevationM },
+        margin = NEW_PEAK_MARGIN.toPx(),
+    )
+    selection.drawnIds = groups.mapTo(HashSet()) { it.peak.mountain.mountain.osmId }
+    selection.shownIds = selection.drawnIds + groups.flatMap { g -> g.members.map { it.mountain.mountain.osmId } }
+
+    // 山名は、出すときも外すときも [LABEL_FADE_SECONDS] かけて濃さを変える。外した山名は、薄くなりきるまでその場に描く。
+    val now = System.nanoTime()
+    val dt = if (!selection.fading || selection.lastNanos == 0L) 1f / 60 else ((now - selection.lastNanos) / 1e9f).coerceIn(0f, 0.1f)
+    selection.lastNanos = now
+    val fadeStep = dt / LABEL_FADE_SECONDS
+    for (id in selection.drawnIds) selection.labelAlpha[id] = min(1f, (selection.labelAlpha[id] ?: 0f) + fadeStep)
+    val visibleById = visible.associateBy { it.mountain.mountain.osmId }
+    val fadingOut = mutableListOf<Pair<PlacedPeak, Float>>()
+    val iterator = selection.labelAlpha.entries.iterator()
+    while (iterator.hasNext()) {
+        val entry = iterator.next()
+        if (entry.key in selection.drawnIds) continue
+        val peak = visibleById[entry.key]
+        val alpha = entry.value - fadeStep
+        if (peak == null || alpha <= 0f) iterator.remove() else {
+            entry.setValue(alpha)
+            fadingOut += peak to alpha
+        }
+    }
+    val fadingOutIds = fadingOut.mapTo(HashSet()) { it.first.mountain.mountain.osmId }
+
+    // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
+    val placedBoxes = groups.map { it.peak.box }
+    val othersLabels = groups.map { group ->
+        val peak = group.peak
+        if (group.members.isEmpty()) return@map null
+        // 「ほか 3 山」は山名の下に添える。ほかの山の山名と重なるときは添えない(タップすれば一覧は出る)。
+        val others = textMeasurer.measure(texts.others(group.members.size), styles.others)
+        val p = peak.position
+        val top = labelBox(peak, gap).bottom
+        val half = others.size.width / 2f
+        val below = Box(min(peak.box.left, p.x - half), top, max(peak.box.right, p.x + half), top + others.size.height)
+        if (placedBoxes.any { it !== peak.box && it.intersects(below) }) null else others to below
+    }
+    val textBoxes = groups.map { labelBox(it.peak, gap) } + othersLabels.mapNotNull { it?.second }
+
+    // 山名を出さない山のアイコンを描く。描くのは次の 2 つ。標高が不明な山は描かない(一覧には残る)。
+    // - まとめた山(「ほか 3 山」に数えた山)。押すと、まとめた山の一覧を開く。
+    // - 視界の正面(手動位置モードでは画面の中央)の山。山の多い方角から少ない方角へ向けたときに、
+    //   山が急に現れたように見えないようにする。範囲の縁では、外へ行くほど薄くする。
+    // 濃さは優先度のスコアが低いほど薄くし、山名や「ほか 3 山」にかかる山は一番薄くして、押しても反応しない(山名を押しやすくする)。
+    // 濃さは [ICON_FADE_SECONDS] かけて変え、まとめた山でなくなった山や範囲を出た山も、急に消さずにだんだん薄くする。
+    val focusCenter = Offset(size.width / 2, (chartTop + chartBottom) / 2)
+    val focusRadius = size.width * FOCUS_RADIUS_RATIO
+    val owners = HashMap<Long, PeakGroup<PlacedPeak>>()
+    for (group in groups) for (member in group.members) owners[member.mountain.mountain.osmId] = group
+    val iconStep = dt / ICON_FADE_SECONDS
+    val iconTargets = mutableListOf<PlacedPeak>()
+    var iconFading = false
+    for (peak in visible) {
+        val m = peak.mountain
+        val id = m.mountain.osmId
+        if (m.mountain.elevationM == null) continue
+        if (id in selection.drawnIds || id in fadingOutIds) {
+            // 山名を出している間は山名と一緒に描く。山名を外し終えたら、アイコンだけの濃さから続ける。
+            selection.iconAlpha[id] = scoreAlpha(score(m))
+            continue
+        }
+        val p = peak.position
+        val icon = PeakIcon.of(m.mountain.elevationClass())
+        val halfWidth = icon.halfWidthDp.dp.toPx()
+        val iconBox = Box(p.x - halfWidth, p.y - icon.heightDp.dp.toPx(), p.x + halfWidth, p.y)
+        val owner = owners[id]
+        val focus = if (headingUp) {
+            ((DialGeometry.TAPE_SPAN_DEG / 2 - abs(Heading.delta(headingDeg, m.bearingDeg))) / FAN_EDGE_FADE_DEG).toFloat()
+        } else {
+            (focusRadius - (p - focusCenter).getDistance()) / (focusRadius * FOCUS_EDGE_FADE_RATIO)
+        }.coerceIn(0f, 1f)
+        val weight = if (owner != null) 1f else focus
+        val underText = textBoxes.any { it.intersects(iconBox) }
+        val target = if (weight <= 0f || p.y < chartTop + iconHeight) 0f
+            else (if (underText) MIN_ICON_ALPHA else scoreAlpha(score(m))) * weight
+        val current = selection.iconAlpha[id] ?: 0f
+        val alpha = if (current < target) min(target, current + iconStep) else max(target, current - iconStep)
+        if (alpha != target) iconFading = true
+        if (alpha <= 0f) {
+            selection.iconAlpha.remove(id)
+            continue
+        }
+        selection.iconAlpha[id] = alpha
+        drawPeakIcon(selection.sprites, p, icon, alpha = alpha, shadow = false)
+        if (underText || target <= 0f) continue
+        iconTargets += if (owner != null) {
+            PlacedPeak(owner.peak.mountain, p, owner.peak.label, iconBox, owner.members.map { it.mountain })
+        } else {
+            PlacedPeak(m, p, peak.label, iconBox)
+        }
+    }
+    // 画面の外へ出た山は忘れる。
+    selection.iconAlpha.keys.retainAll(visibleById.keys)
+    selection.fading = selection.labelAlpha.values.any { it < 1f } || iconFading
+
+    // 山名を外した山は、アイコンをアイコンだけの濃さへ、山名を透明へ近づけながら描く。
+    for ((peak, alpha) in fadingOut) {
+        val icon = PeakIcon.of(peak.mountain.mountain.elevationClass())
+        drawPeakIcon(selection.sprites, peak.position, icon, alpha = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha), shadow = false)
+        drawNameChip(peak, gap, icon.color, alpha)
+    }
+    val reps = groups.mapIndexed { i, group ->
+        val peak = group.peak
+        val p = peak.position
+        val icon = PeakIcon.of(peak.mountain.mountain.elevationClass())
+        val alpha = selection.labelAlpha[peak.mountain.mountain.osmId] ?: 1f
+        drawPeakIcon(selection.sprites, p, icon, alpha = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha), shadow = alpha >= 1f)
+        drawNameChip(peak, gap, icon.color, alpha)
+        var box = peak.box
+        othersLabels[i]?.let { (others, below) ->
+            drawText(others, topLeft = Offset(p.x - others.size.width / 2f, below.top), alpha = alpha)
+            box = Box(min(box.left, below.left), box.top, max(box.right, below.right), below.bottom)
+        }
+        PlacedPeak(peak.mountain, p, peak.label, box, group.members.map { it.mountain })
+    }
+    return reps + iconTargets
+}
+
+/**
+ * アイコンだけで描く山の濃さ。優先度のスコア(仰角、°)が低いほど薄くする。
+ * [SCORE_ALPHA_FULL_DEG] 以上で [MAX_ICON_ALPHA]、0° 以下で [MIN_ICON_ALPHA]。
+ */
+private fun scoreAlpha(scoreDeg: Double): Float {
+    val t = (scoreDeg / SCORE_ALPHA_FULL_DEG).coerceIn(0.0, 1.0).toFloat()
+    return MIN_ICON_ALPHA + (MAX_ICON_ALPHA - MIN_ICON_ALPHA) * t
+}
+
+/** 山名を出す山のアイコンの濃さ。山名の濃さ([labelAlpha])に合わせて、アイコンだけの濃さ([base])から 1 へ近づける。 */
+private fun labeledIconAlpha(base: Float, labelAlpha: Float): Float = base + (1f - base) * labelAlpha
+
+/** 山名を出し入れするときに、濃さを変える時間(秒)。 */
+private const val LABEL_FADE_SECONDS = 0.25f
+
+/** 山名を出さない山のアイコンの濃さを、0 から 1 まで変えるのにかける時間(秒)。 */
+private const val ICON_FADE_SECONDS = 0.5f
+
+/** ヘディングアップで、視野の扇の端からこの角度(°)の内側まで、アイコンをだんだん薄くする。 */
+private const val FAN_EDGE_FADE_DEG = 8.0
+
+/** 手動位置モードで、画面の中央の円の縁から半径のこの割合の内側まで、アイコンをだんだん薄くする。 */
+private const val FOCUS_EDGE_FADE_RATIO = 0.2f
+
+/** 山名の札の範囲。 */
+private fun DrawScope.labelBox(peak: PlacedPeak, gap: Float): Box = peak.labelBox(gap, LABEL_PAD_X.toPx(), LABEL_PAD_Y.toPx())
+
+private fun PlacedPeak.labelBox(gap: Float, padX: Float, padY: Float): Box {
+    val half = label.size.width / 2f + padX
+    return Box(position.x - half, position.y + gap, position.x + half, position.y + gap + label.size.height + padY * 2)
+}
+
+/** 山名の札の、文字の周りの余白。 */
+private val LABEL_PAD_X = 7.dp
+private val LABEL_PAD_Y = 2.dp
+
+/** 山名を白い札に載せ、札の縁をアイコンと同じ標高の色([edge])にする。どの山が高いかがひと目で分かるようにする。 */
+private fun DrawScope.drawNameChip(peak: PlacedPeak, gap: Float, edge: Color, alpha: Float = 1f) {
+    val box = labelBox(peak, gap)
+    val chip = Size(box.right - box.left, box.bottom - box.top)
+    val radius = CornerRadius(chip.height / 2)
+    drawRoundRect(ShadowColor, Offset(box.left, box.top + 1.dp.toPx()), chip, radius, alpha = alpha)
+    drawRoundRect(Color.White, Offset(box.left, box.top), chip, radius, alpha = alpha)
+    val border = 2.dp.toPx()
+    drawRoundRect(
+        edge,
+        Offset(box.left + border / 2, box.top + border / 2),
+        Size(chip.width - border, chip.height - border),
+        CornerRadius((chip.height - border) / 2),
+        style = Stroke(width = border),
+        alpha = alpha,
+    )
+    drawText(peak.label, topLeft = Offset(peak.position.x - peak.label.size.width / 2f, box.top + LABEL_PAD_Y.toPx()), alpha = alpha)
+}
+
+/** アイコンだけで描く山(まとめた山と、視界の正面の山名を出さない山)の濃さの範囲。山名を出す山と見分けられるように薄くする。 */
+private const val MIN_ICON_ALPHA = 0.15f
+private const val MAX_ICON_ALPHA = 0.6f
+
+/** アイコンを最も濃く描く仰角(°)。 */
+private const val SCORE_ALPHA_FULL_DEG = 3.0
+
+/** 手動位置モードで、山名を出さない山もアイコンで描く画面の中央の円の半径(画面の幅に対する比)。 */
+private const val FOCUS_RADIUS_RATIO = 0.5f
+
+/**
+ * 標高の区分ごとの山アイコン。形は同じ丸みのある山で、色と大きさを変え、2000m 以上には頂に雪を載せる。
+ * 色だけに頼らず、高さと雪の有無でも区別できるようにする。底辺の中点が山の位置に来る。
+ */
+private enum class PeakIcon(val halfWidthDp: Float, val heightDp: Float, val color: Color, val shade: Color, val snow: Boolean) {
+    /** 1000m 未満(標高不明を含む): 緑の低い山。 */
+    LOW(halfWidthDp = 11f, heightDp = 13f, color = Color(0xFF3DBB5C), shade = Color(0xFF23853B), snow = false),
+
+    /** 1000m 以上 2000m 未満: 橙の山。 */
+    MIDDLE(halfWidthDp = 13f, heightDp = 19f, color = Color(0xFFF39A2B), shade = Color(0xFFC46A0C), snow = false),
+
+    /** 2000m 以上: 紫の高い山に雪。 */
+    HIGH(halfWidthDp = 15f, heightDp = 25f, color = Color(0xFF8E6CD8), shade = Color(0xFF5B3FA8), snow = true),
+    ;
+
+    companion object {
+        val MAX_HEIGHT_DP = entries.maxOf { it.heightDp }
+
+        fun of(cls: ElevationClass): PeakIcon = when (cls) {
+            ElevationClass.LOW -> LOW
+            ElevationClass.MIDDLE -> MIDDLE
+            ElevationClass.HIGH -> HIGH
+        }
+    }
+}
+
+/**
+ * 山アイコンを [p](底辺の中点)に描く。[sprites] に覚えた画像を、濃さ([alpha])を変えて貼る。
+ * 1 画面に数百のアイコンを描くことがあるので、毎回形を作って描くより軽くする。
+ * 位置は画素にそろえて貼り、画像がにじまないようにする。
+ */
+private fun DrawScope.drawPeakIcon(sprites: PeakIconSprites, p: Offset, icon: PeakIcon, alpha: Float = 1f, shadow: Boolean = true) {
+    val sprite = sprites.get(this, icon, shadow)
+    drawImage(
+        sprite.image,
+        dstOffset = IntOffset(p.x.roundToInt() - sprite.anchor.x, p.y.roundToInt() - sprite.anchor.y),
+        dstSize = IntSize(sprite.image.width, sprite.image.height),
+        alpha = alpha,
+    )
+}
+
+/**
+ * 山アイコンの画像。標高の区分と影の有無ごとに一度だけ描いて覚え、画面の画素の細かさが変わったら描き直す。
+ * 画像にしておくと、薄く描いたときもアイコン全体が一様に薄くなる(縁や斜面が本体から透けない)。
+ */
+private class PeakIconSprites {
+    class Sprite(val image: ImageBitmap, val anchor: IntOffset)
+
+    private var density = 0f
+    private val sprites = HashMap<Pair<PeakIcon, Boolean>, Sprite>()
+
+    fun get(scope: DrawScope, icon: PeakIcon, shadow: Boolean): Sprite {
+        if (scope.density != density) {
+            sprites.clear()
+            density = scope.density
+        }
+        return sprites.getOrPut(icon to shadow) {
+            with(scope) {
+                // 白い縁と影がはみ出す分の余白をとる。山の頂は高さの 1.07 倍まで膨らむ。
+                val pad = 3.dp.toPx()
+                val halfWidth = icon.halfWidthDp.dp.toPx()
+                val height = icon.heightDp.dp.toPx()
+                val anchor = IntOffset((pad + halfWidth).roundToInt(), (pad + height * 1.1f).roundToInt())
+                val image = ImageBitmap((anchor.x * 2), (anchor.y + pad + 1.5.dp.toPx()).roundToInt())
+                CanvasDrawScope().draw(
+                    Density(scope.density, scope.fontScale), LayoutDirection.Ltr, GraphicsCanvas(image),
+                    Size(image.width.toFloat(), image.height.toFloat()),
+                ) {
+                    drawPeakIconShape(Offset(anchor.x.toFloat(), anchor.y.toFloat()), icon, shadow)
+                }
+                Sprite(image, anchor)
+            }
+        }
+    }
+}
+
+/**
+ * 山アイコンの形を描く。白い縁と影で地面の色から浮かせ、右の斜面を少し暗くして立体に見せる。
+ * 形の点は、底辺の中点を原点に、横は半幅、縦は高さを 1 とした割合で決める(iOS と同じ)。
+ */
+private fun DrawScope.drawPeakIconShape(p: Offset, icon: PeakIcon, shadow: Boolean, alpha: Float = 1f) {
+    val w = icon.halfWidthDp.dp.toPx()
+    val h = icon.heightDp.dp.toPx()
+    fun x(f: Float) = p.x + f * w
+    fun y(f: Float) = p.y - f * h
+    val body = Path().apply {
+        moveTo(x(-1f), y(0f))
+        quadraticTo(x(-0.615f), y(0.419f), x(-0.154f), y(0.93f))
+        quadraticTo(x(0f), y(1.07f), x(0.154f), y(0.93f))
+        quadraticTo(x(0.615f), y(0.419f), x(1f), y(0f))
+        close()
+    }
+    if (shadow) translate(top = 1.5.dp.toPx()) { drawPath(body, ShadowColor, alpha = alpha) }
+    drawPath(body, Color.White, alpha = alpha, style = Stroke(width = 2.5.dp.toPx(), join = StrokeJoin.Round))
+    drawPath(body, icon.color, alpha = alpha)
+    val slope = Path().apply {
+        moveTo(x(0.077f), y(0.884f))
+        quadraticTo(x(0.462f), y(0.465f), x(0.769f), y(0.093f))
+        lineTo(x(0.231f), y(0.093f))
+        close()
+    }
+    drawPath(slope, icon.shade, alpha = 0.35f * alpha)
+    if (icon.snow) {
+        val snow = Path().apply {
+            moveTo(x(-0.423f), y(0.605f))
+            quadraticTo(x(-0.154f), y(0.977f), x(0f), y(1f))
+            quadraticTo(x(0.154f), y(0.977f), x(0.423f), y(0.605f))
+            lineTo(x(0.192f), y(0.512f))
+            lineTo(x(0f), y(0.628f))
+            lineTo(x(-0.192f), y(0.512f))
+            close()
+        }
+        drawPath(snow, Color.White, alpha = alpha)
+    }
+}
+
+/** [points] を順に結んで閉じた多角形。Offset は value class で vararg にできないため List で受ける。 */
+private fun polygon(points: List<Offset>): Path = Path().apply {
+    moveTo(points[0].x, points[0].y)
+    for (p in points.drop(1)) lineTo(p.x, p.y)
+    close()
+}
+
+/**
+ * 現在地がほぼ山頂のときに双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
+ * 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ視野の扇形を前方へ描く。
+ * 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤のため)。タップの当たり判定用の範囲を返す。
+ */
+private fun DrawScope.drawSummit(
+    center: Offset,
+    summit: NearbyMountain,
+    textMeasurer: TextMeasurer,
+    styles: DialTextStyles,
+    observerRotation: Float,
+    coneAlpha: Float,
+): PlacedPeak {
+    val u = 1.dp.toPx()
+    fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + y * u)
+
+    val rock = polygon(listOf(at(-16f, 10f), at(-8f, -2f), at(-4f, 1f), at(2f, -8f), at(16f, 10f)))
+    // 日の当たる面。右の尾根を明るくして立体に見せる。
+    val lit = polygon(listOf(at(2f, -8f), at(16f, 10f), at(7f, 10f)))
+    val flag = polygon(listOf(at(2f, -24f), at(13f, -20.5f), at(2f, -17f)))
+    val poleTop = at(2f, -24f)
+    val poleBottom = at(2f, -8f)
+
+    if (coneAlpha > 0f) rotate(observerRotation, pivot = center) { drawViewCone(at(0f, -6f), coneAlpha) }
+
+    // 白い縁取り → 本体の順に描く。
+    val halo = Stroke(width = 4f * u, join = StrokeJoin.Round)
+    drawPath(rock, Color.White, style = halo)
+    drawPath(flag, Color.White, style = halo)
+    drawLine(Color.White, poleTop, poleBottom, strokeWidth = 5f * u, cap = StrokeCap.Round)
+    drawPath(rock, SummitRock)
+    drawPath(lit, SummitRockLight)
+    drawLine(FlagPole, poleTop, poleBottom, strokeWidth = 2f * u, cap = StrokeCap.Round)
+    drawPath(flag, NorthRed)
+
+    val label = textMeasurer.measure(summit.mountain.name, styles.label)
+    val padX = 5f * u
+    val padY = 2f * u
+    val labelLeft = center.x + 22f * u
+    val labelTop = center.y - 4f * u - label.size.height / 2f
+    drawRoundRect(
+        Color.White.copy(alpha = 0.85f),
+        topLeft = Offset(labelLeft - padX, labelTop - padY),
+        size = Size(label.size.width + padX * 2, label.size.height + padY * 2),
+        cornerRadius = CornerRadius(4f * u),
+    )
+    drawText(label, topLeft = Offset(labelLeft, labelTop))
+
+    val box = Box(
+        left = center.x - 18f * u,
+        top = min(center.y - 26f * u, labelTop - padY),
+        right = labelLeft + label.size.width + padX,
+        bottom = max(center.y + 12f * u, labelTop + label.size.height + padY),
+    )
+    return PlacedPeak(summit, center, label, box)
+}
+
+/**
+ * 向いている方位(画面の上)を示す視野。[apex] から前方へ扇形に広がり、遠くほど薄くなる。
+ * 双眼鏡と山頂アイコンで共通に使う。
+ */
+private fun DrawScope.drawViewCone(apex: Offset, alpha: Float) {
+    val reach = 70.dp.toPx()
+    val halfAngle = 22f
+    drawArc(
+        brush = Brush.radialGradient(
+            colors = listOf(LensBlue.copy(alpha = 0.35f * alpha), LensBlue.copy(alpha = 0f)),
+            center = apex,
+            radius = reach,
+        ),
+        startAngle = -90f - halfAngle,
+        sweepAngle = halfAngle * 2,
+        useCenter = true,
+        topLeft = Offset(apex.x - reach, apex.y - reach),
+        size = Size(reach * 2, reach * 2),
+    )
+}
+
+/**
+ * ヘディングアップで、上部の方位目盛りと同じ幅([TAPE_SPAN_DEG])の視野。[apex] から画面の外まで扇を広げ、
+ * 縁を橙色の線にして、扇の外側をうっすら暗くする。山や同心円より下に描き、山名を隠さない。
+ */
+private fun DrawScope.drawViewFan(apex: Offset, alpha: Float) {
+    val reach = hypot(size.width, size.height) * 2
+    val half = Math.toRadians(TAPE_SPAN_DEG / 2).toFloat()
+    val left = apex + Offset(-reach * kotlin.math.sin(half), -reach * kotlin.math.cos(half))
+    val right = apex + Offset(reach * kotlin.math.sin(half), -reach * kotlin.math.cos(half))
+    val outside = Path().apply {
+        fillType = PathFillType.EvenOdd
+        addRect(Rect(apex.x - reach, apex.y - reach, apex.x + reach, apex.y + reach))
+        addPath(polygon(listOf(apex, left, right)))
+    }
+    drawPath(outside, FanShade.copy(alpha = 0.12f * alpha))
+    val edge = Path().apply {
+        moveTo(left.x, left.y)
+        lineTo(apex.x, apex.y)
+        lineTo(right.x, right.y)
+    }
+    drawPath(edge, FanEdge.copy(alpha = alpha), style = Stroke(width = 2.dp.toPx(), join = StrokeJoin.Round))
+}
+
+/**
+ * 現在地を表す双眼鏡。対物レンズを上(向いている方位)に向け、前方へ広がる視野を薄く描いて
+ * 「前を覗いている」ように見せる。同心円や山と重なっても埋もれないよう、白い丸の上に置く。
+ * タップの当たり判定用に、白い丸まで含めた範囲を返す。
+ */
+private fun DrawScope.drawBinoculars(center: Offset, coneAlpha: Float): Box {
+    val u = 1.dp.toPx()
+
+    /** 中心からのずれ(dp)で矩形を描く。[grow] だけ四方に広げる。 */
+    fun part(x: Float, top: Float, width: Float, bottom: Float, corner: Float, color: Color, grow: Float = 0f) {
+        drawRoundRect(
+            color,
+            topLeft = Offset(center.x + (x - width / 2 - grow) * u, center.y + (top - grow) * u),
+            size = Size((width + grow * 2) * u, (bottom - top + grow * 2) * u),
+            cornerRadius = CornerRadius((corner + grow) * u),
+        )
+    }
+
+    fun body(color: Color, grow: Float) {
+        for (side in listOf(-1f, 1f)) {
+            val x = side * 10f
+            part(x, top = -13f, width = 15f, bottom = 3f, corner = 5f, color = color, grow = grow) // 対物部
+            part(x, top = 1f, width = 9f, bottom = 12f, corner = 3f, color = color, grow = grow) // 接眼部
+        }
+        part(0f, top = -1f, width = 8f, bottom = 6f, corner = 2f, color = color, grow = grow) // ブリッジ
+    }
+
+    if (coneAlpha > 0f) drawViewCone(Offset(center.x, center.y - 10f * u), coneAlpha)
+    // 白い丸の上に置き、帯や円の上でも現在地が目立つようにする。
+    val disc = Offset(center.x, center.y - 1f * u)
+    drawCircle(ShadowColor, radius = 23f * u, center = disc + Offset(0f, 1.5f * u))
+    drawCircle(Color.White, radius = 23f * u, center = disc)
+    body(Color.White, grow = 2f)
+    body(BinocularBody, grow = 0f)
+    drawCircle(BinocularHinge, radius = 3f * u, center = Offset(center.x, center.y + 2.5f * u))
+    for (side in listOf(-1f, 1f)) {
+        // 前を向いたレンズ面を斜め後ろから見た楕円。
+        val lens = Offset(center.x + side * 10f * u, center.y - 10.5f * u)
+        drawOval(LensBlue, topLeft = lens - Offset(5.5f * u, 2.5f * u), size = Size(11f * u, 5f * u))
+        drawOval(
+            Color.White.copy(alpha = 0.8f),
+            topLeft = lens + Offset(-3.5f * u, -1.5f * u),
+            size = Size(3f * u, 1.4f * u),
+        )
+    }
+    return Box(left = center.x - 23f * u, top = center.y - 24f * u, right = center.x + 23f * u, bottom = center.y + 22f * u)
+}
+
+/** 画面上部の方位目盛り。向いている方位が中央に来る。 */
+private fun DrawScope.drawTape(headingDeg: Double, tapeHeight: Float, textMeasurer: TextMeasurer) {
+    val center = size.width / 2
+    val half = TAPE_SPAN_DEG / 2
+    val baseline = 1.5.dp.toPx()
+    // 帯は中央ほど明るく、左右の端で背景に溶かす。帯の両端は視野の扇の縁と同じ方位なので、下端の線も扇の縁と同じ橙色にする。
+    // 上端も山並みに溶かし、ヘッダーとの境目に筋を作らない。横のぼかしに縦のぼかしを重ねるため、別の層に描いて上側を削る。
+    val band = Size(size.width, tapeHeight)
+    drawIntoCanvas { it.saveLayer(Rect(Offset.Zero, band), Paint()) }
+    drawRect(
+        Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0f), Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0f))),
+        size = band,
+    )
+    drawRect(
+        Brush.verticalGradient(
+            0f to Color.Transparent,
+            HeaderScenery.TAPE_BAND_FADE_FRACTION.toFloat() to Color.Black,
+            startY = 0f,
+            endY = tapeHeight,
+        ),
+        size = band,
+        blendMode = BlendMode.DstIn,
+    )
+    drawIntoCanvas { it.restore() }
+    drawRect(
+        Brush.horizontalGradient(listOf(FanEdge.copy(alpha = 0f), FanEdge, FanEdge.copy(alpha = 0f))),
+        topLeft = Offset(0f, tapeHeight - baseline),
+        size = Size(size.width, baseline),
+    )
+    val labelBottom = tapeHeight - baseline - TAPE_MAJOR_TICK_DP.dp.toPx()
+    for (tick in DialGeometry.tapeTicks(headingDeg, TAPE_SPAN_DEG)) {
+        val x = center + (tick.offsetDeg / TAPE_SPAN_DEG * size.width).toFloat()
+        // 線と数字は端へ行くほど少し薄くして、中央の方位に目が行くようにする。東西南北の文字は薄くしない。
+        val edge = (kotlin.math.abs(tick.offsetDeg) / half).toFloat().coerceAtMost(1f)
+        val ink = TapeInk.copy(alpha = 1f - 0.4f * edge * edge)
+        val major = tick.angleDeg % 10 == 0
+        val length = (if (major) TAPE_MAJOR_TICK_DP else TAPE_MINOR_TICK_DP).dp.toPx()
+        drawLine(
+            ink,
+            Offset(x, tapeHeight - baseline),
+            Offset(x, tapeHeight - baseline - length),
+            strokeWidth = (if (major) 2.5f else 1.5f).dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+        val cardinal = DialGeometry.cardinalLabel(tick.angleDeg)
+        val style = when {
+            cardinal != null -> TextStyle(
+                color = if (cardinal == "N") NorthRed else TapeInk,
+                fontSize = if (cardinal.length == 1) 20.sp else 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            tick.angleDeg % 30 == 0 -> TextStyle(color = TapeSubtle.copy(alpha = ink.alpha), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            else -> null
+        } ?: continue
+        val label = textMeasurer.measure(cardinal ?: tick.angleDeg.toString(), style)
+        drawText(label, topLeft = Offset(x - label.size.width / 2f, (labelBottom - label.size.height) / 2 + 1.dp.toPx()))
+    }
+}
+
+/** 目盛りの中央を指す赤い印と、その下の淡い白の札に「北東 45°　標高 312m」(標高は分かるときだけ)。 */
+private fun DrawScope.drawReadout(
+    headingDeg: Double,
+    altitudeM: Double?,
+    tapeHeight: Float,
+    textMeasurer: TextMeasurer,
+    styles: DialTextStyles,
+    texts: DialTexts,
+) {
+    val center = size.width / 2
+    val caret = 5.dp.toPx()
+    drawPath(
+        polygon(
+            listOf(
+                Offset(center, tapeHeight - 2 * caret),
+                Offset(center + caret, tapeHeight),
+                Offset(center - caret, tapeHeight),
+            ),
+        ),
+        NorthRed,
+    )
+    val (direction, altitude) = texts.readoutParts(headingDeg, altitudeM)
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        append(direction)
+        if (altitude.isNotEmpty()) {
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = TapeSubtle))
+            append(altitude)
+            pop()
+        }
+    }
+    val label = textMeasurer.measure(text, styles.readout.copy(color = TapeInk))
+    val padX = 12.dp.toPx()
+    val padY = 3.dp.toPx()
+    val pill = Size(label.size.width + padX * 2, label.size.height + padY * 2)
+    val topLeft = Offset(center - pill.width / 2, tapeHeight + 4.dp.toPx())
+    val radius = CornerRadius(pill.height / 2)
+    // 札は目盛りの帯と同じくらいの淡い白にして、帯より目立たせない。同心円と重なっても文字が読める程度の濃さは残す。
+    drawRoundRect(Color.White.copy(alpha = 0.5f), topLeft, pill, radius)
+    drawText(label, topLeft = topLeft + Offset(padX, padY))
+}
+
+/** 16 方位の名前の文字列リソース。[Heading.directionIndex] の番号の順(北から時計回り)。 */
+private val DIRECTION_NAMES = listOf(
+    R.string.direction_n, R.string.direction_nne, R.string.direction_ne, R.string.direction_ene,
+    R.string.direction_e, R.string.direction_ese, R.string.direction_se, R.string.direction_sse,
+    R.string.direction_s, R.string.direction_ssw, R.string.direction_sw, R.string.direction_wsw,
+    R.string.direction_w, R.string.direction_wnw, R.string.direction_nw, R.string.direction_nnw,
+)
+
+/** 方位盤に描く文言。描画(DrawScope)の中では stringResource を呼べないので、先に文字列リソースから読んでおく。 */
+internal class DialTexts(
+    private val directionNames: List<String>,
+    /** 「ほか %1$d 山」。 */
+    private val othersFormat: String,
+    /** 「　標高 %1$,dm」。 */
+    private val altitudeFormat: String,
+) {
+    /** 16 方位の名前(北、北北東、…)。 */
+    fun direction(headingDeg: Double): String = directionNames[Heading.directionIndex(headingDeg)]
+
+    /** 重なって山名を省いた山の数を、代表の山の山名の下に添える文言。「ほか 3 山」。 */
+    fun others(count: Int): String = String.format(othersFormat, count)
+
+    /** 方位(「北東 45°」)と標高(「　標高 312m」、分からなければ空)に分けたもの。 */
+    fun readoutParts(headingDeg: Double, altitudeM: Double?): Pair<String, String> {
+        val deg = headingDeg.roundToInt() % 360
+        val altitude = altitudeM?.let { String.format(altitudeFormat, Math.round(it)) } ?: ""
+        return "${direction(headingDeg)} $deg°" to altitude
+    }
+}
+
+@Composable
+internal fun rememberDialTexts(): DialTexts {
+    val names = DIRECTION_NAMES.map { stringResource(it) }
+    val others = stringResource(R.string.dial_others)
+    val altitude = stringResource(R.string.dial_altitude)
+    return remember(names, others, altitude) { DialTexts(names, others, altitude) }
+}
+
+@Preview(widthDp = 320, heightDp = 560)
+@Composable
+private fun DialCanvasPreview() {
+    fun peak(name: String, ele: Double, km: Double, bearing: Double) =
+        NearbyMountain(Mountain(name.hashCode().toLong(), name, 0.0, 0.0, ele), km, bearing)
+    DialCanvas(
+        headingDeg = 0.0,
+        mountains = listOf(
+            // プレビュー用の仮の山名なので、文字列リソースにしない。
+            peak("□□山", 1212.0, 8.0, 20.0), // 文言チェック対象外
+            peak("○○山", 560.0, 12.5, -18.0), // 文言チェック対象外
+            peak("○×山", 122.0, 3.5, -20.0), // 文言チェック対象外
+            peak("△△岳", 2456.0, 15.0, 5.0), // 文言チェック対象外
+        ),
+        rangeKm = DialGeometry.DEFAULT_RANGE_KM,
+        modifier = Modifier.fillMaxSize().background(DialGround),
+    )
+}

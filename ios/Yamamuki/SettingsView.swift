@@ -4,7 +4,7 @@ import YamamukiCore
 /// 最低標高スライダーの上限と刻み。
 private let maxMinElevationM = 3000
 private let minElevationStepM = 100
-private let maxPeaksStep = 10
+private let maxPeaksStep = 5
 
 /// 設定画面。方位盤の左下の設定ボタンで開く。
 struct SettingsView: View {
@@ -15,84 +15,77 @@ struct SettingsView: View {
         let settings = model.settings
         NavigationView {
             Form {
-                Section("表示する山") {
+                Section(Strings.text("settings_section_peaks")) {
                     StepSlider(
                         value: settings.minElevationM,
                         range: 0...maxMinElevationM,
                         step: minElevationStepM,
                         label: minElevationLabel,
-                        description: "0 m ですべての山を表示します。絞り込み中は標高不明の山を表示しません。"
+                        description: Strings.text("settings_min_elevation_description")
                     ) { m in model.updateSettings { $0.minElevationM = m } }
                     StepSlider(
                         value: settings.maxPeaks,
                         range: Settings.maxPeaksRange,
                         step: maxPeaksStep,
-                        label: { "一度に表示する山 最大 \($0) 件" },
-                        description: "多いと画面が混み合い、少ないと高い山だけになります。重なる山は標高の低いほうを省きます。"
+                        label: { Strings.format("settings_max_peaks", $0) },
+                        description: Strings.text("settings_max_peaks_description")
                     ) { n in model.updateSettings { $0.maxPeaks = n } }
                 }
 
-                Section("表示") {
+                Section(Strings.text("settings_section_display")) {
                     Choice(
-                        title: "文字の大きさ",
+                        title: Strings.text("settings_text_size"),
                         options: Settings.textScales,
                         selected: settings.textScale,
                         label: textScaleLabel
                     ) { v in model.updateSettings { $0.textScale = v } }
                     Choice(
-                        title: "起動時の表示範囲（km）",
+                        title: Strings.text("settings_initial_range"),
                         options: Settings.initialRangesKm,
                         selected: settings.initialRangeKm,
                         // 6 つ並ぶと「10km」が収まらないので、単位は見出しに出す。
                         label: { "\($0)" },
-                        description: "現在地から画面上端までの距離。起動後はピンチで変えられます。"
+                        description: Strings.text("settings_initial_range_description")
                     ) { v in model.updateSettings { $0.initialRangeKm = v } }
                 }
 
-                Section("画面") {
+                Section(Strings.text("settings_section_battery")) {
                     SwitchRow(
-                        title: "画面を常に点灯",
-                        description: "方位盤を表示している間は画面を消しません。電池の減りが早くなります。",
+                        title: Strings.text("settings_keep_screen_on"),
+                        description: Strings.text("settings_keep_screen_on_description"),
                         isOn: settings.keepScreenOn
                     ) { v in model.updateSettings { $0.keepScreenOn = v } }
+                    StepSlider(
+                        value: settings.sensorPrecision.rawValue,
+                        range: 0...(SensorPrecision.allCases.count - 1),
+                        step: 1,
+                        label: { Strings.format("settings_sensor_precision", SensorPrecision(rawValue: $0)?.label ?? "") },
+                        description: Strings.text("settings_sensor_precision_description")
+                    ) { i in model.updateSettings { $0.sensorPrecision = SensorPrecision(rawValue: i) ?? .standard } }
                 }
 
-                Section("通信とキャッシュ") {
-                    SwitchRow(
-                        title: "山データを手動で取得",
-                        description: "自動では通信せず、保存済みのデータで表示します。方位盤の左下の更新ボタンを押したときだけ、" +
-                            "今の表示範囲を取得します。山に入る前に、電波の届く場所で縮小して広めに取得しておくと安心です。",
-                        isOn: settings.manualFetch
-                    ) { v in model.updateSettings { $0.manualFetch = v } }
-                    Choice(
-                        title: "取得したデータを使う期間",
-                        options: Settings.cacheMaxAgeDaysOptions,
-                        selected: settings.cacheMaxAgeDays,
-                        // 5 つ並ぶと「180日」が収まらないので、長い期間は「半年」「1年」と書く。
-                        label: { days in
-                            switch days {
-                            case 180: return "半年"
-                            case 365: return "1年"
-                            default: return "\(days)日"
-                            }
-                        },
-                        description: "この期間を過ぎた地域は取り直します。山データはめったに変わらないので、長くすると通信が減ります。"
-                    ) { v in model.updateSettings { $0.cacheMaxAgeDays = v } }
+                Section(Strings.text("settings_section_peak_data")) {
+                    PeakDataSection(
+                        data: model.peakData,
+                        updating: model.peakDataUpdating,
+                        notice: model.peakDataNotice,
+                        onUpdate: model.updatePeakData
+                    )
                     CacheSection(info: model.cacheInfo, onClear: model.clearCache)
                 }
 
-                Section("このアプリについて") {
+                Section(Strings.text("settings_section_about")) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("バージョン \(appVersion)")
-                        Text("山データ © OpenStreetMap contributors (ODbL)").font(.footnote).foregroundStyle(.secondary)
+                        Text(Strings.format("settings_version", appVersion))
+                        Text(Strings.text("settings_data_license")).font(.footnote).foregroundStyle(.secondary)
                     }
                 }
             }
-            .navigationTitle("設定")
+            .navigationTitle(Strings.text("settings_title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("閉じる") { dismiss() }
+                    Button(Strings.text("common_close")) { dismiss() }
                 }
             }
         }
@@ -111,15 +104,15 @@ struct SettingsView: View {
 }
 
 private func minElevationLabel(_ m: Int) -> String {
-    m == 0 ? "すべての山を表示" : "標高 \(groupedInteger(m)) m 以上の山だけ表示"
+    m == 0 ? Strings.text("settings_min_elevation_all") : Strings.format("settings_min_elevation_value", groupedInteger(m))
 }
 
 private func textScaleLabel(_ scale: Double) -> String {
     switch scale {
-    case 0.85: return "小"
-    case 1.0: return "標準"
-    case 1.2: return "大"
-    case 1.4: return "特大"
+    case 0.85: return Strings.text("settings_text_size_small")
+    case 1.0: return Strings.text("settings_text_size_standard")
+    case 1.2: return Strings.text("settings_text_size_large")
+    case 1.4: return Strings.text("settings_text_size_extra_large")
     default: return "×\(scale)"
     }
 }
@@ -195,6 +188,53 @@ private struct SwitchRow: View {
     }
 }
 
+/// 全国の山データの取り込み状況と、取得(最新版の確認)のボタン。
+private struct PeakDataSection: View {
+    let data: InstalledPeakData?
+    let updating: Bool
+    let notice: String?
+    let onUpdate: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(Strings.text("settings_peak_data_title"))
+            if let data {
+                // 元データの日時は UTC なので、日付だけを出す。
+                Text(Strings.format(
+                    "settings_peak_data_summary",
+                    groupedInteger(data.mountainCount),
+                    String(data.sourceTimestamp.prefix(10)).replacingOccurrences(of: "-", with: "/"),
+                    installedDate(data.installedAt)
+                ))
+                    .font(.subheadline)
+            } else {
+                Text(Strings.text("settings_peak_data_none")).font(.subheadline)
+            }
+            if let notice { Text(notice).font(.subheadline).foregroundStyle(Color.accentColor) }
+            Text(Strings.text("settings_peak_data_description"))
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+        Button(action: onUpdate) {
+            HStack(spacing: 8) {
+                if updating {
+                    ProgressView()
+                    Text(Strings.text("settings_peak_data_fetching"))
+                } else {
+                    Text(Strings.text(data == nil ? "settings_peak_data_fetch" : "settings_peak_data_check"))
+                }
+            }
+        }
+        .disabled(updating)
+    }
+
+    private func installedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "yyyy/MM/dd"
+        return formatter.string(from: date)
+    }
+}
+
 private struct CacheSection: View {
     let info: CacheInfo?
     let onClear: () -> Void
@@ -202,26 +242,22 @@ private struct CacheSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("保存しているデータ")
+            Text(Strings.text("settings_cache_title"))
             if let info {
-                Text("山 \(groupedInteger(info.mountainCount)) 件（取得済みの区画 \(info.tileCount) 個）・容量 \(byteSizeText(info.sizeBytes))")
+                Text(Strings.format("settings_cache_summary", groupedInteger(info.mountainCount), info.tileCount, byteSizeText(info.sizeBytes)))
                     .font(.subheadline)
             } else {
-                Text("読み込み中…").font(.subheadline)
+                Text(Strings.text("common_loading")).font(.subheadline)
             }
-            Text("消去すると現在地の周辺を取り直すので、通信が発生します。").font(.footnote).foregroundStyle(.secondary)
+            Text(Strings.text("settings_cache_description")).font(.footnote).foregroundStyle(.secondary)
         }
-        Button("キャッシュを消去", role: .destructive) { confirming = true }
+        Button(Strings.text("settings_cache_clear"), role: .destructive) { confirming = true }
             .disabled(info == nil || info?.tileCount == 0)
-            .alert("キャッシュを消去しますか？", isPresented: $confirming) {
-                Button("消去", role: .destructive, action: onClear)
-                Button("キャンセル", role: .cancel) {}
+            .alert(Strings.text("settings_cache_clear_title"), isPresented: $confirming) {
+                Button(Strings.text("settings_cache_clear_confirm"), role: .destructive, action: onClear)
+                Button(Strings.text("common_cancel"), role: .cancel) {}
             } message: {
-                Text(
-                    Features.areaDownload
-                        ? "保存している山データを消去し、現在地の周辺を取り直します。事前ダウンロードした地域は残ります。"
-                        : "保存している山データをすべて消去し、現在地の周辺を取り直します。"
-                )
+                Text(Strings.text(Features.areaDownload ? "settings_cache_clear_message_keep_areas" : "settings_cache_clear_message"))
             }
     }
 }

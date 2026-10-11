@@ -7,22 +7,33 @@
 
 - スマホを向けた方向に見える山を山名付きで表示する Android / iOS アプリ「山むき」。
 - Android 版は Kotlin + Jetpack Compose、iOS 版は Swift + SwiftUI（XcodeGen。対応する iOS の版は `ios/project.yml` の `deploymentTarget` を見る）。
-- 山データは OpenStreetMap の Overpass API から取得し、端末内にキャッシュしてオフラインでも使う。
+- 山データは OpenStreetMap のデータから作った全国の山頂データを yamamuki-data（GitHub Pages と Releases）から取得し、端末内にキャッシュしてオフラインでも使う。Overpass API から取得するコードは残っているが使っていない。
 
 | ディレクトリ | 中身 |
 |---|---|
-| `core/` | Android に依存しないロジック（Kotlin）。単体テストあり |
-| `app/` | Android アプリ（画面、Room のキャッシュ、設定） |
-| `ios/YamamukiCore/` | `core/` を Swift に移植したパッケージ。単体テストあり |
+| `android/` | Android 版の Gradle プロジェクト。Android Studio ではこのフォルダを開く |
+| `android/core/` | Android に依存しないロジック（Kotlin）。単体テストあり |
+| `android/app/` | Android アプリ（画面、Room のキャッシュ、設定） |
+| `ios/YamamukiCore/` | `android/core/` を Swift に移植したパッケージ。単体テストあり |
 | `ios/Yamamuki/` | iOS アプリ（画面、位置と方位の取得、設定） |
 | `ios/YamamukiUITests/` | iOS アプリの画面を操作する UI テスト（XCUITest） |
 | `ios/project.yml` | XcodeGen の設定。`ios/Yamamuki.xcodeproj` はここから生成する |
+| `site/` | GitHub Pages で公開するページ（プライバシーポリシー、山データの参照先ファイル `data/osm-peaks/`）。main に入ると `.github/workflows/pages.yml` で公開する |
 
 ## 言葉づかい
 
 - ユーザーとのやり取り、コミットメッセージ、PR のタイトルと説明、コードのコメント、画面の文言は日本語で書く。
 - 文体は決めない。簡潔で分かりやすく書き、専門用語より普段の言葉を選ぶ。
 - コミットと PR のタイトルは、何が変わるかを一文で書く（例:「双眼鏡をタップすると現在地の緯度経度と標高を表示する」）。
+- 画面に出す文言はコードに直接書かず、Android は `android/app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/Localizable.xcstrings` に書き、コードからはキーで引く（iOS は `Strings.text` / `Strings.format`）。
+  - キー名は両 OS で同じにし、同じキーには同じ文言を入れる。OS で文言を変えるときは別のキーにする。片方の OS だけの文言は、`.github/scripts/check-ui-strings.py` の `PLATFORM_ONLY` に理由と一緒に書く。
+  - core（`android/core/`・`ios/YamamukiCore/`）は画面の文言を持たない。方位の番号や待ち時間などの値を返し、アプリ側で文言にする。都道府県・地方の名前と、開発者向けのエラーの文は core に置いてよい。
+  - ログの文と、プレビュー用の仮の文字列（行末に `// 文言チェック対象外`）は対象外。
+- PR の説明や README などの文章と、アプリの画面に出す文言（Android は `android/app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/Localizable.xcstrings`）を、自然で読みやすい表現に推敲するときは、スキル `yomiyasu`（`.agents/skills/yomiyasu/SKILL.md`）を使う。ただし、次の点はこのリポジトリの書き方を優先する。
+  - 英単語や数字の前後の半角空白（「OpenStreetMap の」「7 日間」など）は消さない。
+  - コミットの本文、README、AGENTS.md の箇条書きは地の文に書き換えない。PR テンプレートの見出しも変えない。
+  - 画面の文言は、画面に収まる短さを保ち、ボタンや見出しの短い語を文に書き換えない。Android と iOS で同じ文言にそろえる。
+  - 付属の `yomiyasu_lint.py` の指摘のうち、箇条書きの比率（`excess_list`）は直さない。
 
 ## コミットメッセージ
 
@@ -86,8 +97,8 @@ feat: 山データを都道府県単位で事前ダウンロードできるよ�
 - 設定の「キャッシュを消去」では、保存済みの地域を消さない。
 
 検証:
-- 成功: ./gradlew -p core test
-- 成功: ./gradlew :app:assembleDebug
+- 成功: ./gradlew -p core test（android/ で実行）
+- 成功: ./gradlew :app:assembleDebug（android/ で実行）
 - 環境上実行できず: swift test（Swift の無い環境のため、PR の CI で確認する）
 - 未実施: 実機での動作確認
 
@@ -97,20 +108,39 @@ Co-authored-by: Codex GPT-6
 ## Android と iOS をそろえる
 
 - 機能の追加や不具合の修正は、特に指示がなければ Android と iOS の両方に同じ動作で入れる。片方だけにするときは PR の説明にそう書く。
-- `core/`（Kotlin）と `ios/YamamukiCore/`（Swift）は同じロジックの移植。片方を変えたらもう片方も同じに変え、テストも両方に足す。
+- `android/core/`（Kotlin）と `ios/YamamukiCore/`（Swift）は同じロジックの移植。片方を変えたらもう片方も同じに変え、テストも両方に足す。
 - 両 OS の違いは端末の機能による差だけにする。違いを増やしたら README の「Android 版と iOS 版の違い」を更新する。
+
+## DB の版と移行
+
+Android 版の山データの DB（Room）は、配布したあとも端末に残る。アップデートで版が変わったときに読めないと、起動直後に落ちる。
+
+- テーブルや列を変えたら、DB の版（`MountainDatabase.VERSION`）を上げ、同じ PR で古い版からの移行を入れる。
+  - テーブルや列を足すだけなら、`@Database` の `autoMigrations` に `AutoMigration(from, to)` を足す。
+  - Room が自動で作れない移行（列の名前を変える・消すなど）は、`MountainMigrations.kt` に `Migration(from, to)` を足す。
+- 事前ダウンロードした山データ（`mountains` と `fetched_tiles`）は移行で消さない。DB をまるごと作り直す `fallbackToDestructiveMigration()` は使わない（作り直すのは、古い版のアプリで新しい版の DB を開いたときだけ）。取り直せるテーブルだけは、移行の中で作り直してよい。
+- ビルドで書き出したスキーマ（`android/app/schemas/` の版ごとの JSON）をコミットし、既にある版の JSON は書き換えない。
+- 移行は、`android/app/schemas/` のすべての版から今の版へ移して山データが残るかを、単体テスト（`MountainDatabaseMigrationTest`）で確かめる。新しい版で初期値の無い必須の列を足したら、テストの見本の行にも値を足す。
+- iOS 版のキャッシュはタイルごとの JSON で、読めないファイルは取得していないものとして取り直す。形式を変えるときは、項目を省略可能にして古いファイルも読めるようにする。
 
 ## 変更の確かめ方
 
 コミットの前に、変えた部分に応じて次を通す。CI（`.github/workflows/`）でも同じものを動かしている。
 
 ```bash
-# すべて: 改行コードと BOM の確認
+# すべて: 改行コードと BOM の確認、画面の文言が文字列リソースにまとまっているかの確認
 .github/scripts/check-text-format.sh
+.github/scripts/check-ui-strings.py
 
-# Android: core の単体テストとアプリのビルド
-./gradlew -p core test
-./gradlew :app:assembleDebug
+# Android: core の単体テスト、アプリのビルドと単体テスト、DB のスキーマの確認（Gradle は android/ で動かす）
+(cd android && ./gradlew -p core test)
+(cd android && ./gradlew :app:assembleDebug)
+(cd android && ./gradlew :app:testDebugUnitTest)
+git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
+
+# 山データの参照先ファイル（site/data/osm-peaks/）: スクリプトの単体テストと、Release と合っているかの確認
+python3 -m unittest discover -s .github/scripts/tests
+git fetch origin main && .github/scripts/peak_data.py check --base origin/main
 
 # iOS: core の単体テスト（Mac または Swift の入った環境）
 (cd ios/YamamukiCore && swift test)
@@ -121,7 +151,10 @@ Co-authored-by: Codex GPT-6
 ```
 
 - iOS の画面を変えたら、手元で UI テストも動かす（手順は README の「iOS 版」）。CI では UI テストのビルドだけを確かめ、実行はしない。
-- CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで動く。
+- CI の「Build」（Android）は、アプリの単体テストと DB のスキーマの確認（スキーマのコミット漏れと、既にある版のスキーマの書き換え）も行う。
+- CI の「Text format」は、画面の文言の確認（コードに直接書いた日本語、iOS のキーの過不足、両 OS のキーと文言のずれ）も行う。
+- CI の「山データの確認」は、参照先ファイルと manifest のコピーが yamamuki-data の Release と合っているか（コピーが Release と同じか、`manifests/` が追加だけか、データ本体の大きさと SHA-256、`stable` の件数の減り方）を確かめる。参照先の manifest をアプリの読み込み処理で読めるかは、core の単体テスト（`SitePeakDataTest`）で確かめる。
+- CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで、「山データの確認」は `site/data/` か山データのスクリプト・ワークフローを変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
 - ロジックを変えたら単体テストを足す。テストを消したり飛ばしたりして通すことはしない。
 - 画面を変えたら、変更前と変更後のスクリーンショットを PR に貼る（撮れないときはそう書く）。
@@ -133,14 +166,16 @@ Co-authored-by: Codex GPT-6
 - 「修正して」「ブランチを作成して」という依頼に、PR 作成の許可は含まれない。作業が終わったら PR は作らず、ブランチ名と変更内容を伝える。
 - 1 つの PR には 1 つの目的だけを入れる。ついでのリファクタリングや整形は別の PR にする。
 - PR の説明は `.github/pull_request_template.md` の見出し（何を変えたか・対象・確認方法・スクリーンショット）に沿って書く。
-- PR の件名と本文は、スキル `pr-description`（`.agents/skills/pr-description/SKILL.md`）の手順でコミットから作る。コミットが複数ある PR は、本文の最後に「マージ時のコミット」の候補を入れる。
+- PR の件名と本文は、スキル `pr-description`（`.agents/skills/pr-description/SKILL.md`）の手順でコミットから作る。PR を作るときや本文を書き直すときは、覚えている書き方で済ませず、毎回このスキルを読む。
+  - コミットが複数ある PR は、本文の最後に「マージ時のコミット」の候補を入れる。候補は、マージ画面の欄に合わせて「Commit message」（件名と `(#PR 番号)`）と「Extended description」（本文・検証・作成者）の 2 つのコードブロックに分ける。件名と本文を 1 つのブロックにまとめない。
 - マージはユーザーが行う（スカッシュマージ）。エージェントは PR をマージしない。
 - 複数の人や AI が並行して作業するときは、それぞれ別のブランチを使い、相手のブランチには push しない。同じファイルを大きく変える作業は同時に進めない。
 
-## AI が投稿するコメント
+## AI が作成する Issue・PR と投稿するコメント
 
-- AI が GitHub に直接投稿するコメント（PR・Issue のコメント、レビュー、レビューへの返信）は、見出し（1 行目）の先頭に、書いた AI のモデル名が分かるプレフィックスを `[モデル名]` の形で付ける。
+- AI が作成する Issue・PR の本文と、GitHub に直接投稿するコメント（PR・Issue のコメント、レビュー、レビューへの返信）は、先頭（1 行目）に `[モデル名]` を付ける。本文が見出しで始まる場合は、その前にモデル名だけの行を追加し、空行を挟んで見出しを書く。文章で始まる場合は、その文章の先頭に付ける。
   - 例: `[Claude Opus 5.5] CI の失敗を直しました`、`[Codex GPT-5] レビューの指摘に対応しました`
+- Issue・PR の件名にはモデル名を入れず、要望・問題・変更の内容が分かるものにする。
 - モデル名は、そのとき実際に動いているモデルを書く。分からないときはツール名（`[Claude Code]`、`[Codex]`）だけでもよい。
 - ほかの AI や人に @ で宛てたコメント（AI の名前や人のアカウント名の前に @ を付けたもの）には反応しない。同じ PR を見ている別の AI が、自分宛てでない依頼に答えてしまうのを防ぐため。
 - AI は、PR や Issue のコメント・レビューに、自分宛てに @ を付けて明示的に頼まれたときだけ反応する（返信、コードの修正、push）。@ の付いていないコメントには、内容が修正の依頼や指摘に読めても反応しない。クラウドのセッションなどで PR を監視しているときも同じ。コメント欄で人どうしが仕様を検討して整理してから AI に頼むことが多く、検討中の意見に AI が先回りして手を加えると話がややこしくなるため。
@@ -151,6 +186,7 @@ Co-authored-by: Codex GPT-6
 
 AI ツールが起こしやすい失敗を防ぐための指示。人の作業には当てはまらないものもある。
 
+- 画面の文言をコードに直接書いてしまうツールがあるので、文言は文字列リソースに書く（「言葉づかい」を参照）。
 - エディタの設定（`.editorconfig`）を読まずにファイルを書くツールがあるので、編集前に対象ファイルの改行コードと BOM を確かめて保つ。Markdown は保存後に先頭の BOM が残っているかを確かめる（`SKILL.md` は BOM が付いていないかを確かめる）。
 - 既存の Markdown に BOM を付けるときは、改行コードを変えない。
 - `Co-authored-by:` の書き方:
@@ -188,7 +224,7 @@ AI ツールが起こしやすい失敗を防ぐための指示。人の作業�
 
 ## やってはいけないこと
 
-- 生成物や手元の設定をコミットしない（`ios/Yamamuki.xcodeproj/`、`local.properties`、`build/` など。`.gitignore` を参照）。
+- 生成物や手元の設定をコミットしない（`ios/Yamamuki.xcodeproj/`、`android/local.properties`、`build/` など。`.gitignore` を参照）。
 - 署名鍵（`*.jks`、`*.keystore`、`*-release.properties`）や API キーなどの秘密情報をコミットしない。
 - アプリの版（Android の `versionCode` / `versionName`、iOS の `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`）は、ユーザーの指示があるときだけ上げる。上げるときは両 OS をそろえる。
 - 依存ライブラリの更新は、機能の変更と同じ PR に混ぜない。
