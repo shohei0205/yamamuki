@@ -108,8 +108,13 @@ class PeakDataTest {
         val mountains = PeakData.parseMountains(gzip)
         assertEquals(
             listOf(
-                Mountain(3403990450, "万三郎岳", 34.8627963, 139.0018525, 1405.6),
-                Mountain(12, "名無し標高", 43.5, 142.9, null),
+                Mountain(
+                    3403990450, "万三郎岳", 34.8627963, 139.0018525, 1405.6,
+                    nameReading = "ばんざぶろうだけ",
+                    aliases = listOf("天城山"),
+                    wikipediaUrl = "https://ja.wikipedia.org/wiki/%E5%A4%A9%E5%9F%8E%E5%B1%B1",
+                ),
+                Mountain(12, "名無し標高", 43.5, 142.9, null, wikidataUrl = "https://www.wikidata.org/wiki/Q1"),
             ),
             mountains,
         )
@@ -127,7 +132,44 @@ class PeakDataTest {
             """.trimIndent(),
         )
         assertEquals(
-            listOf(Mountain(1, "山頂", 35.0, 138.0, 100.0), Mountain(2, "種別不明", 35.1, 138.1, null)),
+            listOf(
+                Mountain(1, "山頂", 35.0, 138.0, 100.0, pointId = "1", tags = listOf("日本百名山")),
+                Mountain(2, "種別不明", 35.1, 138.1, null, pointId = "2"),
+            ),
+            PeakData.parseMountains(v5),
+        )
+    }
+
+    @Test
+    fun parsesPointV5Fields() {
+        // 地点データ版 5 で増えた項目と、読み仮名・別名・URL。形の合わない値は無いものとして扱う。
+        val v5 = gzip(
+            """
+            [{"id":"1","type":"peak","osmId":1,"name":"富士山","latitude":35.36,"longitude":138.72,"elevationM":3776.0,
+              "nameReading":" ふじさん ","aliases":["不二山","富士山",""," 芙蓉峰 ","不二山",3],
+              "wikipediaUrl":"https://ja.wikipedia.org/wiki/x","wikidataUrl":"https://www.wikidata.org/wiki/Q39231",
+              "tags":["日本百名山","日本百名山"],"graphic":{"svg":"<svg/>","scale":1.5},"unknown":{"a":1}},
+             {"id":"2","type":"peak","osmId":2,"name":"山","latitude":35.0,"longitude":138.0,
+              "nameReading":null,"aliases":null,"wikipediaUrl":"http://example.com/","wikidataUrl":"","tags":"日本百名山",
+              "graphic":{"svg":"<svg/>","scale":-1}},
+             {"id":"3","type":"peak","osmId":3,"name":"山","latitude":35.0,"longitude":138.0,"graphic":{"scale":2}}]
+            """.trimIndent(),
+        )
+        assertEquals(
+            listOf(
+                Mountain(
+                    1, "富士山", 35.36, 138.72, 3776.0,
+                    pointId = "1",
+                    nameReading = "ふじさん",
+                    aliases = listOf("不二山", "芙蓉峰"),
+                    wikipediaUrl = "https://ja.wikipedia.org/wiki/x",
+                    wikidataUrl = "https://www.wikidata.org/wiki/Q39231",
+                    tags = listOf("日本百名山"),
+                    graphic = PointGraphic("<svg/>", 1.5),
+                ),
+                Mountain(2, "山", 35.0, 138.0, null, pointId = "2", graphic = PointGraphic("<svg/>", 1.0)),
+                Mountain(3, "山", 35.0, 138.0, null, pointId = "3"),
+            ),
             PeakData.parseMountains(v5),
         )
     }

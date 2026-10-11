@@ -3,7 +3,10 @@ package io.github.shohei0205.yamamuki.core
 import java.util.Locale
 import kotlin.math.abs
 
-/** OSM の山頂ノード1件。 */
+/**
+ * OSM の山頂ノード1件。
+ * [pointId] から下は、yamamuki-data の地点データ版 5 の項目。版 4 までのデータと Overpass から取った山には無い。
+ */
 data class Mountain(
     val osmId: Long,
     val name: String,
@@ -11,6 +14,28 @@ data class Mountain(
     val longitude: Double,
     /** 標高(m)。OSM に ele タグが無い、または解釈できない場合は null。 */
     val elevationM: Double?,
+    /** データセット内で一意な地点の ID(地点データの id)。OSM 由来の山頂では osmId を文字列にしたもの。 */
+    val pointId: String? = null,
+    /** 山名の読み仮名。 */
+    val nameReading: String? = null,
+    /** 別名。 */
+    val aliases: List<String> = emptyList(),
+    /** Wikipedia の記事の URL(https)。 */
+    val wikipediaUrl: String? = null,
+    /** Wikidata の項目の URL(https)。 */
+    val wikidataUrl: String? = null,
+    /** 「日本百名山」などの分類ラベル。 */
+    val tags: List<String> = emptyList(),
+    /** 地点ごとの画像。 */
+    val graphic: PointGraphic? = null,
+)
+
+/** 地点ごとの画像(地点データの graphic)。 */
+data class PointGraphic(
+    /** SVG の本文。 */
+    val svg: String,
+    /** アプリの標準の大きさに対する表示倍率。 */
+    val scale: Double = 1.0,
 )
 
 /** 現在地から見た山。距離と方位角(真北基準、時計回り 0〜360°)を持つ。 */

@@ -2,6 +2,8 @@ package io.github.shohei0205.yamamuki.data
 
 import android.content.Context
 import io.github.shohei0205.yamamuki.core.Tile
+import androidx.room.AutoMigration
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -13,7 +15,10 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
+import org.json.JSONArray
 
 @Entity(
     tableName = "mountains",
@@ -27,7 +32,30 @@ data class MountainEntity(
     val elevationM: Double?,
     val tileLat: Int,
     val tileLon: Int,
+    // ここから下は地点データ版 5 の項目(DB の版 2 で追加)。版 1 の行と Overpass から取った山には無い。
+    val pointId: String? = null,
+    val nameReading: String? = null,
+    @ColumnInfo(defaultValue = "[]") val aliases: List<String> = emptyList(),
+    val wikipediaUrl: String? = null,
+    val wikidataUrl: String? = null,
+    @ColumnInfo(defaultValue = "[]") val tags: List<String> = emptyList(),
+    /** 地点の画像の SVG。画像が無ければ null。 */
+    val graphicSvg: String? = null,
+    /** 地点の画像の表示倍率。画像が無ければ null。 */
+    val graphicScale: Double? = null,
 )
+
+/** 別名やタグの一覧を、JSON の配列の文字列として 1 つの列に入れる。 */
+class StringListConverter {
+    @TypeConverter
+    fun fromList(value: List<String>): String = JSONArray(value).toString()
+
+    @TypeConverter
+    fun toList(value: String): List<String> {
+        val array = JSONArray(value)
+        return List(array.length()) { array.getString(it) }
+    }
+}
 
 /** Overpass から取得済みのタイルと取得時刻。山が0件のタイルも記録してオフライン時に再取得しない。 */
 @Entity(tableName = "fetched_tiles", primaryKeys = ["tileLat", "tileLon"])
@@ -102,7 +130,15 @@ interface MountainDao {
 /**
  * 山データのキャッシュ。版([VERSION])を上げるときは、同じ PR で古い版からの移行も入れる(MountainMigrations.kt)。
  */
-@Database(entities = [MountainEntity::class, FetchedTileEntity::class], version = MountainDatabase.VERSION)
+@Database(
+    entities = [MountainEntity::class, FetchedTileEntity::class],
+    version = MountainDatabase.VERSION,
+    autoMigrations = [
+        // 版 5 の項目の列を足す。足した列は、次の起動で端末に残した gz から作り直すときに埋まる。
+        AutoMigration(from = 1, to = 2),
+    ],
+)
+@TypeConverters(StringListConverter::class)
 abstract class MountainDatabase : RoomDatabase() {
     abstract fun mountainDao(): MountainDao
 
@@ -110,7 +146,7 @@ abstract class MountainDatabase : RoomDatabase() {
         const val FILE_NAME = "mountains.db"
 
         /** DB の版。テーブルや列を変えたら上げる。書き出したスキーマは android/app/schemas/ に版ごとに残す。 */
-        const val VERSION = 1
+        const val VERSION = 2
 
         /**
          * 端末の DB がこのアプリより新しい版のとき(新しい版の開発版を入れたあとで古い版に戻したとき)は、
