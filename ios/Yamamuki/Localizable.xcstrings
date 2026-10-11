@@ -870,6 +870,17 @@
         }
       }
     },
+    "map_mode_search": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索位置モード"
+          }
+        }
+      }
+    },
     "map_mode_to_heading_up": {
       "extractionState": "manual",
       "localizations": {
@@ -888,6 +899,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "現在の向きのまま操作する"
+          }
+        }
+      }
+    },
+    "map_mode_to_manual_here": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在地に戻る（手動位置モード）"
           }
         }
       }

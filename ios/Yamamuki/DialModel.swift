@@ -264,7 +264,6 @@ final class DialModel: ObservableObject {
     }
 
     func resetCenter() {
-        if viewpoint != nil { leaveViewpoint(); return }
         northUpTask?.cancel()
         guard let startLocation = location, let startObserver = gpsLocation else { return }
         let startHeading = displayHeading
@@ -314,13 +313,15 @@ final class DialModel: ObservableObject {
         fetch()
     }
 
-    /// 検索位置モードをやめ、双眼鏡を実際の現在地に戻してヘディングアップにする。
+    /// 検索位置モードをやめ、双眼鏡を実際の現在地に戻して手動位置モードにする。地図の向きはそのまま。
+    /// 現在地がまだ分からないときは、手動位置モードで動かす基準が無いのでヘディングアップにする。
     func leaveViewpoint() {
         northUpTask?.cancel()
+        let manual = gpsLocation != nil
         viewpoint = nil
         location = gpsLocation
-        lockedHeading = nil
-        exploring = false
+        if !manual { lockedHeading = nil }
+        exploring = manual
         returning = false
         peaks = []
         mountains = []

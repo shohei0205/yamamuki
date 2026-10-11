@@ -122,7 +122,10 @@ struct DialView: View {
                             .padding(.trailing, 8)
 
                             Button {
-                                if model.exploring {
+                                // 検索位置モードは手動位置モードへ、手動位置モードはヘディングアップへ、ヘディングアップは手動位置モードへ。
+                                if model.viewpoint != nil {
+                                    model.leaveViewpoint()
+                                } else if model.exploring {
                                     model.resetCenter()
                                 } else {
                                     model.enterManual()
@@ -137,8 +140,10 @@ struct DialView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(!modeButtonEnabled(geometry))
-                            .accessibilityLabel(Strings.text(model.exploring ? "map_mode_to_heading_up" : "map_mode_to_manual"))
-                            .accessibilityValue(Strings.text(model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
+                            .accessibilityLabel(Strings.text(model.viewpoint != nil ? "map_mode_to_manual_here"
+                                : model.exploring ? "map_mode_to_heading_up" : "map_mode_to_manual"))
+                            .accessibilityValue(Strings.text(model.viewpoint != nil ? "map_mode_search"
+                                : model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
                             .padding(.trailing, 8)
 
                             Text(Strings.text("osm_attribution"))

@@ -219,7 +219,6 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resetCenter(compassHeading: () -> Double) {
-        if (state.value.viewpoint != null) return leaveViewpoint()
         northUpJob?.cancel()
         val initial = state.value
         val startLocation = initial.location ?: return
@@ -276,14 +275,18 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         fetch()
     }
 
-    /** 検索位置モードをやめ、双眼鏡を実際の現在地に戻してヘディングアップにする。 */
+    /**
+     * 検索位置モードをやめ、双眼鏡を実際の現在地に戻して手動位置モードにする。地図の向きはそのまま。
+     * 現在地がまだ分からないときは、手動位置モードで動かす基準が無いのでヘディングアップにする。
+     */
     fun leaveViewpoint() {
         northUpJob?.cancel()
         peaks = emptyList()
         fetchedCenter = null
         _state.update {
-            it.copy(viewpoint = null, location = it.gpsLocation, exploring = false, returning = false, lockedHeading = null,
-                mountains = emptyList(), summit = null)
+            val manual = it.gpsLocation != null
+            it.copy(viewpoint = null, location = it.gpsLocation, exploring = manual, returning = false,
+                lockedHeading = if (manual) it.lockedHeading else null, mountains = emptyList(), summit = null)
         }
         fetch()
     }
