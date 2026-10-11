@@ -30,11 +30,6 @@ public enum PanGeometry {
         Heading.normalize(heading + Heading.delta(heading, target) * min(1, max(0, fraction)))
     }
 
-    public static func northUpHeading(_ heading: Double, progress: Double) -> Double {
-        let t = min(1, max(0, progress))
-        return t == 1 ? 0 : Heading.normalize(heading + Heading.delta(heading, 0) * t * t * (3 - 2 * t))
-    }
-
     /// 描画される双眼鏡の中心が画面内にあるか。寸法はpt。
     public static func isObserverVisible(_ observer: MapCenter, viewport: MapCenter, heading: Double,
         rangeKm: Double, canvasWidth: Double, canvasHeight: Double) -> Bool {
@@ -44,14 +39,6 @@ public enum PanGeometry {
         let x = canvasWidth / 2 + offset.x * scale
         let y = canvasHeight - DialGeometry.originBottom - offset.y * scale
         return x >= 0 && x <= canvasWidth && y >= DialGeometry.chartTop && y <= canvasHeight
-    }
-
-    /// 選んだ回転中心をアニメーション中も固定する。高さはpt。
-    public static func northUpViewport(_ observer: MapCenter, viewport: MapCenter, heading: Double,
-        rangeKm: Double, canvasHeight: Double, progress: Double = 1, aroundCenter: Bool = true) -> MapCenter {
-        guard progress > 0, aroundCenter || observer != viewport else { return viewport }
-        return rotateViewport(observer, viewport: viewport, heading: heading, nextHeading: northUpHeading(heading, progress: progress),
-            rangeKm: rangeKm, canvasHeight: canvasHeight, aroundCenter: aroundCenter)
     }
 
     /// 双眼鏡または画面中央を固定して方角を変える。
@@ -111,6 +98,7 @@ public enum PanGeometry {
 /// 地図の向きを start から、動いていく行き先(端末の向きなど)へ回す。
 /// 回す量はタップした時点の最短の回転から始め、その後は行き先が動いた分だけ足していく。
 /// 行き先が真後ろ(180° 先)をまたいでも、途中で逆回りして地図が半回転して見えることはない。
+/// 最初の行き先が読めない(NaN など)ときは回さずに始め、読めた行き先へあとから回す。
 public struct HeadingTurn {
     private let start: Double
     private var target: Double
@@ -118,8 +106,8 @@ public struct HeadingTurn {
 
     public init(start: Double, target: Double) {
         self.start = start
-        self.target = Heading.normalize(target)
-        sweep = Heading.delta(start, target)
+        self.target = Heading.normalize(target.isFinite ? target : start)
+        sweep = Heading.delta(start, self.target)
     }
 
     /// 行き先を target に更新し、進み具合 progress(0〜1)での向きを返す。終わり(1)では行き先そのものを返す。

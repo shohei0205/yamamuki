@@ -6,6 +6,20 @@ final class PanGeometryTests: XCTestCase {
     /// 高さ 800pt の画面で 1km = 10pt になる表示範囲。
     private let range800 = (800 - DialGeometry.chartInset) / 10
 
+    /// コンパスのタップで北へ回すときの、進み具合 progress での向き。
+    private func northUpHeading(_ heading: Double, progress: Double) -> Double {
+        var turn = HeadingTurn(start: heading, target: 0)
+        return turn.heading(target: 0, progress: progress)
+    }
+
+    /// コンパスのタップで北へ回すときの、進み具合 progress での表示位置。
+    private func northUpViewport(_ observer: MapCenter, viewport: MapCenter, heading: Double,
+        rangeKm: Double, canvasHeight: Double, progress: Double = 1, aroundCenter: Bool = true) -> MapCenter {
+        PanGeometry.rotateViewport(observer, viewport: viewport, heading: heading,
+            nextHeading: northUpHeading(heading, progress: progress),
+            rangeKm: rangeKm, canvasHeight: canvasHeight, aroundCenter: aroundCenter)
+    }
+
     func testReturnPathIsStraightOnScreenWhileHeadingAndGpsChange() {
         for offset in [PlanOffset(x: 12, y: -8), PlanOffset(x: -30, y: 20), PlanOffset(x: 0, y: 0)] {
             for targetHeading in [10.0, 90.0, 180.0, 270.0] {
@@ -58,9 +72,9 @@ final class PanGeometryTests: XCTestCase {
                 rangeKm: range800, canvasWidth: 360, canvasHeight: 800))
             let before = screen(tokyo, viewport: viewport, heading: heading, scale: 10)
             for progress in [0.0, 0.25, 0.5, 0.75, 1.0] {
-                let next = PanGeometry.northUpViewport(tokyo, viewport: viewport, heading: heading,
+                let next = northUpViewport(tokyo, viewport: viewport, heading: heading,
                     rangeKm: range800, canvasHeight: 800, progress: progress, aroundCenter: false)
-                let after = screen(tokyo, viewport: next, heading: PanGeometry.northUpHeading(heading, progress: progress), scale: 10)
+                let after = screen(tokyo, viewport: next, heading: northUpHeading(heading, progress: progress), scale: 10)
                 XCTAssertEqual(before.x, after.x, accuracy: 1e-6)
                 XCTAssertEqual(before.y, after.y, accuracy: 1e-6)
             }
@@ -92,24 +106,24 @@ final class PanGeometryTests: XCTestCase {
                         XCTAssertEqual(before.x, 0, accuracy: 1e-6)
                         XCTAssertEqual(before.y, pivotY, accuracy: 1e-6)
                         for progress in [0.0, 0.25, 0.5, 0.75, 1.0] {
-                            let animated = PanGeometry.northUpViewport(tokyo, viewport: viewport, heading: heading,
+                            let animated = northUpViewport(tokyo, viewport: viewport, heading: heading,
                                 rangeKm: range, canvasHeight: height, progress: progress)
-                            let angle = PanGeometry.northUpHeading(heading, progress: progress)
+                            let angle = northUpHeading(heading, progress: progress)
                             let position = screen(landmark, viewport: animated, heading: angle, scale: scale)
                             XCTAssertEqual(position.x, before.x, accuracy: 1e-6)
                             XCTAssertEqual(position.y, before.y, accuracy: 1e-6)
-                            let normal = PanGeometry.northUpViewport(tokyo, viewport: tokyo, heading: heading,
+                            let normal = northUpViewport(tokyo, viewport: tokyo, heading: heading,
                                 rangeKm: range, canvasHeight: height, progress: progress, aroundCenter: false)
                             XCTAssertEqual(normal, tokyo)
                             let binoculars = screen(tokyo, viewport: normal, heading: angle, scale: scale)
                             XCTAssertEqual(binoculars.x, 0, accuracy: 1e-6)
                             XCTAssertEqual(binoculars.y, 0, accuracy: 1e-6)
                         }
-                        let next = PanGeometry.northUpViewport(tokyo, viewport: viewport, heading: heading, rangeKm: range, canvasHeight: height)
+                        let next = northUpViewport(tokyo, viewport: viewport, heading: heading, rangeKm: range, canvasHeight: height)
                         let after = screen(landmark, viewport: next, heading: 0, scale: scale)
                         XCTAssertEqual(after.x, before.x, accuracy: 1e-6)
                         XCTAssertEqual(after.y, before.y, accuracy: 1e-6)
-                        XCTAssertEqual(next, PanGeometry.northUpViewport(tokyo, viewport: next, heading: 0, rangeKm: range, canvasHeight: height))
+                        XCTAssertEqual(next, northUpViewport(tokyo, viewport: next, heading: 0, rangeKm: range, canvasHeight: height))
                     }
                 }
             }
@@ -126,11 +140,11 @@ final class PanGeometryTests: XCTestCase {
     }
 
     func testNorthUpAnimationUsesShortestTurnAndStopsExactlyAtNorth() {
-        XCTAssertEqual(PanGeometry.northUpHeading(90, progress: 0.5), 45, accuracy: 1e-8)
-        XCTAssertEqual(PanGeometry.northUpHeading(270, progress: 0.5), 315, accuracy: 1e-8)
-        XCTAssertEqual(PanGeometry.northUpHeading(359, progress: 0.5), 359.5, accuracy: 1e-8)
-        XCTAssertEqual(PanGeometry.northUpHeading(90, progress: 0), 90)
-        XCTAssertEqual(PanGeometry.northUpHeading(359, progress: 1), 0)
+        XCTAssertEqual(northUpHeading(90, progress: 0.5), 45, accuracy: 1e-8)
+        XCTAssertEqual(northUpHeading(270, progress: 0.5), 315, accuracy: 1e-8)
+        XCTAssertEqual(northUpHeading(359, progress: 0.5), 359.5, accuracy: 1e-8)
+        XCTAssertEqual(northUpHeading(90, progress: 0), 90)
+        XCTAssertEqual(northUpHeading(359, progress: 1), 0)
     }
 
     func testHeadingSwipeAcrossNorth() {
@@ -232,13 +246,13 @@ final class PanGeometryTests: XCTestCase {
         XCTAssertEqual(turn.heading(target: .nan, progress: 1), 350, accuracy: 1e-8)
     }
 
-    func testHeadingTurnToNorthMatchesNorthUpHeading() {
-        for start in [90.0, 270, 359, 180] {
-            for progress in [0.0, 0.25, 0.5, 0.75, 1] {
-                var turn = HeadingTurn(start: start, target: 0)
-                XCTAssertEqual(turn.heading(target: 0, progress: progress),
-                    PanGeometry.northUpHeading(start, progress: progress), accuracy: 1e-8)
-            }
-        }
+    func testHeadingTurnStartsInPlaceWhenFirstTargetIsUnreadable() {
+        var turn = HeadingTurn(start: 0, target: .nan)
+        XCTAssertEqual(turn.heading(target: .nan, progress: 0.5), 0, accuracy: 1e-8)
+        // あとから読めた向きへ回す。
+        XCTAssertEqual(turn.heading(target: 90, progress: 0.5), 45, accuracy: 1e-8)
+        XCTAssertEqual(turn.heading(target: 90, progress: 1), 90, accuracy: 1e-8)
+        var infinite = HeadingTurn(start: 10, target: .infinity)
+        XCTAssertEqual(infinite.heading(target: .nan, progress: 1), 10, accuracy: 1e-8)
     }
 }

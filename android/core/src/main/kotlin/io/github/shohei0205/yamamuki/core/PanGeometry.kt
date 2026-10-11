@@ -25,11 +25,6 @@ object PanGeometry {
     fun returnHeading(heading: Double, target: Double, fraction: Double): Double =
         Heading.normalize(heading + Heading.delta(heading, target) * fraction.coerceIn(0.0, 1.0))
 
-    fun northUpHeading(heading: Double, progress: Double): Double {
-        val t = progress.coerceIn(0.0, 1.0)
-        return if (t == 1.0) 0.0 else Heading.normalize(heading + Heading.delta(heading, 0.0) * t * t * (3 - 2 * t))
-    }
-
     /** 描画される双眼鏡の中心が画面内にあるか。寸法はdp。 */
     fun isObserverVisible(observer: MapCenter, viewport: MapCenter, heading: Double,
         rangeKm: Double, canvasWidth: Double, canvasHeight: Double): Boolean {
@@ -39,13 +34,6 @@ object PanGeometry {
         val x = canvasWidth / 2 + offset.x * scale
         val y = canvasHeight - DialGeometry.ORIGIN_BOTTOM_DP - offset.y * scale
         return x in 0.0..canvasWidth && y in DialGeometry.CHART_TOP_DP..canvasHeight
-    }
-
-    /** 選んだ回転中心をアニメーション中も固定する。高さはdp。 */
-    fun northUpViewport(observer: MapCenter, viewport: MapCenter, heading: Double,
-        rangeKm: Double, canvasHeight: Double, progress: Double = 1.0, aroundCenter: Boolean = true): MapCenter {
-        if (progress <= 0 || (!aroundCenter && observer == viewport)) return viewport
-        return rotateViewport(observer, viewport, heading, northUpHeading(heading, progress), rangeKm, canvasHeight, aroundCenter)
     }
 
     /** 双眼鏡または画面中央を固定して方角を変える。 */
@@ -111,10 +99,11 @@ object PanGeometry {
  * 地図の向きを [start] から、動いていく行き先(端末の向きなど)へ回す。
  * 回す量はタップした時点の最短の回転から始め、その後は行き先が動いた分だけ足していく。
  * 行き先が真後ろ(180° 先)をまたいでも、途中で逆回りして地図が半回転して見えることはない。
+ * 最初の行き先が読めない(NaN など)ときは回さずに始め、読めた行き先へあとから回す。
  */
 class HeadingTurn(private val start: Double, target: Double) {
-    private var target = Heading.normalize(target)
-    private var sweep = Heading.delta(start, target)
+    private var target = Heading.normalize(if (target.isFinite()) target else start)
+    private var sweep = Heading.delta(start, this.target)
 
     /** 行き先を [target] に更新し、進み具合 [progress](0〜1)での向きを返す。終わり(1)では行き先そのものを返す。 */
     fun headingAt(target: Double, progress: Double): Double {
