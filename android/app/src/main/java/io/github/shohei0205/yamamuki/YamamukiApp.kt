@@ -51,15 +51,16 @@ class YamamukiApp : Application() {
         }
     }
 
-    private val cache: RoomMountainCache by lazy { RoomMountainCache(database.mountainDao()) }
+    /** 保存している山データ。方位盤は [mountainRepository] を通して読み、山の検索だけは全件を直接読む。 */
+    val mountainCache: RoomMountainCache by lazy { RoomMountainCache(database.mountainDao()) }
 
     val mountainRepository: MountainRepository by lazy {
-        MountainRepository(remote = OverpassClient(http, userAgent = USER_AGENT), cache = cache)
+        MountainRepository(remote = OverpassClient(http, userAgent = USER_AGENT), cache = mountainCache)
     }
 
     /** yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。どこから読むかは [peakDataChannel]。 */
     val peakDataUpdater: PeakDataUpdater by lazy {
-        PeakDataUpdater(PeakData.source(peakDataChannel, http, userAgent = USER_AGENT), cache, peakDataStore.archive)
+        PeakDataUpdater(PeakData.source(peakDataChannel, http, userAgent = USER_AGENT), mountainCache, peakDataStore.archive)
     }
 
     private companion object {

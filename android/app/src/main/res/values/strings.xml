@@ -151,4 +151,13 @@
     <string name="area_notice_failed">%1$sの取得に失敗しました。サーバーの混雑または通信状況が原因の可能性があります。</string>
     <string name="area_notice_failed_progress">%1$sの取得に失敗しました（%2$d / %3$d 区画保存済み）。サーバーの混雑または通信状況が原因の可能性があります。</string>
     <string name="area_notice_canceled">%1$sのダウンロードを中断しました（%2$d / %3$d 区画保存済み）。</string>
+
+    <!-- 山の検索 -->
+    <string name="search_open">山を検索</string>
+    <string name="search_title">山の検索</string>
+    <string name="search_placeholder">山名・よみがな</string>
+    <string name="search_loading">山データを読み込んでいます</string>
+    <string name="search_no_data">山データがありません。設定の「山データを更新」で取得すると検索できます。</string>
+    <string name="search_no_results">見つかりませんでした</string>
+    <string name="search_result_direction">%1$s %2$s</string>
 </resources>

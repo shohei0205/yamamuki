@@ -25,6 +25,9 @@ class RoomMountainCache(private val dao: MountainDao) : MountainCache {
     override suspend fun mountainsIn(box: BoundingBox): List<Mountain> =
         dao.mountainsIn(box.south, box.west, box.north, box.east).map { it.toMountain() }
 
+    /** 保存しているすべての山。山の検索で使う。 */
+    suspend fun allMountains(): List<Mountain> = dao.allMountains().map { it.toMountain() }
+
     override suspend fun replaceTiles(tiles: Collection<Tile>, mountains: List<Mountain>, fetchedAtMillis: Long) {
         dao.replaceTiles(
             tiles = tiles.map { FetchedTileEntity(it.latIndex, it.lonIndex, fetchedAtMillis) },

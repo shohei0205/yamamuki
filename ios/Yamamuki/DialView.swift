@@ -15,6 +15,8 @@ struct DialView: View {
     @State private var showObserver = false
     /// 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
     @State private var groupIds: [Int64]?
+    /// 検索ボタンを押したときの方位盤の高さ。選んだ山頂を中央に置くのに使う(検索画面のキーボードの影響を受けないよう、開く前に覚える)。
+    @State private var searchCanvasHeight = 0.0
 
     var body: some View {
         GeometryReader { geometry in
@@ -32,10 +34,11 @@ struct DialView: View {
                     mountains: model.mountains,
                     rangeKm: model.rangeKm,
                     summit: model.summit,
-                    altitudeM: model.gpsLocation?.mslAltitudeM,
+                    altitudeM: model.observer?.mslAltitudeM,
                     maxPeaks: model.settings.maxPeaks,
                     textScale: model.settings.textScale,
-                    observerLocation: model.gpsLocation,
+                    // 双眼鏡の位置。検索位置モードでは選んだ山頂。
+                    observerLocation: model.observer,
                     viewportLocation: model.location,
                     compassHeading: model.heading ?? model.displayHeading,
                     headingUp: !model.exploring,
@@ -108,6 +111,16 @@ struct DialView: View {
                         .padding(.leading, 8)
                         Spacer()
                         VStack(alignment: .trailing, spacing: 12) {
+                            // 山の検索。どちらのモードからでも使える。
+                            RoundButton(label: Strings.text("search_open"), iconColor: searchButtonIconColor) {
+                                Image(systemName: "magnifyingglass")
+                            } action: {
+                                searchCanvasHeight = Double(geometry.size.height)
+                                model.openSearch()
+                            }
+                            .disabled(Double(geometry.size.height) <= DialGeometry.chartInset)
+                            .padding(.trailing, 8)
+
                             Button {
                                 if model.exploring {
                                     model.resetCenter()
@@ -117,13 +130,13 @@ struct DialView: View {
                             } label: {
                                 Image(systemName: model.exploring ? "scope" : "location.north.fill")
                                     .font(.system(size: 26, weight: .medium))
-                                    .foregroundStyle(model.gpsLocation == nil ? Color.gray.opacity(0.4) : modeButtonIconColor)
+                                    .foregroundStyle(modeButtonEnabled(geometry) ? modeButtonIconColor : Color.gray.opacity(0.4))
                                     .frame(width: 56, height: 56)
                                     .background(Circle().fill(Color.white))
                                     .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
                             }
                             .buttonStyle(.plain)
-                            .disabled(!model.hasLocationPermission || model.gpsLocation == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
+                            .disabled(!modeButtonEnabled(geometry))
                             .accessibilityLabel(Strings.text(model.exploring ? "map_mode_to_heading_up" : "map_mode_to_manual"))
                             .accessibilityValue(Strings.text(model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
                             .padding(.trailing, 8)
@@ -170,6 +183,24 @@ struct DialView: View {
         .sheet(isPresented: $showObserver) {
             ObserverDetailView(model: model).fetchErrorAlert(model)
         }
+        .sheet(isPresented: showSearch) {
+            MountainSearchView(model: model) { model.showFromMountain($0, canvasHeight: searchCanvasHeight) }
+                .fetchErrorAlert(model)
+        }
+    }
+
+    /// 右下のモード切替ボタンを押せるか。検索位置モードからは、現在地が分からなくても抜けられるようにする。
+    private func modeButtonEnabled(_ geometry: GeometryProxy) -> Bool {
+        model.viewpoint != nil
+            || (model.hasLocationPermission && model.gpsLocation != nil && Double(geometry.size.height) > DialGeometry.chartInset)
+    }
+
+    /// 検索画面のシート。下に引いて閉じたときも、読み込んだ山を手放す。
+    private var showSearch: Binding<Bool> {
+        Binding(
+            get: { model.search != nil },
+            set: { if !$0 { model.closeSearch() } }
+        )
     }
 
     /// 手動位置モードの表示(上部の目盛りを隠し、向きの表示とコンパスを出す)。現在地へ戻り始めたらすぐ戻す。
@@ -181,7 +212,7 @@ struct DialView: View {
     /// 手動位置モードの左上に出す、端末の向きと現在地の標高。
     /// ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
     private var headingLabel: some View {
-        let parts = model.heading.map { readoutParts(headingDeg: $0, altitudeM: model.gpsLocation?.mslAltitudeM) }
+        let parts = model.heading.map { readoutParts(headingDeg: $0, altitudeM: model.observer?.mslAltitudeM) }
         let text = parts.map {
             Text(Strings.format("dial_heading", $0.direction)).foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle)
         } ?? Text(Strings.text("dial_heading_loading")).foregroundColor(tapeInk)
@@ -275,6 +306,8 @@ private let settingsButtonIconColor = Color(hex: 0x43A047)
 private let downloadButtonIconColor = Color(hex: 0xFB8C00)
 /// モード切替ボタンのアイコンの色(青)。
 private let modeButtonIconColor = Color(hex: 0x1A73E8)
+/// 山の検索ボタンのアイコンの色(紫)。
+private let searchButtonIconColor = Color(hex: 0x8E24AA)
 
 /// 方位盤の下の角に置く丸いボタン。右下のモード切替ボタンと同じく、白地に影を付けて地図の上でも見分けやすくする。
 /// アイコンはボタンごとに色を変える([iconColor])。

@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -168,7 +169,8 @@ fun DialScreen(
     val headingAccuracyLow by remember(context) {
         headingAccuracyLowUpdates(context).distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
-    val location = state.gpsLocation
+    // 双眼鏡の位置。検索位置モードでは選んだ山頂。
+    val location = state.observer
     val declination = remember(location) {
         location?.let {
             GeomagneticField(
@@ -191,6 +193,7 @@ fun DialScreen(
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showDownload by rememberSaveable { mutableStateOf(false) }
+    val showSearch = state.search != null
     var showObserver by remember { mutableStateOf(false) }
     // 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
     var groupIds by remember { mutableStateOf<List<Long>?>(null) }
@@ -216,11 +219,13 @@ fun DialScreen(
             .drawBehind { drawRect(HeaderSkyTop, size = Size(size.width, safeDrawing.getTop(this).toFloat())) }
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .onSizeChanged {
+                // 検索画面でキーボードが出ている間は、方位盤の大きさを変えない(選んだ山頂を中央に置く計算がずれるため)。
+                if (showSearch) return@onSizeChanged
                 canvasHeight = it.height / density.density.toDouble()
                 canvasWidth = it.width / density.density.toDouble()
             }
-            .pointerInput(showSettings) {
-                if (showSettings) return@pointerInput
+            .pointerInput(showSettings, showSearch) {
+                if (showSettings || showSearch) return@pointerInput
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     var multiTouch = false
@@ -331,15 +336,29 @@ fun DialScreen(
             )
         }
 
-        MapModeButton(
-            manual = state.exploring,
-            enabled = hasPermission && state.gpsLocation != null && canvasHeight > DialGeometry.CHART_INSET_DP,
-            onClick = {
-                if (state.exploring) viewModel.resetCenter { currentCompassHeading }
-                else viewModel.enterManual(heading ?: 0.0)
-            },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
-        )
+        // 右下: 山の検索と、モードの切り替え。検索はどちらのモードからでも使える。
+        Column(
+            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            RoundMapButton(
+                onClick = viewModel::openSearch,
+                enabled = canvasHeight > DialGeometry.CHART_INSET_DP,
+                iconColor = SEARCH_BUTTON_ICON_COLOR,
+            ) {
+                Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search_open), Modifier.size(28.dp))
+            }
+            MapModeButton(
+                manual = state.exploring,
+                // 検索位置モードからは、現在地が分からなくても抜けられるようにする。
+                enabled = state.viewpoint != null ||
+                    (hasPermission && state.gpsLocation != null && canvasHeight > DialGeometry.CHART_INSET_DP),
+                onClick = {
+                    if (state.exploring) viewModel.resetCenter { currentCompassHeading }
+                    else viewModel.enterManual(heading ?: 0.0)
+                },
+            )
+        }
 
         // 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目・同じ高さにそろえる。
         Row(
@@ -391,6 +410,16 @@ fun DialScreen(
             )
         }
 
+        state.search?.let { search ->
+            MountainSearchScreen(
+                search = search,
+                from = state.gpsLocation,
+                onQueryChange = viewModel::onSearchQuery,
+                onSelect = { viewModel.showFromMountain(it, heading ?: 0.0, canvasHeight) },
+                onClose = viewModel::closeSearch,
+            )
+        }
+
         if (Features.AREA_DOWNLOAD && showDownload) {
             AreaDownloadScreen(
                 state = download,
@@ -424,7 +453,7 @@ fun DialScreen(
         )
     }
 
-    val overlay = showSettings || showDownload
+    val overlay = showSettings || showDownload || showSearch
     if (selected != null && !overlay) {
         MountainDetailDialog(selected, onDismiss = { selectedId = null })
     } else if (group != null && !overlay) {
@@ -537,7 +566,7 @@ private fun ObserverDetailDialog(location: GeoPoint, onDismiss: () -> Unit) {
 
 /** 詳細表示の標高。「1,212 m」、不明なら「不明」。山と現在地で共通に使う。 */
 @Composable
-private fun elevationLabel(elevationM: Double?): String =
+internal fun elevationLabel(elevationM: Double?): String =
     elevationText(elevationM) ?: stringResource(R.string.common_unknown)
 
 /** 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。山と現在地で共通に使う。 */

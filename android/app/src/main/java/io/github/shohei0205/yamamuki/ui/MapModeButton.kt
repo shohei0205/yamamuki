@@ -53,6 +53,9 @@ val SETTINGS_BUTTON_ICON_COLOR = Color(0xFF43A047)
 /** 事前ダウンロードのボタンのアイコンの色(橙)。 */
 val DOWNLOAD_BUTTON_ICON_COLOR = Color(0xFFFB8C00)
 
+/** 山の検索ボタンのアイコンの色(紫)。 */
+val SEARCH_BUTTON_ICON_COLOR = Color(0xFF8E24AA)
+
 /** モード切替ボタンのアイコンの色(青)。 */
 private val MODE_BUTTON_ICON_COLOR = Color(0xFF1A73E8)
 

@@ -49,6 +49,15 @@ public actor FileMountainCache: MountainCache {
         }
     }
 
+    /// 保存しているすべての山。山の検索で使う。読んだタイルは覚えておかない(全国分を持ち続けないため)。
+    public func allMountains() -> [Mountain] {
+        tileFiles().compactMap { tileIndex(of: $0) }.flatMap { tile -> [Mountain] in
+            if let cached = loaded[tile] { return cached?.mountains ?? [] }
+            let file = (try? Data(contentsOf: url(of: tile))).flatMap { try? JSONDecoder().decode(TileFile.self, from: $0) }
+            return file?.mountains ?? []
+        }
+    }
+
     public func info() -> CacheInfo {
         var mountains = 0
         var tiles = 0

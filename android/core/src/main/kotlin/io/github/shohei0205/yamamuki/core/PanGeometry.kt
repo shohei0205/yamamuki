@@ -20,6 +20,16 @@ object PanGeometry {
         return if (t == 1.0) 0.0 else Heading.normalize(heading + Heading.delta(heading, 0.0) * t * t * (3 - 2 * t))
     }
 
+    /**
+     * 双眼鏡を画面の中央に置く表示範囲の原点。検索した山頂を中央に出すときに使う。高さはdp。
+     * 画面の大きさが分からないときは [observer] をそのまま返す(双眼鏡は下端の原点に出る)。
+     */
+    fun centeredViewport(observer: MapCenter, heading: Double, rangeKm: Double, canvasHeight: Double): MapCenter {
+        if (!canvasHeight.isFinite() || canvasHeight <= DialGeometry.CHART_INSET_DP || !rangeKm.isFinite() || rangeKm <= 0) return observer
+        val scale = (canvasHeight - DialGeometry.CHART_INSET_DP) / rangeKm
+        return drag(observer, 0.0, -(canvasHeight / 2 - DialGeometry.ORIGIN_BOTTOM_DP), scale, heading)
+    }
+
     /** 描画される双眼鏡の中心が画面内にあるか。寸法はdp。 */
     fun isObserverVisible(observer: MapCenter, viewport: MapCenter, heading: Double,
         rangeKm: Double, canvasWidth: Double, canvasHeight: Double): Boolean {

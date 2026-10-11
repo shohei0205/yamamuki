@@ -72,6 +72,10 @@ interface MountainDao {
     )
     suspend fun mountainsIn(south: Double, west: Double, north: Double, east: Double): List<MountainEntity>
 
+    /** 保存しているすべての山。山の検索で使う(全国分でも 1.5 万件ほど)。 */
+    @Query("SELECT * FROM mountains")
+    suspend fun allMountains(): List<MountainEntity>
+
     @Query(
         "SELECT * FROM fetched_tiles WHERE tileLat BETWEEN :minLat AND :maxLat AND tileLon BETWEEN :minLon AND :maxLon"
     )
