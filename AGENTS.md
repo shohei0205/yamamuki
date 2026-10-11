@@ -33,7 +33,7 @@
   - 英単語や数字の前後の半角空白（「OpenStreetMap の」「7 日間」など）は消さない。
   - コミットの本文、README、AGENTS.md の箇条書きは地の文に書き換えない。PR テンプレートの見出しも変えない。
   - 画面の文言は、画面に収まる短さを保ち、ボタンや見出しの短い語を文に書き換えない。Android と iOS で同じ文言にそろえる。
-  - 付属の `yomiyasu_lint.py` の指摘のうち、半角空白（`unnatural_halfwidth_space`）と箇条書きの比率（`excess_list`）は直さない。
+  - 付属の `yomiyasu_lint.py` の指摘のうち、箇条書きの比率（`excess_list`）は直さない。
 
 ## コミットメッセージ
 
