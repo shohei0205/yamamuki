@@ -40,9 +40,11 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
     public var readerVersion: Int
     /// 取り込んだデータ本体(gz)の SHA-256。端末に残した gz がこの版のものかを確かめる。
     public var dataSha256: String?
+    /// 取り込んだときの manifest の SHA-256。端末に残した manifest がこの版のものかを確かめる。
+    public var manifestSha256: String?
 
     public init(version: String, sourceTimestamp: String, mountainCount: Int, manifestEtag: String?, installedAt: Date,
-                readerVersion: Int = 0, dataSha256: String? = nil) {
+                readerVersion: Int = 0, dataSha256: String? = nil, manifestSha256: String? = nil) {
         self.version = version
         self.sourceTimestamp = sourceTimestamp
         self.mountainCount = mountainCount
@@ -50,10 +52,11 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
         self.installedAt = installedAt
         self.readerVersion = readerVersion
         self.dataSha256 = dataSha256
+        self.manifestSha256 = manifestSha256
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, sourceTimestamp, mountainCount, manifestEtag, installedAt, readerVersion, dataSha256
+        case version, sourceTimestamp, mountainCount, manifestEtag, installedAt, readerVersion, dataSha256, manifestSha256
     }
 
     /// 読み込み処理の版と SHA-256 を記録していない、古い版のアプリが保存した記録も読む。
@@ -66,6 +69,7 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
         installedAt = try c.decode(Date.self, forKey: .installedAt)
         readerVersion = try c.decodeIfPresent(Int.self, forKey: .readerVersion) ?? 0
         dataSha256 = try c.decodeIfPresent(String.self, forKey: .dataSha256)
+        manifestSha256 = try c.decodeIfPresent(String.self, forKey: .manifestSha256)
     }
 }
 
@@ -359,7 +363,7 @@ public enum PeakData {
 
 /// 配信データの最新版を確かめ、新しければ取得・検証してキャッシュに取り込む。
 /// 取り込む前に失敗したら、キャッシュの内容はそのまま残る。
-/// 取り込んだデータ本体は `archive` に残し、読み込み処理の版が上がったら、そこから作り直す。
+/// 取り込んだ manifest とデータ本体は `archive` に組で残し、読み込み処理の版が上がったら、そこから作り直す。
 public struct PeakDataUpdater: Sendable {
     public enum Result: Equatable, Sendable {
         /// 取り込み済みの版が最新だった。
@@ -412,8 +416,8 @@ public struct PeakDataUpdater: Sendable {
         let mountains = try PeakData.parseMountains(data)
         guard !mountains.isEmpty else { throw PeakDataError("山データが空です") }
         try await cache.replaceTiles(PeakData.tiles(of: mountains), mountains: mountains, fetchedAt: clock())
-        // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の gz が残る。
-        await archive?.write(data)
+        // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の組が残る。
+        await archive?.write(manifest: body, data: data)
         return .updated(InstalledPeakData(
             version: manifest.version,
             sourceTimestamp: manifest.sourceTimestamp,
@@ -421,17 +425,22 @@ public struct PeakDataUpdater: Sendable {
             manifestEtag: etag,
             installedAt: clock(),
             readerVersion: PeakData.readerVersion,
-            dataSha256: manifest.sha256
+            dataSha256: manifest.sha256,
+            manifestSha256: PeakData.sha256Hex(body)
         ))
     }
 
-    /// `installed` が古い読み込み処理で作った保存データなら、端末に残した gz から通信せずに作り直す。
-    /// 作り直したら新しい記録を、作り直す必要が無いか、gz が無い・SHA-256 が合わない・読めないときは nil を返す。
+    /// `installed` が古い読み込み処理で作った保存データなら、端末に残した manifest と gz から通信せずに作り直す。
+    /// 作り直したら新しい記録を、作り直す必要が無いか、manifest か gz が無い・SHA-256 が合わない・読めないときは nil を返す。
     /// nil のときに作り直しが必要なら、次の `update` で取り直す。
     public func rebuild(installed: InstalledPeakData?) async throws -> InstalledPeakData? {
         guard var installed, installed.readerVersion < PeakData.readerVersion,
-              let data = await archive?.read(), let sha256 = installed.dataSha256, PeakData.sha256Hex(data) == sha256,
-              let mountains = try? PeakData.parseMountains(data), !mountains.isEmpty else { return nil }
+              let archived = await archive?.read(),
+              let manifestSha256 = installed.manifestSha256, PeakData.sha256Hex(archived.manifest) == manifestSha256,
+              let sha256 = installed.dataSha256, PeakData.sha256Hex(archived.data) == sha256,
+              let manifest = try? PeakData.parseManifest(archived.manifest),
+              (try? PeakData.verify(archived.data, against: manifest)) != nil,
+              let mountains = try? PeakData.parseMountains(archived.data), !mountains.isEmpty else { return nil }
         try await cache.replaceTiles(PeakData.tiles(of: mountains), mountains: mountains, fetchedAt: clock())
         installed.mountainCount = mountains.count
         installed.readerVersion = PeakData.readerVersion

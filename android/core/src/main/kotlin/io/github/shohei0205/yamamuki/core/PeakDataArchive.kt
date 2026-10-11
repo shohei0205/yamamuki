@@ -5,36 +5,61 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 
+/** 端末に残した、取り込んだときの manifest とデータ本体(gz)の組。 */
+class ArchivedPeakData(val manifest: ByteArray, val data: ByteArray)
+
 /**
- * 取り込んだ配信データの本体(gz)を、端末に 1 つだけ残しておく場所。
- * アプリが読まない項目も含めて残し、読み込み処理の版が上がったら、通信せずに保存データを作り直すのに使う。
+ * 取り込んだ配信データの manifest と本体(gz)を、端末に 1 組だけ残しておく場所。
+ * アプリが読まない項目(manifest の出典、地点の tags など)も含めて残し、読み込み処理の版が上がったら、
+ * 通信せずに保存データを作り直すのに使う。
  */
 interface PeakDataArchive {
-    /** 残した gz。無いか読めなければ null。 */
-    suspend fun read(): ByteArray?
+    /** 残した manifest と gz。どちらかが無いか読めなければ null。 */
+    suspend fun read(): ArchivedPeakData?
 
-    /** 前の gz を [data] で置き換える。失敗しても例外は投げない(次の作り直しで SHA-256 が合わず、取り直すだけ)。 */
-    suspend fun write(data: ByteArray)
+    /**
+     * 前の組を [manifest] と [data] で置き換える。失敗しても例外は投げない
+     * (次の作り直しで SHA-256 が合わず、取り直すだけ)。
+     */
+    suspend fun write(manifest: ByteArray, data: ByteArray)
 
-    /** 残した gz を消す。 */
+    /** 残した組を消す。 */
     suspend fun delete()
 }
 
-/** [file] に gz を残す。書くときは一時ファイルに書いてから名前を変え、書きかけのファイルを残さない。 */
-class FilePeakDataArchive(private val file: File) : PeakDataArchive {
-    override suspend fun read(): ByteArray? = withContext(Dispatchers.IO) {
+/**
+ * [directory] に manifest.json と osm-peaks.json.gz を残す。書くときは一時ファイルに書いてから名前を変え、
+ * 書きかけのファイルを残さない。2 つの置き換えの間で止まったときは組が食い違うが、
+ * 取り込み済みの記録の SHA-256 と合わなくなるので、作り直しには使われない。
+ */
+class FilePeakDataArchive(private val directory: File) : PeakDataArchive {
+    private val manifestFile = File(directory, MANIFEST_NAME)
+    private val dataFile = File(directory, DATA_NAME)
+
+    override suspend fun read(): ArchivedPeakData? = withContext(Dispatchers.IO) {
         try {
-            if (file.isFile) file.readBytes() else null
+            if (manifestFile.isFile && dataFile.isFile) ArchivedPeakData(manifestFile.readBytes(), dataFile.readBytes()) else null
         } catch (e: IOException) {
             null
         }
     }
 
-    override suspend fun write(data: ByteArray) = withContext(Dispatchers.IO) {
+    override suspend fun write(manifest: ByteArray, data: ByteArray) = withContext(Dispatchers.IO) {
+        directory.mkdirs()
+        replace(manifestFile, manifest)
+        replace(dataFile, data)
+    }
+
+    override suspend fun delete() = withContext(Dispatchers.IO) {
+        manifestFile.delete()
+        dataFile.delete()
+        Unit
+    }
+
+    private fun replace(file: File, bytes: ByteArray) {
         val temp = File(file.path + ".tmp")
         try {
-            file.parentFile?.mkdirs()
-            temp.writeBytes(data)
+            temp.writeBytes(bytes)
             if (!temp.renameTo(file)) {
                 file.delete()
                 if (!temp.renameTo(file)) temp.delete()
@@ -42,11 +67,10 @@ class FilePeakDataArchive(private val file: File) : PeakDataArchive {
         } catch (e: IOException) {
             temp.delete()
         }
-        Unit
     }
 
-    override suspend fun delete() = withContext(Dispatchers.IO) {
-        file.delete()
-        Unit
+    companion object {
+        const val MANIFEST_NAME = "manifest.json"
+        const val DATA_NAME = "osm-peaks.json.gz"
     }
 }

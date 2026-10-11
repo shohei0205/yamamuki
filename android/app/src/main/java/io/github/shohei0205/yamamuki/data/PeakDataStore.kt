@@ -8,13 +8,13 @@ import java.io.File
 
 /**
  * 取り込み済みの全国の山データの版を、端末内(SharedPreferences)に覚えておく。
- * 取り込んだデータ本体(gz)も 1 つだけ残す([archive])。山データの DB と同じく、自動バックアップには入れない。
+ * 取り込んだ manifest とデータ本体(gz)も 1 組だけ残す([archive])。山データの DB と同じく、自動バックアップには入れない。
  */
 class PeakDataStore(context: Context) {
     private val prefs = context.getSharedPreferences("peak_data", Context.MODE_PRIVATE)
-    private val archiveFile = File(context.noBackupFilesDir, "peak-data/osm-peaks.json.gz")
+    private val archiveDirectory = File(context.noBackupFilesDir, "peak-data")
 
-    val archive: PeakDataArchive = FilePeakDataArchive(archiveFile)
+    val archive: PeakDataArchive = FilePeakDataArchive(archiveDirectory)
 
     fun load(): InstalledPeakData? {
         val version = prefs.getString(KEY_VERSION, null) ?: return null
@@ -26,6 +26,7 @@ class PeakDataStore(context: Context) {
             installedAtMillis = prefs.getLong(KEY_INSTALLED_AT, 0),
             readerVersion = prefs.getInt(KEY_READER_VERSION, 0),
             dataSha256 = prefs.getString(KEY_DATA_SHA256, null),
+            manifestSha256 = prefs.getString(KEY_MANIFEST_SHA256, null),
         )
     }
 
@@ -38,13 +39,15 @@ class PeakDataStore(context: Context) {
             .putLong(KEY_INSTALLED_AT, data.installedAtMillis)
             .putInt(KEY_READER_VERSION, data.readerVersion)
             .putString(KEY_DATA_SHA256, data.dataSha256)
+            .putString(KEY_MANIFEST_SHA256, data.manifestSha256)
             .apply()
     }
 
-    /** 記録と、残した gz を消す。 */
+    /** 記録と、残した manifest と gz を消す。 */
     fun clear() {
         prefs.edit().clear().apply()
-        archiveFile.delete()
+        File(archiveDirectory, FilePeakDataArchive.MANIFEST_NAME).delete()
+        File(archiveDirectory, FilePeakDataArchive.DATA_NAME).delete()
     }
 
     private companion object {
@@ -55,5 +58,6 @@ class PeakDataStore(context: Context) {
         const val KEY_INSTALLED_AT = "installed_at"
         const val KEY_READER_VERSION = "reader_version"
         const val KEY_DATA_SHA256 = "data_sha256"
+        const val KEY_MANIFEST_SHA256 = "manifest_sha256"
     }
 }

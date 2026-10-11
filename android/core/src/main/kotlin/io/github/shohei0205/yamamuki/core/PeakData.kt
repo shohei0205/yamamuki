@@ -48,6 +48,8 @@ data class InstalledPeakData(
     val readerVersion: Int = 0,
     /** 取り込んだデータ本体(gz)の SHA-256。端末に残した gz がこの版のものかを確かめる。 */
     val dataSha256: String? = null,
+    /** 取り込んだときの manifest の SHA-256。端末に残した manifest がこの版のものかを確かめる。 */
+    val manifestSha256: String? = null,
 )
 
 /** 配信データが壊れている、または読めない形式だった。 */
@@ -304,7 +306,7 @@ object PeakData {
 /**
  * 配信データの最新版を確かめ、新しければ取得・検証してキャッシュに取り込む。
  * 取り込む前に失敗したら、キャッシュの内容はそのまま残る。
- * 取り込んだデータ本体は [archive] に残し、読み込み処理の版が上がったら、そこから作り直す。
+ * 取り込んだ manifest とデータ本体は [archive] に組で残し、読み込み処理の版が上がったら、そこから作り直す。
  */
 class PeakDataUpdater(
     private val source: PeakDataSource,
@@ -341,8 +343,9 @@ class PeakDataUpdater(
         val mountains = PeakData.parseMountains(data)
         if (mountains.isEmpty()) throw PeakDataException("山データが空です")
         cache.replaceTiles(PeakData.tilesOf(mountains), mountains, clock())
-        // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の gz が残る。
-        archive?.write(data)
+        // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の組が残る。
+        val manifestBytes = fetched.body.toByteArray(Charsets.UTF_8)
+        archive?.write(manifestBytes, data)
         return Result.Updated(
             InstalledPeakData(
                 version = manifest.version,
@@ -352,21 +355,25 @@ class PeakDataUpdater(
                 installedAtMillis = clock(),
                 readerVersion = PeakData.READER_VERSION,
                 dataSha256 = manifest.sha256,
+                manifestSha256 = PeakData.sha256Hex(manifestBytes),
             ),
         )
     }
 
     /**
-     * [installed] が古い読み込み処理で作った保存データなら、端末に残した gz から通信せずに作り直す。
-     * 作り直したら新しい記録を、作り直す必要が無いか、gz が無い・SHA-256 が合わない・読めないときは null を返す。
+     * [installed] が古い読み込み処理で作った保存データなら、端末に残した manifest と gz から通信せずに作り直す。
+     * 作り直したら新しい記録を、作り直す必要が無いか、manifest か gz が無い・SHA-256 が合わない・読めないときは null を返す。
      * null のときに作り直しが必要なら、次の [update] で取り直す。
      */
     suspend fun rebuild(installed: InstalledPeakData?): InstalledPeakData? {
         if (installed == null || installed.readerVersion >= PeakData.READER_VERSION) return null
-        val data = archive?.read() ?: return null
-        if (installed.dataSha256 == null || PeakData.sha256Hex(data) != installed.dataSha256) return null
+        val archived = archive?.read() ?: return null
+        if (installed.manifestSha256 == null || PeakData.sha256Hex(archived.manifest) != installed.manifestSha256) return null
+        if (installed.dataSha256 == null || PeakData.sha256Hex(archived.data) != installed.dataSha256) return null
         val mountains = try {
-            PeakData.parseMountains(data)
+            val manifest = PeakData.parseManifest(archived.manifest.toString(Charsets.UTF_8))
+            PeakData.verify(archived.data, manifest)
+            PeakData.parseMountains(archived.data)
         } catch (e: PeakDataException) {
             return null
         }
