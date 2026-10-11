@@ -455,8 +455,12 @@ private struct ViewpointLabel: View {
         let heading = headingDeg.map { Strings.format("dial_heading", readoutParts(headingDeg: $0, altitudeM: nil).direction) }
             ?? Strings.text("dial_heading_loading")
         VStack(alignment: .leading, spacing: 2) {
-            (Text(mountain.name).font(.system(size: 18 * textScale, weight: .bold)).foregroundColor(tapeInk)
-                + Text("  " + elevationListLabel(mountain.elevationM)).font(.system(size: 13 * textScale, weight: .bold)).foregroundColor(tapeSubtle))
+            HStack(spacing: 6) {
+                // 方位盤と同じ標高別の山アイコンを、山名の文字と同じ高さで添える。
+                PeakIconInline(mountain: mountain, height: 18 * textScale)
+                (Text(mountain.name).font(.system(size: 18 * textScale, weight: .bold)).foregroundColor(tapeInk)
+                    + Text("  " + elevationListLabel(mountain.elevationM)).font(.system(size: 13 * textScale, weight: .bold)).foregroundColor(tapeSubtle))
+            }
             Text(verbatim: "\(lat)  \(lon)").font(.system(size: 11 * textScale)).foregroundColor(tapeSubtle)
             Text(heading).font(.system(size: 14 * textScale, weight: .bold)).foregroundColor(tapeInk)
         }

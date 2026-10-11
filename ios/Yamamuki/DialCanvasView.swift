@@ -941,6 +941,24 @@ private enum PeakIcon: CaseIterable {
     }
 }
 
+/// mountain の標高の区分の山アイコンを、高さ height に縮めて描く。札などで山名の左に添える。
+/// 方位盤と同じ形と色にし、影は付けない。
+struct PeakIconInline: View {
+    let mountain: Mountain
+    let height: CGFloat
+
+    var body: some View {
+        let icon = PeakIcon.of(mountain.elevationClass)
+        let ratio = height / icon.height
+        Canvas { context, _ in
+            var ctx = context
+            ctx.scaleBy(x: ratio, y: ratio)
+            drawPeakIconShape(ctx, at: CGPoint(x: icon.halfWidth, y: icon.height), icon: icon, shadow: false)
+        }
+        .frame(width: 2 * icon.halfWidth * ratio, height: height)
+    }
+}
+
 /// [points] を順に結んで閉じた多角形。
 private func polygon(_ points: [CGPoint]) -> Path {
     var path = Path()
