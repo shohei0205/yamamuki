@@ -1618,17 +1618,6 @@
           }
         }
       }
-    },
-    "viewpoint_tag": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "検索位置モード"
-          }
-        }
-      }
     }
   },
   "version": "1.0"

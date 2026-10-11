@@ -683,15 +683,6 @@ private fun ViewpointLabel(mountain: Mountain, headingDeg: Double?, textScale: F
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
-            stringResource(R.string.viewpoint_tag),
-            color = Color.White,
-            fontSize = 11.sp * textScale,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .background(SEARCH_BUTTON_ICON_COLOR, RoundedCornerShape(50))
-                .padding(horizontal = 8.dp, vertical = 1.dp),
-        )
-        Text(
             buildAnnotatedString {
                 append(mountain.name)
                 withStyle(SpanStyle(color = TapeSubtle, fontSize = 13.sp * textScale)) { append("  $elevation") }

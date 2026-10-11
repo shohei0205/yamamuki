@@ -164,5 +164,4 @@
     <string name="search_no_data">山データがありません。設定の「山データを更新」で取得すると検索できます。</string>
     <string name="search_no_results">見つかりませんでした</string>
     <string name="search_result_direction">%1$s %2$s</string>
-    <string name="viewpoint_tag">検索位置モード</string>
 </resources>
