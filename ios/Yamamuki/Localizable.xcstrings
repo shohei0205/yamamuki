@@ -397,6 +397,17 @@
         }
       }
     },
+    "detail_distance_from_summit": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山頂からの距離"
+          }
+        }
+      }
+    },
     "detail_elevation": {
       "extractionState": "manual",
       "localizations": {
@@ -844,6 +855,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "西南西"
+          }
+        }
+      }
+    },
+    "elevation_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標高不明"
           }
         }
       }
@@ -1593,6 +1615,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "バージョン %1$@"
+          }
+        }
+      }
+    },
+    "viewpoint_tag": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索位置モード"
           }
         }
       }

@@ -9,6 +9,7 @@
     <string name="common_delete">削除</string>
     <string name="common_loading">読み込み中…</string>
     <string name="common_unknown">不明</string>
+    <string name="elevation_unknown">標高不明</string>
     <string name="settings_title">設定</string>
     <string name="osm_attribution" translatable="false">© OpenStreetMap contributors</string>
 
@@ -60,6 +61,7 @@
     <string name="detail_elevation">標高</string>
     <string name="detail_coordinate">緯度経度</string>
     <string name="detail_distance">現在地からの距離</string>
+    <string name="detail_distance_from_summit">山頂からの距離</string>
     <string name="detail_latitude_north">北緯 %1$s</string>
     <string name="detail_latitude_south">南緯 %1$s</string>
     <string name="detail_longitude_east">東経 %1$s</string>
@@ -162,4 +164,5 @@
     <string name="search_no_data">山データがありません。設定の「山データを更新」で取得すると検索できます。</string>
     <string name="search_no_results">見つかりませんでした</string>
     <string name="search_result_direction">%1$s %2$s</string>
+    <string name="viewpoint_tag">検索位置モード</string>
 </resources>

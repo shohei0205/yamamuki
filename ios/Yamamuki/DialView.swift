@@ -78,10 +78,17 @@ struct DialView: View {
 
                 // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。どちらもヘッダーの下に置く。
                 VStack {
-                    HStack {
+                    HStack(alignment: .top) {
                         if manualChrome {
-                            headingLabel
-                                .transition(.move(edge: .leading).combined(with: .opacity))
+                            // 検索位置モードでは、手動位置モードと見分けられるよう、向きの代わりに選んだ山の札を出す。
+                            Group {
+                                if let viewpoint = model.viewpoint {
+                                    ViewpointLabel(mountain: viewpoint, headingDeg: model.lockedHeading, textScale: model.settings.textScale)
+                                } else {
+                                    headingLabel
+                                }
+                            }
+                            .transition(.move(edge: .leading).combined(with: .opacity))
                         }
                         Spacer()
                         if manualChrome {
@@ -179,10 +186,10 @@ struct DialView: View {
             AreaDownloadView(model: model, download: model.areaDownload).fetchErrorAlert(model)
         }
         .sheet(item: selectedMountain) { nearby in
-            MountainDetailView(nearby: nearby).fetchErrorAlert(model)
+            MountainDetailView(nearby: nearby, viewpoint: model.viewpoint).fetchErrorAlert(model)
         }
         .sheet(isPresented: showGroup) {
-            PeakGroupView(peaks: group).fetchErrorAlert(model)
+            PeakGroupView(peaks: group, viewpoint: model.viewpoint).fetchErrorAlert(model)
         }
         // 開いている間も歩けば値が更新される。
         .sheet(isPresented: $showObserver) {
@@ -404,9 +411,10 @@ private struct PermissionRequest: View {
     }
 }
 
-/// タップした山の詳細。
+/// タップした山の詳細。検索位置モード(viewpoint が非 nil)では、距離は選んだ山頂から測ったもの。
 private struct MountainDetailView: View {
     let nearby: NearbyMountain
+    let viewpoint: Mountain?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -419,7 +427,14 @@ private struct MountainDetailView: View {
             }
             DetailRow(label: Strings.text("detail_elevation"), value: elevationLabel(m.elevationM))
             DetailRow(label: Strings.text("detail_coordinate"), value: coordinateLabel(latitude: m.latitude, longitude: m.longitude))
-            DetailRow(label: Strings.text("detail_distance"), value: distanceText(nearby.distanceKm))
+            if let viewpoint {
+                // 選んだ山頂そのものは、山頂からの距離が 0 なので出さない。
+                if viewpoint.osmId != m.osmId {
+                    DetailRow(label: Strings.text("detail_distance_from_summit"), value: distanceText(nearby.distanceKm))
+                }
+            } else {
+                DetailRow(label: Strings.text("detail_distance"), value: distanceText(nearby.distanceKm))
+            }
             Spacer()
         }
         .padding(24)
@@ -427,9 +442,43 @@ private struct MountainDetailView: View {
     }
 }
 
+/// 検索位置モードの左上に出す、選んだ山の札。山名と標高、緯度経度、地図の上の方位を出す。
+/// そのまま画面を撮っても、どの山から見た方位盤かが分かるようにする。
+private struct ViewpointLabel: View {
+    let mountain: Mountain
+    let headingDeg: Double?
+    let textScale: Double
+
+    var body: some View {
+        let lat = Strings.format(mountain.latitude >= 0 ? "detail_latitude_north" : "detail_latitude_south", degreeText(mountain.latitude))
+        let lon = Strings.format(mountain.longitude >= 0 ? "detail_longitude_east" : "detail_longitude_west", degreeText(mountain.longitude))
+        let heading = headingDeg.map { Strings.format("dial_heading", readoutParts(headingDeg: $0, altitudeM: nil).direction) }
+            ?? Strings.text("dial_heading_loading")
+        VStack(alignment: .leading, spacing: 2) {
+            Text(Strings.text("viewpoint_tag"))
+                .font(.system(size: 11 * textScale, weight: .bold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(searchButtonIconColor))
+            (Text(mountain.name).font(.system(size: 18 * textScale, weight: .bold)).foregroundColor(tapeInk)
+                + Text("  " + elevationListLabel(mountain.elevationM)).font(.system(size: 13 * textScale, weight: .bold)).foregroundColor(tapeSubtle))
+            Text(verbatim: "\(lat)  \(lon)").font(.system(size: 11 * textScale)).foregroundColor(tapeSubtle)
+            Text(heading).font(.system(size: 14 * textScale, weight: .bold)).foregroundColor(tapeInk)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 260, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.92)).shadow(color: .black.opacity(0.2), radius: 4, y: 2))
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 /// 重なる山をまとめた代表の山をタップしたときの一覧。山を選ぶと、その山の詳細を開く。
 private struct PeakGroupView: View {
     let peaks: [NearbyMountain]
+    /// 検索位置モードで選んだ山。詳細の距離の見出しを変えるのに使う。
+    let viewpoint: Mountain?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -437,11 +486,11 @@ private struct PeakGroupView: View {
         NavigationView {
             List(peaks) { nearby in
                 NavigationLink {
-                    MountainDetailView(nearby: nearby)
+                    MountainDetailView(nearby: nearby, viewpoint: viewpoint)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(nearby.mountain.name).font(.body)
-                        Text(Strings.format("detail_group_item", elevationLabel(nearby.mountain.elevationM), distanceText(nearby.distanceKm)))
+                        Text(Strings.format("detail_group_item", elevationListLabel(nearby.mountain.elevationM), distanceText(nearby.distanceKm)))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }

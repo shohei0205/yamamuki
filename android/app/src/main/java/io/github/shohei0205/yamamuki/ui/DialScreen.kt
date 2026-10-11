@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -57,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -88,6 +90,7 @@ import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.Heading
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
+import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.degreeText
 import io.github.shohei0205.yamamuki.core.distanceText
@@ -317,11 +320,17 @@ fun DialScreen(
             exit = slideOutHorizontally(tween(MODE_ANIMATION_MS)) { -it } + fadeOut(tween(MODE_ANIMATION_MS)),
             modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = DialGeometry.HEADER_HEIGHT_DP.dp + 8.dp),
         ) {
-            HeadingLabel(
-                headingDeg = compassHeading ?: heading,
-                altitudeM = location?.mslAltitudeM,
-                textScale = state.settings.textScale,
-            )
+            // 検索位置モードでは、手動位置モードと見分けられるよう、向きの代わりに選んだ山の札を出す。
+            val viewpoint = state.viewpoint
+            if (viewpoint != null) {
+                ViewpointLabel(mountain = viewpoint, headingDeg = heading, textScale = state.settings.textScale)
+            } else {
+                HeadingLabel(
+                    headingDeg = compassHeading ?: heading,
+                    altitudeM = location?.mslAltitudeM,
+                    textScale = state.settings.textScale,
+                )
+            }
         }
         AnimatedVisibility(
             visible = manualChrome,
@@ -458,7 +467,7 @@ fun DialScreen(
 
     val overlay = showSettings || showDownload || showSearch
     if (selected != null && !overlay) {
-        MountainDetailDialog(selected, onDismiss = { selectedId = null })
+        MountainDetailDialog(selected, viewpoint = state.viewpoint, onDismiss = { selectedId = null })
     } else if (group != null && !overlay) {
         PeakGroupDialog(
             group,
@@ -501,9 +510,9 @@ private fun FetchErrorDialog(message: String, onRetry: () -> Unit, onDismiss: ()
     )
 }
 
-/** タップした山の詳細。 */
+/** タップした山の詳細。検索位置モード([viewpoint] が非 null)では、距離は選んだ山頂から測ったもの。 */
 @Composable
-private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) {
+private fun MountainDetailDialog(nearby: NearbyMountain, viewpoint: Mountain?, onDismiss: () -> Unit) {
     val m = nearby.mountain
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -513,7 +522,12 @@ private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DetailRow(stringResource(R.string.detail_elevation), elevationLabel(m.elevationM))
                 DetailRow(stringResource(R.string.detail_coordinate), coordinateLabel(m.latitude, m.longitude))
-                DetailRow(stringResource(R.string.detail_distance), distanceText(nearby.distanceKm))
+                when {
+                    viewpoint == null -> DetailRow(stringResource(R.string.detail_distance), distanceText(nearby.distanceKm))
+                    // 選んだ山頂そのものは、山頂からの距離が 0 なので出さない。
+                    viewpoint.osmId != m.osmId ->
+                        DetailRow(stringResource(R.string.detail_distance_from_summit), distanceText(nearby.distanceKm))
+                }
             }
         },
     )
@@ -539,7 +553,7 @@ private fun PeakGroupDialog(peaks: List<NearbyMountain>, onSelect: (NearbyMounta
                         Text(
                             stringResource(
                                 R.string.detail_group_item,
-                                elevationLabel(nearby.mountain.elevationM),
+                                elevationListLabel(nearby.mountain.elevationM),
                                 distanceText(nearby.distanceKm),
                             ),
                             style = MaterialTheme.typography.labelMedium,
@@ -571,6 +585,11 @@ private fun ObserverDetailDialog(location: GeoPoint, onDismiss: () -> Unit) {
 @Composable
 internal fun elevationLabel(elevationM: Double?): String =
     elevationText(elevationM) ?: stringResource(R.string.common_unknown)
+
+/** 一覧や札に出す標高。「1,212 m」、不明なら「標高不明」(見出しが無いので、何が不明かを書く)。 */
+@Composable
+internal fun elevationListLabel(elevationM: Double?): String =
+    elevationText(elevationM) ?: stringResource(R.string.elevation_unknown)
 
 /** 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。山と現在地で共通に使う。 */
 @Composable
@@ -634,6 +653,55 @@ private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Flo
                 .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
                 .padding(horizontal = 12.dp, vertical = 3.dp),
         )
+    }
+}
+
+/**
+ * 検索位置モードの左上に出す、選んだ山の札。山名と標高、緯度経度、地図の上の方位を出す。
+ * そのまま画面を撮っても、どの山から見た方位盤かが分かるようにする。
+ */
+@Composable
+private fun ViewpointLabel(mountain: Mountain, headingDeg: Double?, textScale: Float) {
+    val texts = rememberDialTexts()
+    val lat = stringResource(
+        if (mountain.latitude >= 0) R.string.detail_latitude_north else R.string.detail_latitude_south,
+        degreeText(mountain.latitude),
+    )
+    val lon = stringResource(
+        if (mountain.longitude >= 0) R.string.detail_longitude_east else R.string.detail_longitude_west,
+        degreeText(mountain.longitude),
+    )
+    val heading = headingDeg?.let { stringResource(R.string.dial_heading, texts.readoutParts(it, null).first) }
+        ?: stringResource(R.string.dial_heading_loading)
+    val elevation = elevationListLabel(mountain.elevationM)
+    Column(
+        Modifier
+            .widthIn(max = 260.dp)
+            .shadow(4.dp, RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            stringResource(R.string.viewpoint_tag),
+            color = Color.White,
+            fontSize = 11.sp * textScale,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .background(SEARCH_BUTTON_ICON_COLOR, RoundedCornerShape(50))
+                .padding(horizontal = 8.dp, vertical = 1.dp),
+        )
+        Text(
+            buildAnnotatedString {
+                append(mountain.name)
+                withStyle(SpanStyle(color = TapeSubtle, fontSize = 13.sp * textScale)) { append("  $elevation") }
+            },
+            color = TapeInk,
+            fontSize = 18.sp * textScale,
+            fontWeight = FontWeight.Bold,
+        )
+        Text("$lat  $lon", color = TapeSubtle, fontSize = 11.sp * textScale)
+        Text(heading, color = TapeInk, fontSize = 14.sp * textScale, fontWeight = FontWeight.Bold)
     }
 }
 

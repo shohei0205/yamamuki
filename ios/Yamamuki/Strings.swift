@@ -38,6 +38,11 @@ func elevationLabel(_ elevationM: Double?) -> String {
     elevationText(elevationM) ?? Strings.text("common_unknown")
 }
 
+/// 一覧や札に出す標高。「1,212 m」、不明なら「標高不明」(見出しが無いので、何が不明かを書く)。
+func elevationListLabel(_ elevationM: Double?) -> String {
+    elevationText(elevationM) ?? Strings.text("elevation_unknown")
+}
+
 /// 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。山と現在地で共通に使う。
 func coordinateLabel(latitude: Double, longitude: Double) -> String {
     let lat = Strings.format(latitude >= 0 ? "detail_latitude_north" : "detail_latitude_south", degreeText(latitude))

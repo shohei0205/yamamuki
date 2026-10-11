@@ -108,7 +108,7 @@ private fun SearchNote(text: String) {
 private fun SearchResultRow(mountain: Mountain, from: GeoPoint?, onClick: () -> Unit) {
     val texts = rememberDialTexts()
     val seen = from?.let { mountain.seenFrom(it.latitude, it.longitude) }
-    val elevation = elevationLabel(mountain.elevationM)
+    val elevation = elevationListLabel(mountain.elevationM)
     val detail = seen?.let {
         stringResource(
             R.string.detail_group_item,

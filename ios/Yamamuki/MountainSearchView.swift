@@ -69,7 +69,7 @@ struct MountainSearchView: View {
 
     /// 検索結果の 1 行。山名とよみがな、標高と現在地からの方角・距離。
     private func row(_ mountain: Mountain) -> some View {
-        let elevation = elevationLabel(mountain.elevationM)
+        let elevation = elevationListLabel(mountain.elevationM)
         let detail = model.gpsLocation.map { here -> String in
             let seen = mountain.seen(fromLatitude: here.latitude, longitude: here.longitude)
             return Strings.format("detail_group_item", elevation,
