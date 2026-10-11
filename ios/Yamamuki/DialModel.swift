@@ -318,8 +318,10 @@ final class DialModel: ObservableObject {
         fetchTask?.cancel()
         let keep = areaDownload.savedTiles
         Task { @MainActor in
-            await cache.clear(keeping: keep)
+            // 記録を先に消す。消している途中でアプリが終わっても、記録だけが残って「最新です」となり、
+            // 取り直せなくなることがないように。
             peakDataStore.clear()
+            await cache.clear(keeping: keep)
             peakData = nil
             peakDataNotice = nil
             peaks = []
@@ -419,7 +421,9 @@ final class DialModel: ObservableObject {
             guard let self else { return }
             defer { peakDataUpdating = false }
             do {
-                let result = try await peakDataUpdater.update(installed: installed)
+                // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
+                let hasMountains = await cache.info().mountainCount > 0
+                let result = try await peakDataUpdater.update(installed: hasMountains ? installed : nil)
                 peakDataStore.save(result.installed)
                 peakData = result.installed
                 if case .updated = result {
