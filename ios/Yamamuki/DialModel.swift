@@ -98,7 +98,8 @@ final class DialModel: ObservableObject {
         repository = MountainRepository(remote: OverpassClient(userAgent: userAgent), cache: cache)
         peakDataUpdater = PeakDataUpdater(
             source: PeakData.source(Self.peakDataChannel, userAgent: userAgent),
-            cache: cache
+            cache: cache,
+            archive: peakDataStore.archive
         )
         peakData = peakDataStore.load()
         areaDownload = AreaDownloadModel(repository: repository, cache: cache)
@@ -119,6 +120,7 @@ final class DialModel: ObservableObject {
             authorization = status
             if hasLocationPermission { locationService.start() }
         }
+        rebuildPeakData()
     }
 
     /// 画面が前面に出たとき。初回は「山データを取得しますか」に答えてから位置情報の許可を求める(ダイアログを重ねない)。
@@ -377,6 +379,26 @@ final class DialModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 logger.error("山データの読み込みに失敗: \(String(describing: error), privacy: .public)")
                 loading = false
+            }
+        }
+    }
+
+    /// アプリの更新で山データの読み込み処理が新しくなっていたら、残した gz から通信せずに保存データを作り直す。
+    /// 作り直せなければ何もしない(次に更新を確かめたときに取り直す)。
+    private func rebuildPeakData() {
+        guard let installed = peakData, installed.readerVersion < PeakData.readerVersion, !peakDataUpdating else { return }
+        peakDataUpdating = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { peakDataUpdating = false }
+            do {
+                guard let rebuilt = try await peakDataUpdater.rebuild(installed: installed) else { return }
+                peakDataStore.save(rebuilt)
+                peakData = rebuilt
+                reloadFromCache()
+                refreshCacheInfo()
+            } catch {
+                logger.warning("山データの作り直しに失敗: \(String(describing: error), privacy: .public)")
             }
         }
     }

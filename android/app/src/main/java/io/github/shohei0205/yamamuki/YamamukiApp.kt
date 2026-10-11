@@ -59,7 +59,7 @@ class YamamukiApp : Application() {
 
     /** yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。どこから読むかは [peakDataChannel]。 */
     val peakDataUpdater: PeakDataUpdater by lazy {
-        PeakDataUpdater(PeakData.source(peakDataChannel, http, userAgent = USER_AGENT), cache)
+        PeakDataUpdater(PeakData.source(peakDataChannel, http, userAgent = USER_AGENT), cache, peakDataStore.archive)
     }
 
     private companion object {
