@@ -44,6 +44,18 @@ private final class MemoryCache: MountainCache, @unchecked Sendable {
     }
 }
 
+private final class MemoryArchive: PeakDataArchive, @unchecked Sendable {
+    var archived: ArchivedPeakData?
+
+    init(_ archived: ArchivedPeakData? = nil) {
+        self.archived = archived
+    }
+
+    func read() async -> ArchivedPeakData? { archived }
+    func write(manifest: Data, data: Data) async { archived = ArchivedPeakData(manifest: manifest, data: data) }
+    func delete() async { archived = nil }
+}
+
 final class PeakDataTests: XCTestCase {
     /// yamamuki-data の peaks/README.md の例と同じ形の 2 件(2 件目は標高もふりがなも無い)を、
     /// Python の gzip.compress(mtime=0) で圧縮したもの。Swift には gzip の圧縮が無いので、出来上がりを埋め込む。
@@ -227,5 +239,121 @@ final class PeakDataTests: XCTestCase {
 
         guard case .updated = result else { return XCTFail("新しい版は取り込むはず") }
         XCTAssertNil(cache.mountains[99], "配信範囲の古い山はキャッシュから消す")
+    }
+
+    /// 取り込んだときの manifest と gz の組。
+    private func kept() -> MemoryArchive { MemoryArchive(ArchivedPeakData(manifest: manifest(), data: gzip)) }
+
+    private func sha256(_ data: Data) -> String { PeakData.sha256Hex(data) }
+
+    func testKeepsImportedManifestAndGzAndRecordsReaderVersion() async throws {
+        let archive = MemoryArchive()
+        let installed = try await PeakDataUpdater(source: FakeSource(manifest: manifest(), data: gzip), cache: MemoryCache(), archive: archive)
+            .update(installed: nil).installed
+        XCTAssertEqual(archive.archived?.data, gzip, "読まない項目も含めて、受け取った gz をそのまま残す")
+        XCTAssertEqual(archive.archived?.manifest, manifest(), "manifest も組で残す")
+        XCTAssertEqual(installed.readerVersion, PeakData.readerVersion)
+        XCTAssertEqual(installed.dataSha256, gzipSha256)
+        XCTAssertEqual(installed.manifestSha256, sha256(manifest()))
+    }
+
+    func testBrokenDataKeepsPreviousGz() async {
+        let previous = ArchivedPeakData(manifest: Data([9]), data: Data([1, 2, 3]))
+        let archive = MemoryArchive(previous)
+        let source = FakeSource(manifest: manifest(), data: gzip.dropLast())
+        _ = try? await PeakDataUpdater(source: source, cache: MemoryCache(), archive: archive).update(installed: nil)
+        XCTAssertEqual(archive.archived, previous)
+    }
+
+    /// 古い読み込み処理で manifest と gz を取り込んだときの記録。
+    private func oldInstalled(sha256 dataSha: String?? = .none, manifestSha256: String?? = .none) -> InstalledPeakData {
+        InstalledPeakData(version: "v1", sourceTimestamp: "", mountainCount: 1, manifestEtag: "\"e1\"",
+                          installedAt: Date(timeIntervalSince1970: 0), readerVersion: PeakData.readerVersion - 1,
+                          dataSha256: dataSha ?? gzipSha256, manifestSha256: manifestSha256 ?? sha256(manifest()))
+    }
+
+    func testRebuildsFromKeptGzWithoutNetwork() async throws {
+        let source = FakeSource(manifest: manifest(), data: gzip)
+        let cache = MemoryCache()
+        let now = Date(timeIntervalSince1970: 2_000)
+        let updater = PeakDataUpdater(source: source, cache: cache, archive: kept(), clock: { now })
+
+        let rebuilt = try await updater.rebuild(installed: oldInstalled())
+        var expected = oldInstalled()
+        expected.mountainCount = 2
+        expected.readerVersion = PeakData.readerVersion
+        XCTAssertEqual(rebuilt, expected)
+        XCTAssertEqual(Set(cache.mountains.keys), [3_403_990_450, 12])
+        XCTAssertEqual(cache.tiles[Tile.of(40.0, 141.0)], now)
+        XCTAssertTrue(source.sentEtags.isEmpty && source.dataCalls == 0, "通信しない")
+
+        // 作り直したあとは、同じ版なら取り直さない。
+        let again = try await updater.rebuild(installed: rebuilt)
+        XCTAssertNil(again)
+        guard case .upToDate = try await updater.update(installed: rebuilt) else { return XCTFail("最新のはず") }
+        XCTAssertEqual(source.dataCalls, 0)
+    }
+
+    func testRefetchesSameVersionWhenKeptGzIsMissing() async throws {
+        // gz か manifest が無い、SHA-256 が合わない、組が食い違う(gz が manifest の SHA-256 と合わない)。
+        let other = Data([1, 2, 3])
+        let zero = String(repeating: "0", count: 64)
+        let cases: [(MemoryArchive, InstalledPeakData)] = [
+            (MemoryArchive(), oldInstalled()),
+            (kept(), oldInstalled(sha256: zero)),
+            (kept(), oldInstalled(sha256: .some(nil))),
+            (kept(), oldInstalled(manifestSha256: zero)),
+            (kept(), oldInstalled(manifestSha256: .some(nil))),
+            (MemoryArchive(ArchivedPeakData(manifest: manifest(), data: other)), oldInstalled(sha256: sha256(other))),
+        ]
+        for (archive, installed) in cases {
+            let source = FakeSource(manifest: manifest(), data: gzip)
+            let cache = MemoryCache()
+            let updater = PeakDataUpdater(source: source, cache: cache, archive: archive)
+            let rebuilt = try await updater.rebuild(installed: installed)
+            XCTAssertNil(rebuilt)
+            XCTAssertTrue(cache.mountains.isEmpty)
+            // 作り直せなかったら、データの版が同じでも ETag を送らずに取り直す。
+            guard case .updated(let result) = try await updater.update(installed: installed) else { return XCTFail("取り直すはず") }
+            XCTAssertEqual(source.sentEtags, [nil])
+            XCTAssertEqual(source.dataCalls, 1)
+            XCTAssertEqual(result.readerVersion, PeakData.readerVersion)
+        }
+    }
+
+    func testFileArchiveReplacesAndDeletesGz() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let folder = dir.appendingPathComponent("data", isDirectory: true)
+        let archive = FilePeakDataArchive(directory: folder)
+        let empty = await archive.read()
+        XCTAssertNil(empty)
+        await archive.write(manifest: Data([1]), data: Data([1, 2]))
+        await archive.write(manifest: manifest(), data: gzip)
+        let kept = await archive.read()
+        XCTAssertEqual(kept, ArchivedPeakData(manifest: manifest(), data: gzip), "前の組は置き換える")
+        let files = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        XCTAssertEqual(Set(files), [FilePeakDataArchive.manifestName, FilePeakDataArchive.dataName], "一時ファイルを残さない")
+        // 片方だけでは読まない。
+        try FileManager.default.removeItem(at: folder.appendingPathComponent(FilePeakDataArchive.manifestName))
+        let half = await archive.read()
+        XCTAssertNil(half)
+        await archive.delete()
+        let deleted = await archive.read()
+        XCTAssertNil(deleted)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path), [])
+    }
+
+    func testDecodesInstalledRecordWithoutReaderVersion() throws {
+        // 読み込み処理の版を記録していない、古い版のアプリが保存した記録。
+        let old = InstalledPeakData(version: "v1", sourceTimestamp: "", mountainCount: 1, manifestEtag: nil,
+                                    installedAt: Date(timeIntervalSince1970: 0))
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as! [String: Any]
+        json.removeValue(forKey: "readerVersion")
+        json.removeValue(forKey: "dataSha256")
+        json.removeValue(forKey: "manifestSha256")
+        let decoded = try JSONDecoder().decode(InstalledPeakData.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(decoded, old)
+        XCTAssertEqual(decoded.readerVersion, 0)
     }
 }

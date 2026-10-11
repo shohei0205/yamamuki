@@ -108,6 +108,31 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { connectivityUpdates(application).collect(::onConnectivity) }
         // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
         viewModelScope.launch { app.cacheChanges.collect { reloadFromCache() } }
+        rebuildPeakData()
+    }
+
+    /**
+     * アプリの更新で山データの読み込み処理が新しくなっていたら、残した gz から通信せずに保存データを作り直す。
+     * 作り直せなければ何もしない(次に更新を確かめたときに取り直す)。
+     */
+    private fun rebuildPeakData() {
+        if (app.peakDataStore.load().let { it == null || it.readerVersion >= PeakData.READER_VERSION }) return
+        viewModelScope.launch {
+            _state.update { it.copy(peakDataUpdating = true) }
+            try {
+                val rebuilt = app.peakDataUpdater.rebuild(app.peakDataStore.load()) ?: return@launch
+                app.peakDataStore.save(rebuilt)
+                _state.update { it.copy(peakData = rebuilt) }
+                reloadFromCache()
+                refreshCacheInfo()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "山データの作り直しに失敗\n${e.stackTraceToString()}")
+            } finally {
+                _state.update { it.copy(peakDataUpdating = false) }
+            }
+        }
     }
 
     private fun onConnectivity(connected: Boolean) {
