@@ -323,7 +323,7 @@ fun DialScreen(
             // 検索位置モードでは、手動位置モードと見分けられるよう、向きの代わりに選んだ山の札を出す。
             val viewpoint = state.viewpoint
             if (viewpoint != null) {
-                ViewpointLabel(mountain = viewpoint, headingDeg = heading, textScale = state.settings.textScale)
+                ViewpointLabel(mountain = viewpoint, headingDeg = compassHeading ?: heading, textScale = state.settings.textScale)
             } else {
                 HeadingLabel(
                     headingDeg = compassHeading ?: heading,
@@ -657,7 +657,8 @@ private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Flo
 }
 
 /**
- * 検索位置モードの左上に出す、選んだ山の札。山名と標高、緯度経度、地図の上の方位を出す。
+ * 検索位置モードの左上に出す、選んだ山の札。山名と標高、緯度経度、端末の向きを出す。
+ * 向きは手動位置モードの左上の表示と同じく、端末が向いている方位にする。
  * そのまま画面を撮っても、どの山から見た方位盤かが分かるようにする。
  */
 @Composable
@@ -678,7 +679,8 @@ private fun ViewpointLabel(mountain: Mountain, headingDeg: Double?, textScale: F
         Modifier
             .widthIn(max = 260.dp)
             .shadow(4.dp, RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(16.dp))
+            // 半透明にすると下の影が透けて文字のまわりに四角い跡が出るので、不透明にする。
+            .background(Color.White, RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

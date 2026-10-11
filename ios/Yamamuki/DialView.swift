@@ -83,7 +83,7 @@ struct DialView: View {
                             // 検索位置モードでは、手動位置モードと見分けられるよう、向きの代わりに選んだ山の札を出す。
                             Group {
                                 if let viewpoint = model.viewpoint {
-                                    ViewpointLabel(mountain: viewpoint, headingDeg: model.lockedHeading, textScale: model.settings.textScale)
+                                    ViewpointLabel(mountain: viewpoint, headingDeg: model.heading, textScale: model.settings.textScale)
                                 } else {
                                     headingLabel
                                 }
@@ -442,7 +442,8 @@ private struct MountainDetailView: View {
     }
 }
 
-/// 検索位置モードの左上に出す、選んだ山の札。山名と標高、緯度経度、地図の上の方位を出す。
+/// 検索位置モードの左上に出す、選んだ山の札。山名と標高、緯度経度、端末の向きを出す。
+/// 向きは手動位置モードの左上の表示と同じく、端末が向いている方位にする。
 /// そのまま画面を撮っても、どの山から見た方位盤かが分かるようにする。
 private struct ViewpointLabel: View {
     let mountain: Mountain
@@ -463,7 +464,7 @@ private struct ViewpointLabel: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: 260, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.92)).shadow(color: .black.opacity(0.2), radius: 4, y: 2))
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white).shadow(color: .black.opacity(0.2), radius: 4, y: 2))
         .fixedSize(horizontal: false, vertical: true)
     }
 }
