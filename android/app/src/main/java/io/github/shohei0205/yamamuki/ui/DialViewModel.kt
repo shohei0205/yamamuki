@@ -297,8 +297,10 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun clearCache() {
         fetchJob?.cancel()
         viewModelScope.launch {
-            cacheManager.clear(keep = app.savedAreas.tiles())
+            // 記録を先に消す。消している途中でアプリが終わっても、記録だけが残って「最新です」となり、
+            // 取り直せなくなることがないように。
             app.peakDataStore.clear()
+            cacheManager.clear(keep = app.savedAreas.tiles())
             peaks = emptyList()
             _state.update {
                 it.copy(mountains = emptyList(), summit = null, cacheInfo = cacheManager.info(), peakData = null, peakDataNotice = null)

@@ -316,8 +316,10 @@ final class DialModel: ObservableObject {
         fetchTask?.cancel()
         let keep = areaDownload.savedTiles
         Task { @MainActor in
-            await cache.clear(keeping: keep)
+            // 記録を先に消す。消している途中でアプリが終わっても、記録だけが残って「最新です」となり、
+            // 取り直せなくなることがないように。
             peakDataStore.clear()
+            await cache.clear(keeping: keep)
             peakData = nil
             peakDataNotice = nil
             peaks = []
