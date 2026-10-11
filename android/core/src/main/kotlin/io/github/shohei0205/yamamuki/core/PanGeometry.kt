@@ -106,3 +106,23 @@ object PanGeometry {
         return MapCenter(Math.toDegrees(nextLat).coerceIn(-85.0, 85.0), (Math.toDegrees(nextLon) + 540) % 360 - 180)
     }
 }
+
+/**
+ * 地図の向きを [start] から、動いていく行き先(端末の向きなど)へ回す。
+ * 回す量はタップした時点の最短の回転から始め、その後は行き先が動いた分だけ足していく。
+ * 行き先が真後ろ(180° 先)をまたいでも、途中で逆回りして地図が半回転して見えることはない。
+ */
+class HeadingTurn(private val start: Double, target: Double) {
+    private var target = Heading.normalize(target)
+    private var sweep = Heading.delta(start, target)
+
+    /** 行き先を [target] に更新し、進み具合 [progress](0〜1)での向きを返す。終わり(1)では行き先そのものを返す。 */
+    fun headingAt(target: Double, progress: Double): Double {
+        if (target.isFinite()) {
+            sweep += Heading.delta(this.target, target)
+            this.target = Heading.normalize(target)
+        }
+        val t = progress.coerceIn(0.0, 1.0)
+        return if (t == 1.0) this.target else Heading.normalize(start + sweep * t * t * (3 - 2 * t))
+    }
+}

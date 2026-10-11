@@ -202,5 +202,43 @@ final class PanGeometryTests: XCTestCase {
         XCTAssertFalse(PanGeometry.compassTapFacesDevice(heading: 45))
         XCTAssertFalse(PanGeometry.compassTapFacesDevice(heading: 180))
         XCTAssertFalse(PanGeometry.compassTapFacesDevice(heading: 359))
+        // 境界(±0.5° ちょうど)は北が上とみなさない。
+        XCTAssertTrue(PanGeometry.compassTapFacesDevice(heading: 0.49))
+        XCTAssertTrue(PanGeometry.compassTapFacesDevice(heading: 359.51))
+        XCTAssertFalse(PanGeometry.compassTapFacesDevice(heading: 0.5))
+        XCTAssertFalse(PanGeometry.compassTapFacesDevice(heading: 359.5))
+    }
+
+    func testHeadingTurnKeepsDirectionWhenTargetCrossesBehind() {
+        // 時計回りに回し始めたら、行き先が 180° をまたいでも時計回りのまま。
+        var clockwise = HeadingTurn(start: 0, target: 179.9)
+        XCTAssertEqual(clockwise.heading(target: 179.9, progress: 0.5), 89.95, accuracy: 1e-8)
+        XCTAssertEqual(clockwise.heading(target: 180.1, progress: 0.5), 90.05, accuracy: 1e-8)
+        XCTAssertEqual(clockwise.heading(target: 180.1, progress: 1), 180.1, accuracy: 1e-8)
+        // 反時計回りも同じ。
+        var counter = HeadingTurn(start: 0, target: 180.1)
+        XCTAssertEqual(counter.heading(target: 180.1, progress: 0.5), 270.05, accuracy: 1e-8)
+        XCTAssertEqual(counter.heading(target: 179.9, progress: 0.5), 269.95, accuracy: 1e-8)
+        XCTAssertEqual(counter.heading(target: 179.9, progress: 1), 179.9, accuracy: 1e-8)
+    }
+
+    func testHeadingTurnFollowsMovingTargetAcrossNorth() {
+        var turn = HeadingTurn(start: 90, target: 10)
+        XCTAssertEqual(turn.heading(target: 10, progress: 0), 90, accuracy: 1e-8)
+        // 行き先が北をまたいで 350° へ動いても、近い向きで付いていく。
+        XCTAssertEqual(turn.heading(target: 350, progress: 0.5), 40, accuracy: 1e-8)
+        XCTAssertEqual(turn.heading(target: 350, progress: 1), 350, accuracy: 1e-8)
+        // 読めなかった向きは無視する。
+        XCTAssertEqual(turn.heading(target: .nan, progress: 1), 350, accuracy: 1e-8)
+    }
+
+    func testHeadingTurnToNorthMatchesNorthUpHeading() {
+        for start in [90.0, 270, 359, 180] {
+            for progress in [0.0, 0.25, 0.5, 0.75, 1] {
+                var turn = HeadingTurn(start: start, target: 0)
+                XCTAssertEqual(turn.heading(target: 0, progress: progress),
+                    PanGeometry.northUpHeading(start, progress: progress), accuracy: 1e-8)
+            }
+        }
     }
 }

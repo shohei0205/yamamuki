@@ -202,5 +202,41 @@ class PanGeometryTest {
         assertFalse(PanGeometry.compassTapFacesDevice(45.0))
         assertFalse(PanGeometry.compassTapFacesDevice(180.0))
         assertFalse(PanGeometry.compassTapFacesDevice(359.0))
+        // 境界(±0.5° ちょうど)は北が上とみなさない。
+        assertTrue(PanGeometry.compassTapFacesDevice(0.49))
+        assertTrue(PanGeometry.compassTapFacesDevice(359.51))
+        assertFalse(PanGeometry.compassTapFacesDevice(0.5))
+        assertFalse(PanGeometry.compassTapFacesDevice(359.5))
+    }
+
+    @Test fun headingTurnKeepsDirectionWhenTargetCrossesBehind() {
+        // 時計回りに回し始めたら、行き先が 180° をまたいでも時計回りのまま。
+        val clockwise = HeadingTurn(0.0, 179.9)
+        assertEquals(89.95, clockwise.headingAt(179.9, 0.5), 1e-8)
+        assertEquals(90.05, clockwise.headingAt(180.1, 0.5), 1e-8)
+        assertEquals(180.1, clockwise.headingAt(180.1, 1.0), 1e-8)
+        // 反時計回りも同じ。
+        val counter = HeadingTurn(0.0, 180.1)
+        assertEquals(270.05, counter.headingAt(180.1, 0.5), 1e-8)
+        assertEquals(269.95, counter.headingAt(179.9, 0.5), 1e-8)
+        assertEquals(179.9, counter.headingAt(179.9, 1.0), 1e-8)
+    }
+
+    @Test fun headingTurnFollowsMovingTargetAcrossNorth() {
+        val turn = HeadingTurn(90.0, 10.0)
+        assertEquals(90.0, turn.headingAt(10.0, 0.0), 1e-8)
+        // 行き先が北をまたいで 350° へ動いても、近い向きで付いていく。
+        assertEquals(40.0, turn.headingAt(350.0, 0.5), 1e-8)
+        assertEquals(350.0, turn.headingAt(350.0, 1.0), 1e-8)
+        // 読めなかった向きは無視する。
+        assertEquals(350.0, turn.headingAt(Double.NaN, 1.0), 1e-8)
+    }
+
+    @Test fun headingTurnToNorthMatchesNorthUpHeading() {
+        for (start in listOf(90.0, 270.0, 359.0, 180.0)) {
+            for (progress in listOf(0.0, 0.25, 0.5, 0.75, 1.0)) {
+                assertEquals(PanGeometry.northUpHeading(start, progress), HeadingTurn(start, 0.0).headingAt(0.0, progress), 1e-8)
+            }
+        }
     }
 }

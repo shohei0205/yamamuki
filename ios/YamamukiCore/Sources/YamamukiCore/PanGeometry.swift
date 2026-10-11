@@ -107,3 +107,28 @@ public enum PanGeometry {
             dy: -offset.y + before.y - after.y, scale: 1, heading: 0)
     }
 }
+
+/// 地図の向きを start から、動いていく行き先(端末の向きなど)へ回す。
+/// 回す量はタップした時点の最短の回転から始め、その後は行き先が動いた分だけ足していく。
+/// 行き先が真後ろ(180° 先)をまたいでも、途中で逆回りして地図が半回転して見えることはない。
+public struct HeadingTurn {
+    private let start: Double
+    private var target: Double
+    private var sweep: Double
+
+    public init(start: Double, target: Double) {
+        self.start = start
+        self.target = Heading.normalize(target)
+        sweep = Heading.delta(start, target)
+    }
+
+    /// 行き先を target に更新し、進み具合 progress(0〜1)での向きを返す。終わり(1)では行き先そのものを返す。
+    public mutating func heading(target newTarget: Double, progress: Double) -> Double {
+        if newTarget.isFinite {
+            sweep += Heading.delta(target, newTarget)
+            target = Heading.normalize(newTarget)
+        }
+        let t = min(1, max(0, progress))
+        return t == 1 ? target : Heading.normalize(start + sweep * t * t * (3 - 2 * t))
+    }
+}

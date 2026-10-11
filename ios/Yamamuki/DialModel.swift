@@ -196,10 +196,21 @@ final class DialModel: ObservableObject {
 
     /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。
     func faceNorth(canvasWidth: Double, canvasHeight: Double) {
+        turnMap(from: displayHeading, facingDevice: false, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
+    }
+
+    /// 手動位置モードのまま、約0.5秒で地図を端末の向きに合わせる。合わせたあとは端末の向きに付いていかない。
+    func faceDevice(canvasWidth: Double, canvasHeight: Double) {
+        guard exploring, let startHeading = lockedHeading else { return }
+        turnMap(from: startHeading, facingDevice: true, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
+    }
+
+    /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で地図を北(facingDevice なら端末の向き)へ回す。
+    /// 回している間も端末は動くので、端末の向きは毎回読み直す。
+    private func turnMap(from startHeading: Double, facingDevice: Bool, canvasWidth: Double, canvasHeight: Double) {
         guard let viewport = location, canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset else { return }
         northUpTask?.cancel()
         let observer = gpsLocation ?? viewport
-        let startHeading = displayHeading
         let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
             viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
             rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
@@ -207,47 +218,18 @@ final class DialModel: ObservableObject {
         beginExploring()
         northUpTask = Task { @MainActor [weak self] in
             let started = ProcessInfo.processInfo.systemUptime
-            while !Task.isCancelled {
-                let progress = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
-                let next = PanGeometry.northUpViewport(MapCenter(observer.latitude, observer.longitude),
-                    viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
-                    rangeKm: range, canvasHeight: canvasHeight, progress: progress, aroundCenter: aroundCenter)
-                self?.location = next == MapCenter(viewport.latitude, viewport.longitude) ? viewport
-                    : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
-                self?.lockedHeading = PanGeometry.northUpHeading(startHeading, progress: progress)
-                if progress >= 1 { break }
-                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
-            }
-            if !Task.isCancelled { self?.fetchForViewport() }
-        }
-    }
-
-    /// 手動位置モードのまま、約0.5秒で地図を端末の向きに合わせる。合わせたあとは端末の向きに付いていかない。
-    /// 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に回す。
-    func faceDevice(canvasWidth: Double, canvasHeight: Double) {
-        guard exploring, let viewport = location, let startHeading = lockedHeading,
-              canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset else { return }
-        northUpTask?.cancel()
-        let observer = gpsLocation ?? viewport
-        let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
-            viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
-            rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
-        let range = rangeKm
-        northUpTask = Task { @MainActor [weak self] in
-            let started = ProcessInfo.processInfo.systemUptime
+            var turn = HeadingTurn(start: startHeading, target: facingDevice ? self?.heading ?? startHeading : 0)
             while !Task.isCancelled {
                 guard let self else { return }
-                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
-                // 回している間も端末は動くので、行き先の向きは毎回読み直す。
-                let nextHeading = PanGeometry.returnHeading(startHeading, target: heading ?? startHeading,
-                    fraction: t * t * (3 - 2 * t))
+                let progress = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
+                let nextHeading = turn.heading(target: facingDevice ? heading ?? startHeading : 0, progress: progress)
                 let next = PanGeometry.rotateViewport(MapCenter(observer.latitude, observer.longitude),
                     viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
                     nextHeading: nextHeading, rangeKm: range, canvasHeight: canvasHeight, aroundCenter: aroundCenter)
                 location = next == MapCenter(viewport.latitude, viewport.longitude) ? viewport
                     : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
                 lockedHeading = nextHeading
-                if t >= 1 { break }
+                if progress >= 1 { break }
                 do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
             }
             if !Task.isCancelled { self?.fetchForViewport() }

@@ -9,6 +9,7 @@ import io.github.shohei0205.yamamuki.YamamukiApp
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.GeoMath
 import io.github.shohei0205.yamamuki.core.Heading
+import io.github.shohei0205.yamamuki.core.HeadingTurn
 import io.github.shohei0205.yamamuki.core.InstalledPeakData
 import io.github.shohei0205.yamamuki.core.MapCenter
 import io.github.shohei0205.yamamuki.core.PanGeometry
@@ -222,60 +223,35 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。 */
-    fun faceNorth(headingDeg: Double, canvasWidth: Double, canvasHeight: Double) {
+    fun faceNorth(headingDeg: Double, canvasWidth: Double, canvasHeight: Double) =
+        turnMap(state.value.lockedHeading ?: headingDeg, { 0.0 }, canvasWidth, canvasHeight)
+
+    /** 手動位置モードのまま、約0.5秒で地図を端末の向きに合わせる。合わせたあとは端末の向きに付いていかない。 */
+    fun faceDevice(compassHeading: () -> Double, canvasWidth: Double, canvasHeight: Double) {
+        val startHeading = state.value.takeIf { it.exploring }?.lockedHeading ?: return
+        turnMap(startHeading, compassHeading, canvasWidth, canvasHeight)
+    }
+
+    /**
+     * 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で地図を [target] の向きへ回す。
+     * 回している間も端末は動くので、行き先の向きは毎回読み直す。
+     */
+    private fun turnMap(startHeading: Double, target: () -> Double, canvasWidth: Double, canvasHeight: Double) {
         if (!canvasHeight.isFinite() || canvasHeight <= DialGeometry.CHART_INSET_DP) return
         northUpJob?.cancel()
         val initial = state.value
         val here = initial.location ?: return
         val observer = initial.gpsLocation ?: here
-        val startHeading = initial.lockedHeading ?: headingDeg
         val aroundCenter = !PanGeometry.isObserverVisible(
             MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
             startHeading, initial.rangeKm, canvasWidth, canvasHeight,
         )
+        val turn = HeadingTurn(startHeading, target())
         northUpJob = viewModelScope.launch {
             val started = System.nanoTime()
             do {
                 val progress = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
-                val next = PanGeometry.northUpViewport(
-                    MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
-                    startHeading, initial.rangeKm, canvasHeight, progress, aroundCenter,
-                )
-                _state.update { it.copy(
-                    location = if (next.latitude == here.latitude && next.longitude == here.longitude) here
-                        else GeoPoint(next.latitude, next.longitude),
-                    exploring = true,
-                    lockedHeading = PanGeometry.northUpHeading(startHeading, progress),
-                ) }
-                if (progress >= 1.0) break
-                delay(16)
-            } while (true)
-            fetchForViewport()
-        }
-    }
-
-    /**
-     * 手動位置モードのまま、約0.5秒で地図を端末の向きに合わせる。合わせたあとは端末の向きに付いていかない。
-     * 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に回す。
-     */
-    fun faceDevice(compassHeading: () -> Double, canvasWidth: Double, canvasHeight: Double) {
-        if (!canvasHeight.isFinite() || canvasHeight <= DialGeometry.CHART_INSET_DP) return
-        northUpJob?.cancel()
-        val initial = state.value
-        if (!initial.exploring) return
-        val here = initial.location ?: return
-        val startHeading = initial.lockedHeading ?: return
-        val observer = initial.gpsLocation ?: here
-        val aroundCenter = !PanGeometry.isObserverVisible(
-            MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
-            startHeading, initial.rangeKm, canvasWidth, canvasHeight,
-        )
-        northUpJob = viewModelScope.launch {
-            val started = System.nanoTime()
-            do {
-                val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
-                // 回している間も端末は動くので、行き先の向きは毎回読み直す。
-                val heading = PanGeometry.returnHeading(startHeading, compassHeading(), t * t * (3 - 2 * t))
+                val heading = turn.headingAt(target(), progress)
                 val next = PanGeometry.rotateViewport(
                     MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
                     startHeading, heading, initial.rangeKm, canvasHeight, aroundCenter,
@@ -283,9 +259,10 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(
                     location = if (next.latitude == here.latitude && next.longitude == here.longitude) here
                         else GeoPoint(next.latitude, next.longitude),
+                    exploring = true,
                     lockedHeading = heading,
                 ) }
-                if (t >= 1.0) break
+                if (progress >= 1.0) break
                 delay(16)
             } while (true)
             fetchForViewport()
