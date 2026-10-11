@@ -806,8 +806,8 @@ private fun polygon(points: List<Offset>): Path = Path().apply {
 }
 
 /**
- * 現在地がほぼ山頂のときに双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
- * 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ視野の扇形を前方へ描く。
+ * 現在地がほぼ山頂のとき(検索位置モードでは選んだ山頂)に双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
+ * 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ白い丸の中に置いて、同じ視野の扇形を前方へ描く。
  * 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤のため)。タップの当たり判定用の範囲を返す。
  */
 private fun DrawScope.drawSummit(
@@ -819,7 +819,8 @@ private fun DrawScope.drawSummit(
     coneAlpha: Float,
 ): PlacedPeak {
     val u = 1.dp.toPx()
-    fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + y * u)
+    // 岩山と旗(縦 -24〜10)を、双眼鏡と同じ白い丸の真ん中に収まるよう少し下げて描く。
+    fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + (y + 6f) * u)
 
     val rock = polygon(listOf(at(-16f, 10f), at(-8f, -2f), at(-4f, 1f), at(2f, -8f), at(16f, 10f)))
     // 日の当たる面。右の尾根を明るくして立体に見せる。
@@ -828,7 +829,8 @@ private fun DrawScope.drawSummit(
     val poleTop = at(2f, -24f)
     val poleBottom = at(2f, -8f)
 
-    if (coneAlpha > 0f) rotate(observerRotation, pivot = center) { drawViewCone(at(0f, -6f), coneAlpha) }
+    if (coneAlpha > 0f) rotate(observerRotation, pivot = center) { drawViewCone(Offset(center.x, center.y - 10f * u), coneAlpha) }
+    drawObserverDisc(center)
 
     // 白い縁取り → 本体の順に描く。
     val halo = Stroke(width = 4f * u, join = StrokeJoin.Round)
@@ -843,8 +845,8 @@ private fun DrawScope.drawSummit(
     val label = textMeasurer.measure(summit.mountain.name, styles.label)
     val padX = 5f * u
     val padY = 2f * u
-    val labelLeft = center.x + 22f * u
-    val labelTop = center.y - 4f * u - label.size.height / 2f
+    val labelLeft = center.x + 30f * u
+    val labelTop = center.y - 1f * u - label.size.height / 2f
     drawRoundRect(
         Color.White.copy(alpha = 0.85f),
         topLeft = Offset(labelLeft - padX, labelTop - padY),
@@ -854,10 +856,10 @@ private fun DrawScope.drawSummit(
     drawText(label, topLeft = Offset(labelLeft, labelTop))
 
     val box = Box(
-        left = center.x - 18f * u,
-        top = min(center.y - 26f * u, labelTop - padY),
+        left = center.x - 23f * u,
+        top = min(center.y - 24f * u, labelTop - padY),
         right = labelLeft + label.size.width + padX,
-        bottom = max(center.y + 12f * u, labelTop + label.size.height + padY),
+        bottom = max(center.y + 22f * u, labelTop + label.size.height + padY),
     )
     return PlacedPeak(summit, center, label, box)
 }
@@ -934,10 +936,7 @@ private fun DrawScope.drawBinoculars(center: Offset, coneAlpha: Float): Box {
     }
 
     if (coneAlpha > 0f) drawViewCone(Offset(center.x, center.y - 10f * u), coneAlpha)
-    // 白い丸の上に置き、帯や円の上でも現在地が目立つようにする。
-    val disc = Offset(center.x, center.y - 1f * u)
-    drawCircle(ShadowColor, radius = 23f * u, center = disc + Offset(0f, 1.5f * u))
-    drawCircle(Color.White, radius = 23f * u, center = disc)
+    drawObserverDisc(center)
     body(Color.White, grow = 2f)
     body(BinocularBody, grow = 0f)
     drawCircle(BinocularHinge, radius = 3f * u, center = Offset(center.x, center.y + 2.5f * u))
@@ -952,6 +951,14 @@ private fun DrawScope.drawBinoculars(center: Offset, coneAlpha: Float): Box {
         )
     }
     return Box(left = center.x - 23f * u, top = center.y - 24f * u, right = center.x + 23f * u, bottom = center.y + 22f * u)
+}
+
+/** 双眼鏡と山頂アイコンを載せる、影付きの白い丸。帯や円の上でも現在地が目立つようにする。 */
+private fun DrawScope.drawObserverDisc(center: Offset) {
+    val u = 1.dp.toPx()
+    val disc = Offset(center.x, center.y - 1f * u)
+    drawCircle(ShadowColor, radius = 23f * u, center = disc + Offset(0f, 1.5f * u))
+    drawCircle(Color.White, radius = 23f * u, center = disc)
 }
 
 /** 画面上部の方位目盛り。向いている方位が中央に来る。 */

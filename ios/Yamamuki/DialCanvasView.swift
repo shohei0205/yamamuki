@@ -511,11 +511,12 @@ struct DialCanvasView: View, Animatable {
         ctx.draw(label.text, at: CGPoint(x: p.x - label.size.width / 2, y: rect.minY + labelPadY), anchor: .topLeading)
     }
 
-    /// 現在地がほぼ山頂のときに双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
-    /// 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ視野の扇形を前方へ描く。
+    /// 現在地がほぼ山頂のとき(検索位置モードでは選んだ山頂)に双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
+    /// 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ白い丸の中に置いて、同じ視野の扇形を前方へ描く。
     /// 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤のため)。タップの当たり判定用の範囲を返す。
     private func drawSummit(_ ctx: GraphicsContext, center: CGPoint, summit: NearbyMountain, styles: TextStyles) -> PlacedPeak {
-        func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: center.x + x, y: center.y + y) }
+        // 岩山と旗(縦 -24〜10)を、双眼鏡と同じ白い丸の真ん中に収まるよう少し下げて描く。
+        func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: center.x + x, y: center.y + y + 6) }
 
         let rock = polygon([at(-16, 10), at(-8, -2), at(-4, 1), at(2, -8), at(16, 10)])
         // 日の当たる面。右の尾根を明るくして立体に見せる。
@@ -523,7 +524,8 @@ struct DialCanvasView: View, Animatable {
         let flag = polygon([at(2, -24), at(13, -20.5), at(2, -17)])
         let pole = line(at(2, -24), at(2, -8))
 
-        drawViewCone(rotatedObserver(ctx, center: center), apex: at(0, -6))
+        drawViewCone(rotatedObserver(ctx, center: center), apex: CGPoint(x: center.x, y: center.y - 10))
+        drawObserverDisc(ctx, center: center)
 
         // 白い縁取り → 本体の順に描く。
         let halo = StrokeStyle(lineWidth: 4, lineJoin: .round)
@@ -538,17 +540,17 @@ struct DialCanvasView: View, Animatable {
         let label = measuredText(ctx, summit.mountain.name, size: styles.label, color: tapeInk)
         let padX: CGFloat = 5
         let padY: CGFloat = 2
-        let labelLeft = center.x + 22
-        let labelTop = center.y - 4 - label.size.height / 2
+        let labelLeft = center.x + 30
+        let labelTop = center.y - 1 - label.size.height / 2
         let background = CGRect(x: labelLeft - padX, y: labelTop - padY, width: label.size.width + padX * 2, height: label.size.height + padY * 2)
         ctx.fill(Path(roundedRect: background, cornerRadius: 4), with: .color(.white.opacity(0.85)))
         ctx.draw(label.text, at: CGPoint(x: labelLeft, y: labelTop), anchor: .topLeading)
 
         let box = ScreenBox(
-            left: Double(center.x - 18),
-            top: Double(min(center.y - 26, labelTop - padY)),
+            left: Double(center.x - 23),
+            top: Double(min(center.y - 24, labelTop - padY)),
             right: Double(labelLeft + label.size.width + padX),
-            bottom: Double(max(center.y + 12, labelTop + label.size.height + padY))
+            bottom: Double(max(center.y + 22, labelTop + label.size.height + padY))
         )
         return PlacedPeak(mountain: summit, position: center, box: box)
     }
@@ -617,10 +619,7 @@ struct DialCanvasView: View, Animatable {
         }
 
         drawViewCone(ctx, apex: CGPoint(x: center.x, y: center.y - 10))
-        // 白い丸の上に置き、帯や円の上でも現在地が目立つようにする。
-        let disc = CGRect(x: center.x - 23, y: center.y - 1 - 23, width: 46, height: 46)
-        ctx.fill(Path(ellipseIn: disc.offsetBy(dx: 0, dy: 1.5)), with: .color(shadowColor))
-        ctx.fill(Path(ellipseIn: disc), with: .color(.white))
+        drawObserverDisc(ctx, center: center)
         body(.white, grow: 2)
         body(binocularBody, grow: 0)
         ctx.fill(Path(ellipseIn: CGRect(x: center.x - 3, y: center.y + 2.5 - 3, width: 6, height: 6)), with: .color(binocularHinge))
@@ -631,6 +630,13 @@ struct DialCanvasView: View, Animatable {
             ctx.fill(Path(ellipseIn: CGRect(x: lens.x - 3.5, y: lens.y - 1.5, width: 3, height: 1.4)), with: .color(.white.opacity(0.8)))
         }
         return CGRect(x: center.x - 23, y: center.y - 24, width: 46, height: 46)
+    }
+
+    /// 双眼鏡と山頂アイコンを載せる、影付きの白い丸。帯や円の上でも現在地が目立つようにする。
+    private func drawObserverDisc(_ ctx: GraphicsContext, center: CGPoint) {
+        let disc = CGRect(x: center.x - 23, y: center.y - 1 - 23, width: 46, height: 46)
+        ctx.fill(Path(ellipseIn: disc.offsetBy(dx: 0, dy: 1.5)), with: .color(shadowColor))
+        ctx.fill(Path(ellipseIn: disc), with: .color(.white))
     }
 
     /// 画面上部の方位目盛り。向いている方位が中央に来る。上端は高さが決まっているので文字の倍率を掛けない。
