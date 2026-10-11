@@ -682,20 +682,15 @@ private fun ViewpointLabel(mountain: Mountain, headingDeg: Double?, textScale: F
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        val nameSize = 18.sp * textScale
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            // 方位盤と同じ標高別の山アイコンを、山名の文字と同じ高さで添える。
-            PeakIconInline(mountain, height = with(LocalDensity.current) { nameSize.toDp() })
-            Text(
-                buildAnnotatedString {
-                    append(mountain.name)
-                    withStyle(SpanStyle(color = TapeSubtle, fontSize = 13.sp * textScale)) { append("  $elevation") }
-                },
-                color = TapeInk,
-                fontSize = nameSize,
-                fontWeight = FontWeight.Bold,
-            )
-        }
+        Text(
+            buildAnnotatedString {
+                append(mountain.name)
+                withStyle(SpanStyle(color = TapeSubtle, fontSize = 13.sp * textScale)) { append("  $elevation") }
+            },
+            color = TapeInk,
+            fontSize = 18.sp * textScale,
+            fontWeight = FontWeight.Bold,
+        )
         Text("$lat  $lon", color = TapeSubtle, fontSize = 11.sp * textScale)
         Text(heading, color = TapeInk, fontSize = 14.sp * textScale, fontWeight = FontWeight.Bold)
     }

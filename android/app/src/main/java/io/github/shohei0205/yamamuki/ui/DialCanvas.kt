@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,7 +34,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
@@ -797,21 +795,6 @@ private fun DrawScope.drawPeakIconShape(p: Offset, icon: PeakIcon, shadow: Boole
             close()
         }
         drawPath(snow, Color.White, alpha = alpha)
-    }
-}
-
-/**
- * [mountain] の標高の区分の山アイコンを、高さ [height] に縮めて描く。札などで山名の左に添える。
- * 方位盤と同じ形と色にし、影は付けない。
- */
-@Composable
-internal fun PeakIconInline(mountain: Mountain, height: Dp, modifier: Modifier = Modifier) {
-    val icon = PeakIcon.of(mountain.elevationClass())
-    val ratio = height.value / icon.heightDp
-    Canvas(modifier.size(width = height * (2 * icon.halfWidthDp / icon.heightDp), height = height)) {
-        scale(ratio, pivot = Offset.Zero) {
-            drawPeakIconShape(Offset(icon.halfWidthDp.dp.toPx(), icon.heightDp.dp.toPx()), icon, shadow = false)
-        }
     }
 }
 
