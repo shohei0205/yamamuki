@@ -387,7 +387,9 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(peakDataUpdating = true, peakDataNotice = null) }
             try {
                 // 画面の状態ではなく保存した記録を使う(キャッシュが作り直されて記録が消えていることがある)。
-                val result = app.peakDataUpdater.update(app.peakDataStore.load())
+                // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
+                val installed = app.peakDataStore.load()?.takeIf { cacheManager.info().mountainCount > 0 }
+                val result = app.peakDataUpdater.update(installed)
                 app.peakDataStore.save(result.installed)
                 val updated = result is PeakDataUpdater.Result.Updated
                 _state.update {

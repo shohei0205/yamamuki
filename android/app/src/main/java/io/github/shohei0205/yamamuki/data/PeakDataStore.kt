@@ -43,9 +43,12 @@ class PeakDataStore(context: Context) {
             .apply()
     }
 
-    /** 記録と、残した manifest と gz を消す。 */
+    /**
+     * 記録と、残した manifest と gz を消す。記録は apply() だと書き込みが後回しになり、直後にアプリが終わると
+     * 記録だけが残って取り直せなくなるので、commit() で書き終えてから戻る。
+     */
     fun clear() {
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
         File(archiveDirectory, FilePeakDataArchive.MANIFEST_NAME).delete()
         File(archiveDirectory, FilePeakDataArchive.DATA_NAME).delete()
     }
