@@ -74,7 +74,7 @@
     <string name="peak_data_prompt_later">あとで</string>
     <string name="peak_data_offer_title">山データのダウンロード</string>
     <string name="peak_data_offer_message">新しい山データが入手できます。\n%1$s\n今すぐダウンロードしますか？</string>
-    <string name="peak_data_offer_detail">Release : %1$s, 約 %2$s</string>
+    <string name="peak_data_offer_detail">リリース：%1$s、約 %2$s</string>
     <string name="peak_data_offer_size">約 %1$s</string>
     <string name="peak_data_offer_download">ダウンロード</string>
     <string name="peak_data_offer_later">あとで</string>

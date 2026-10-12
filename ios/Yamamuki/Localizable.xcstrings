@@ -987,7 +987,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Release : %1$@, 約 %2$@"
+            "value": "リリース：%1$@、約 %2$@"
           }
         }
       }
