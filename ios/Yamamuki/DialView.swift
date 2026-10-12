@@ -133,7 +133,7 @@ struct DialView: View {
                                 if model.viewpoint != nil {
                                     model.leaveViewpoint()
                                 } else if model.exploring {
-                                    model.resetCenter()
+                                    model.resetCenter(canvasHeight: Double(geometry.size.height))
                                 } else {
                                     model.enterManual()
                                 }
