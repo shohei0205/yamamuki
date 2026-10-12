@@ -5,6 +5,16 @@ import kotlin.math.*
 data class MapCenter(val latitude: Double, val longitude: Double)
 
 object PanGeometry {
+    /** 北が上とみなす角度の幅。 */
+    const val NORTH_UP_TOLERANCE_DEG = 0.5
+
+    /**
+     * 手動位置モードでコンパスをタップしたとき、地図を端末の向きに合わせるか。
+     * 北が上のときは端末の向きに合わせ、それ以外のときは北を上にする。合わせたあとは端末の向きに付いていかない。
+     */
+    fun compassTapFacesDevice(headingDeg: Double): Boolean =
+        abs(Heading.delta(headingDeg, 0.0)) < NORTH_UP_TOLERANCE_DEG
+
     /** 方角が変わっても双眼鏡を画面上の直線に沿って描画原点へ戻す。offsetはkm、yは上向き。 */
     fun returnViewport(observer: MapCenter, initialOffset: PlanOffset, heading: Double, fraction: Double): MapCenter {
         val remaining = 1.0 - fraction.coerceIn(0.0, 1.0)
@@ -14,11 +24,6 @@ object PanGeometry {
     /** 復帰中の方角。[fraction] に応じて [heading] から [target] へ、北をまたぐときも近い向きに回す。 */
     fun returnHeading(heading: Double, target: Double, fraction: Double): Double =
         Heading.normalize(heading + Heading.delta(heading, target) * fraction.coerceIn(0.0, 1.0))
-
-    fun northUpHeading(heading: Double, progress: Double): Double {
-        val t = progress.coerceIn(0.0, 1.0)
-        return if (t == 1.0) 0.0 else Heading.normalize(heading + Heading.delta(heading, 0.0) * t * t * (3 - 2 * t))
-    }
 
     /**
      * 双眼鏡を画面の中央に置く表示範囲の原点。検索した山頂を中央に出すときに使う。高さはdp。
@@ -39,13 +44,6 @@ object PanGeometry {
         val x = canvasWidth / 2 + offset.x * scale
         val y = canvasHeight - DialGeometry.ORIGIN_BOTTOM_DP - offset.y * scale
         return x in 0.0..canvasWidth && y in DialGeometry.CHART_TOP_DP..canvasHeight
-    }
-
-    /** 選んだ回転中心をアニメーション中も固定する。高さはdp。 */
-    fun northUpViewport(observer: MapCenter, viewport: MapCenter, heading: Double,
-        rangeKm: Double, canvasHeight: Double, progress: Double = 1.0, aroundCenter: Boolean = true): MapCenter {
-        if (progress <= 0 || (!aroundCenter && observer == viewport)) return viewport
-        return rotateViewport(observer, viewport, heading, northUpHeading(heading, progress), rangeKm, canvasHeight, aroundCenter)
     }
 
     /** 双眼鏡または画面中央を固定して方角を変える。 */
@@ -104,5 +102,26 @@ object PanGeometry {
         val nextLon = lon + atan2(sin(bearing) * sin(angular) * cos(lat), cos(angular) - sin(lat) * sin(nextLat))
         // Terrain uses Web Mercator, so stop at its practical latitude limits.
         return MapCenter(Math.toDegrees(nextLat).coerceIn(-85.0, 85.0), (Math.toDegrees(nextLon) + 540) % 360 - 180)
+    }
+}
+
+/**
+ * 地図の向きを [start] から、動いていく行き先(端末の向きなど)へ回す。
+ * 回す量はタップした時点の最短の回転から始め、その後は行き先が動いた分だけ足していく。
+ * 行き先が真後ろ(180° 先)をまたいでも、途中で逆回りして地図が半回転して見えることはない。
+ * 最初の行き先が読めない(NaN など)ときは回さずに始め、読めた行き先へあとから回す。
+ */
+class HeadingTurn(private val start: Double, target: Double) {
+    private var target = Heading.normalize(if (target.isFinite()) target else start)
+    private var sweep = Heading.delta(start, this.target)
+
+    /** 行き先を [target] に更新し、進み具合 [progress](0〜1)での向きを返す。終わり(1)では行き先そのものを返す。 */
+    fun headingAt(target: Double, progress: Double): Double {
+        if (target.isFinite()) {
+            sweep += Heading.delta(this.target, target)
+            this.target = Heading.normalize(target)
+        }
+        val t = progress.coerceIn(0.0, 1.0)
+        return if (t == 1.0) this.target else Heading.normalize(start + sweep * t * t * (3 - 2 * t))
     }
 }

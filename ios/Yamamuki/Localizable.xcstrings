@@ -342,6 +342,17 @@
         }
       }
     },
+    "compass_face_device": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端末の向きに合わせる"
+          }
+        }
+      }
+    },
     "compass_face_north": {
       "extractionState": "manual",
       "localizations": {

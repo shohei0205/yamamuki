@@ -35,6 +35,7 @@
     <string name="map_mode_to_manual">現在の向きのまま操作する</string>
     <string name="map_mode_search">検索位置モード</string>
     <string name="map_mode_to_manual_here">現在地に戻る（手動位置モード）</string>
+    <string name="compass_face_device">端末の向きに合わせる</string>
     <string name="compass_face_north">北を上にする</string>
     <string name="compass_loading">コンパス：方位を確認中</string>
     <string name="compass_ready">コンパス：赤い針が北を示します</string>

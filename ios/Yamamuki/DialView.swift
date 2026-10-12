@@ -94,12 +94,22 @@ struct DialView: View {
                         }
                         Spacer()
                         if manualChrome {
-                            Button { model.faceNorth(canvasWidth: Double(geometry.size.width), canvasHeight: Double(geometry.size.height)) } label: {
+                            // 北が上なら地図を端末の向きに合わせ、それ以外なら北を上にする。方位が未取得なら北を上にするだけ。
+                            let tapFacesDevice = model.heading != nil
+                                && PanGeometry.compassTapFacesDevice(heading: model.displayHeading)
+                            Button {
+                                let width = Double(geometry.size.width), height = Double(geometry.size.height)
+                                if tapFacesDevice {
+                                    model.faceDevice(canvasWidth: width, canvasHeight: height)
+                                } else {
+                                    model.faceNorth(canvasWidth: width, canvasHeight: height)
+                                }
+                            } label: {
                                 CompassIndicator(heading: model.lockedHeading ?? model.heading)
                             }
                             .buttonStyle(.plain)
                             .disabled(model.location == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
-                            .accessibilityLabel(Strings.text("compass_face_north"))
+                            .accessibilityLabel(Strings.text(tapFacesDevice ? "compass_face_device" : "compass_face_north"))
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
                     }
