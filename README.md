@@ -176,7 +176,10 @@ open Yamamuki.xcodeproj
   - `current.json`: `stable`(必須)と `dev`(省略可能)に、読ませる manifest の URL と SHA-256 を書く。
   - `manifests/<タグ>.json`: yamamuki-data の Release の `manifest.json` を書き換えずにコピーしたもの。差し替えるたびに 1 つ増やし、一度置いたファイルは上書きも削除もしない（前の版に戻すとき、そのまま使えるようにするため）。データ本体は yamamuki-data の Release のものを使う。
 - 参照先ファイルは手で書き換えず、Actions の「山データの差し替え PR を作る」を main で手動で動かして、差し替えの PR を作る（実行できるのは書き込み権限のある人だけ）。
-  - 差し替える先（`dev`・`stable`・`dev` を外す `remove-dev`）と Release のタグ（空なら最新）を選ぶ。`stable` には正式版の Release（タグ `osm-peaks-…`、manifest の版 5）だけを置ける。
+  - 「行う操作」で「開発用アプリで試す山データを選ぶ」「配布用アプリで使う山データを選ぶ」「開発用アプリも配布用と同じ山データに戻す」のいずれかを選ぶ。内部では、それぞれ `dev`・`stable`・`remove-dev` として処理する。
+  - 山データを選ぶ操作では、Release のタグを指定する（空欄なら、その種類の最新の Release）。配布用には正式版の Release（タグ `osm-peaks-…`、manifest の版 5）だけを置ける。
+  - 「同じ山データに戻す」操作では、`dev` の指定だけを外し、既存の `stable` を使う。Release のタグは使わない。`dev` の指定がなければ PR は作らない。
+  - 配布用の山データを選ぶときに「開発用アプリも配布用と同じ山データに戻す」にチェックすると、配布用の更新と同時に `dev` の指定も外す。
   - PR は GitHub App のトークンで作る（標準のトークンで作った PR では CI が動かないため）。App の ID と鍵は、main だけが使える環境 `data-swap` の変数 `APP_ID` とシークレット `APP_PRIVATE_KEY` に置いている。
   - PR の CI「山データの確認」が、コピーが Release と同じか、`manifests/` が追加だけか、データ本体の大きさと SHA-256、`stable` の件数が 5% より多く減っていないかを確かめる。件数が減るのを確かめたうえで通すときは、PR にラベル「山データの件数減を確認済み」を付ける。
   - core の単体テスト（`SitePeakDataTest`）が、`current.json` の指す manifest をアプリの読み込み処理で読めるかを確かめる。
