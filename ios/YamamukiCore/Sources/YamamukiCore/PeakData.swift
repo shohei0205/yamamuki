@@ -26,14 +26,8 @@ public struct PeakManifest: Equatable, Sendable {
     /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。
     public let sourceTimestamp: String
 
-    /// データを作った日(UTC)を「2026/10/07」の形で返す。`version` の先頭の日時(例: 20261007T071401Z-…)から読む。
-    /// `version` がこの形でなければ nil。
-    public var releaseDate: String? {
-        let chars = Array(version)
-        guard chars.count >= 16, chars[8] == "T", chars[15] == "Z",
-              (chars[0..<8] + chars[9..<15]).allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
-        return "\(String(chars[0..<4]))/\(String(chars[4..<6]))/\(String(chars[6..<8]))"
-    }
+    /// データを作った日(UTC)。「2026/10/07」の形。`version` から読めなければ nil。
+    public var releaseDate: String? { PeakData.releaseDate(version) }
 }
 
 /// 取り込み済みの配信データ。設定画面に出し、次の確認で同じ版なら取り直さない。
@@ -51,6 +45,9 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
     public var dataSha256: String?
     /// 取り込んだときの manifest の SHA-256。端末に残した manifest がこの版のものかを確かめる。
     public var manifestSha256: String?
+
+    /// データを作った日(UTC)。「2026/10/07」の形。`version` から読めなければ nil。
+    public var releaseDate: String? { PeakData.releaseDate(version) }
 
     public init(version: String, sourceTimestamp: String, mountainCount: Int, manifestEtag: String?, installedAt: Date,
                 readerVersion: Int = 0, dataSha256: String? = nil, manifestSha256: String? = nil) {
@@ -280,6 +277,15 @@ public enum PeakData {
             throw PeakDataError("山データのサイズが合いません(\(data.count) バイト、manifest では \(manifest.sizeBytes) バイト)")
         }
         guard sha256Hex(data) == manifest.sha256 else { throw PeakDataError("山データの SHA-256 が合いません") }
+    }
+
+    /// データを作った日(UTC)を「2026/10/07」の形で返す。データの版の先頭の日時(例: 20261007T071401Z-…)から読む。
+    /// 版がこの形でなければ nil。
+    public static func releaseDate(_ version: String) -> String? {
+        let chars = Array(version)
+        guard chars.count >= 16, chars[8] == "T", chars[15] == "Z",
+              (chars[0..<8] + chars[9..<15]).allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return "\(String(chars[0..<4]))/\(String(chars[4..<6]))/\(String(chars[6..<8]))"
     }
 
     static func sha256Hex(_ data: Data) -> String {

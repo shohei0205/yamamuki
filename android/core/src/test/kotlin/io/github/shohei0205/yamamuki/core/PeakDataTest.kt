@@ -251,6 +251,7 @@ class PeakDataTest {
         fun manifestOf(version: String) = PeakManifest(5, version, "https://example.com/a.gz", "0", 1, 1, "")
         assertEquals("2026/10/07", manifestOf("20261007T071401Z-37585754546-1").releaseDate)
         assertNull(manifestOf("v1").releaseDate)
+        assertEquals("2026/10/07", InstalledPeakData("20261007T071401Z-37585754546-1", "", 1, null, 0).releaseDate)
     }
 
     @Test

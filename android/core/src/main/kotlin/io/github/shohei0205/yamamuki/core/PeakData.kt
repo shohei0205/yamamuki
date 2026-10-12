@@ -32,16 +32,8 @@ data class PeakManifest(
     /** 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。 */
     val sourceTimestamp: String,
 ) {
-    /**
-     * データを作った日(UTC)を「2026/10/07」の形で返す。[version] の先頭の日時(例: 20261007T071401Z-…)から読む。
-     * [version] がこの形でなければ null。
-     */
-    val releaseDate: String?
-        get() = RELEASE_DATE.find(version)?.destructured?.let { (y, m, d) -> "$y/$m/$d" }
-
-    private companion object {
-        val RELEASE_DATE = Regex("^(\\d{4})(\\d{2})(\\d{2})T\\d{6}Z")
-    }
+    /** データを作った日(UTC)。「2026/10/07」の形。[version] から読めなければ null。 */
+    val releaseDate: String? get() = PeakData.releaseDate(version)
 }
 
 /** 取り込み済みの配信データ。設定画面に出し、次の確認で同じ版なら取り直さない。 */
@@ -61,7 +53,10 @@ data class InstalledPeakData(
     val dataSha256: String? = null,
     /** 取り込んだときの manifest の SHA-256。端末に残した manifest がこの版のものかを確かめる。 */
     val manifestSha256: String? = null,
-)
+) {
+    /** データを作った日(UTC)。「2026/10/07」の形。[version] から読めなければ null。 */
+    val releaseDate: String? get() = PeakData.releaseDate(version)
+}
 
 /**
  * 確認した manifest のうち、まだ取り込んでいない版。データ本体を取る前に、大きさを利用者に見せるのに使う。
@@ -171,6 +166,15 @@ object PeakData {
     /** 参照先ファイルが指してよい manifest のファイル名(Release のタグ + .json)。 */
     private val MANIFEST_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]*\\.json")
     private val SHA256_HEX = Regex("[0-9a-f]{64}")
+
+    /**
+     * データを作った日(UTC)を「2026/10/07」の形で返す。データの版の先頭の日時(例: 20261007T071401Z-…)から読む。
+     * 版がこの形でなければ null。
+     */
+    fun releaseDate(version: String): String? =
+        RELEASE_DATE.find(version)?.destructured?.let { (y, m, d) -> "$y/$m/$d" }
+
+    private val RELEASE_DATE = Regex("^(\\d{4})(\\d{2})(\\d{2})T\\d{6}Z")
 
     /** SHA-256 を小文字の16進数で返す。 */
     fun sha256Hex(data: ByteArray): String =

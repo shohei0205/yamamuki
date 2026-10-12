@@ -239,6 +239,9 @@ final class PeakDataTests: XCTestCase {
         }
         XCTAssertEqual(manifest("20261007T071401Z-37585754546-1").releaseDate, "2026/10/07")
         XCTAssertNil(manifest("v1").releaseDate)
+        let installed = InstalledPeakData(version: "20261007T071401Z-37585754546-1", sourceTimestamp: "", mountainCount: 1,
+                                          manifestEtag: nil, installedAt: Date())
+        XCTAssertEqual(installed.releaseDate, "2026/10/07")
     }
 
     func testCheckReportsSizeWithoutFetchingData() async throws {

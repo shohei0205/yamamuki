@@ -199,13 +199,20 @@ private struct PeakDataSection: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(Strings.text("settings_peak_data_title"))
             if let data {
-                // 元データの日時は UTC なので、日付だけを出す。
-                Text(Strings.format(
-                    "settings_peak_data_summary",
-                    groupedInteger(data.mountainCount),
-                    String(data.sourceTimestamp.prefix(10)).replacingOccurrences(of: "-", with: "/"),
-                    installedDate(data.installedAt)
-                ))
+                // リリース日はデータを作った日(UTC)。版から読めなければ出さない。
+                Group {
+                    if let release = data.releaseDate {
+                        Text(Strings.format(
+                            "settings_peak_data_summary",
+                            groupedInteger(data.mountainCount), release, installedDate(data.installedAt)
+                        ))
+                    } else {
+                        Text(Strings.format(
+                            "settings_peak_data_summary_no_release",
+                            groupedInteger(data.mountainCount), installedDate(data.installedAt)
+                        ))
+                    }
+                }
                     .font(.subheadline)
             } else {
                 Text(Strings.text("settings_peak_data_none")).font(.subheadline)
