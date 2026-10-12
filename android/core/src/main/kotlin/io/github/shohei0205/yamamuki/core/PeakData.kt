@@ -31,7 +31,10 @@ data class PeakManifest(
     val mountainCount: Int,
     /** 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。 */
     val sourceTimestamp: String,
-)
+) {
+    /** データを作った日(UTC)。「2026/10/07」の形。[version] から読めなければ null。 */
+    val releaseDate: String? get() = PeakData.releaseDate(version)
+}
 
 /** 取り込み済みの配信データ。設定画面に出し、次の確認で同じ版なら取り直さない。 */
 data class InstalledPeakData(
@@ -50,7 +53,24 @@ data class InstalledPeakData(
     val dataSha256: String? = null,
     /** 取り込んだときの manifest の SHA-256。端末に残した manifest がこの版のものかを確かめる。 */
     val manifestSha256: String? = null,
-)
+) {
+    /** データを作った日(UTC)。「2026/10/07」の形。[version] から読めなければ null。 */
+    val releaseDate: String? get() = PeakData.releaseDate(version)
+}
+
+/**
+ * 確認した manifest のうち、まだ取り込んでいない版。データ本体を取る前に、大きさを利用者に見せるのに使う。
+ * [PeakDataUpdater.install] に渡すと、この manifest のとおりに取り込む。
+ */
+class PeakDataOffer(
+    val manifest: PeakManifest,
+    /** 取ったときの manifest の中身。取り込んだら端末に残す。 */
+    internal val manifestBody: String,
+    internal val etag: String?,
+) {
+    /** ダウンロードするデータ本体のバイト数。 */
+    val sizeBytes: Long get() = manifest.sizeBytes
+}
 
 /** 配信データが壊れている、または読めない形式だった。 */
 class PeakDataException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -146,6 +166,15 @@ object PeakData {
     /** 参照先ファイルが指してよい manifest のファイル名(Release のタグ + .json)。 */
     private val MANIFEST_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]*\\.json")
     private val SHA256_HEX = Regex("[0-9a-f]{64}")
+
+    /**
+     * データを作った日(UTC)を「2026/10/07」の形で返す。データの版の先頭の日時(例: 20261007T071401Z-…)から読む。
+     * 版がこの形でなければ null。
+     */
+    fun releaseDate(version: String): String? =
+        RELEASE_DATE.find(version)?.destructured?.let { (y, m, d) -> "$y/$m/$d" }
+
+    private val RELEASE_DATE = Regex("^(\\d{4})(\\d{2})(\\d{2})T\\d{6}Z")
 
     /** SHA-256 を小文字の16進数で返す。 */
     fun sha256Hex(data: ByteArray): String =
@@ -345,56 +374,61 @@ class PeakDataUpdater(
     private val archive: PeakDataArchive? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    sealed interface Result {
-        val installed: InstalledPeakData
-
+    /** 確認の結果。 */
+    sealed interface Check {
         /** 取り込み済みの版が最新だった。 */
-        data class UpToDate(override val installed: InstalledPeakData) : Result
+        data class UpToDate(val installed: InstalledPeakData) : Check
 
-        data class Updated(override val installed: InstalledPeakData) : Result
+        /** 取り込める版がある。データ本体はまだ取っていない。 */
+        data class Available(val offer: PeakDataOffer) : Check
     }
 
     /**
-     * @param installed 取り込み済みの版。null なら manifest の版によらず取得する。
-     * 古い読み込み処理で作った保存データ([rebuild] で作り直せなかったもの)も、版によらず取り直す。
+     * manifest だけを取って、取り込める版があるかを確かめる。データ本体は取りに行かないので、
+     * 大きさ([PeakDataOffer.sizeBytes])を利用者に見せてから [install] で取り込める。
+     * @param installed 取り込み済みの版。null なら manifest の版によらず取り込める版として返す。
+     * 古い読み込み処理で作った保存データ([rebuild] で作り直せなかったもの)も、版によらず取り込める版として返す。
      */
-    suspend fun update(installed: InstalledPeakData?): Result {
+    suspend fun check(installed: InstalledPeakData?): Check {
         val current = installed?.takeIf { it.readerVersion >= PeakData.READER_VERSION }
         val response = source.fetchManifest(current?.manifestEtag)
-        if (response is ManifestResponse.NotModified && current != null) return Result.UpToDate(current)
+        if (response is ManifestResponse.NotModified && current != null) return Check.UpToDate(current)
         val fetched = response as? ManifestResponse.Fetched
             ?: throw PeakDataException("manifest が返ってきませんでした")
         val manifest = PeakData.parseManifest(fetched.body)
         if (current != null && current.version == manifest.version) {
-            return Result.UpToDate(current.copy(manifestEtag = fetched.etag))
+            return Check.UpToDate(current.copy(manifestEtag = fetched.etag))
         }
+        return Check.Available(PeakDataOffer(manifest, fetched.body, fetched.etag))
+    }
 
+    /** [check] で見つけた版のデータ本体を取得・検証して取り込む。 */
+    suspend fun install(offer: PeakDataOffer): InstalledPeakData {
+        val manifest = offer.manifest
         val data = source.fetchData(manifest.downloadUrl)
         PeakData.verify(data, manifest)
         val mountains = PeakData.parseMountains(data)
         if (mountains.isEmpty()) throw PeakDataException("山データが空です")
         cache.replaceTiles(PeakData.tilesOf(mountains), mountains, clock())
         // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の組が残る。
-        val manifestBytes = fetched.body.toByteArray(Charsets.UTF_8)
+        val manifestBytes = offer.manifestBody.toByteArray(Charsets.UTF_8)
         archive?.write(manifestBytes, data)
-        return Result.Updated(
-            InstalledPeakData(
-                version = manifest.version,
-                sourceTimestamp = manifest.sourceTimestamp,
-                mountainCount = mountains.size,
-                manifestEtag = fetched.etag,
-                installedAtMillis = clock(),
-                readerVersion = PeakData.READER_VERSION,
-                dataSha256 = manifest.sha256,
-                manifestSha256 = PeakData.sha256Hex(manifestBytes),
-            ),
+        return InstalledPeakData(
+            version = manifest.version,
+            sourceTimestamp = manifest.sourceTimestamp,
+            mountainCount = mountains.size,
+            manifestEtag = offer.etag,
+            installedAtMillis = clock(),
+            readerVersion = PeakData.READER_VERSION,
+            dataSha256 = manifest.sha256,
+            manifestSha256 = PeakData.sha256Hex(manifestBytes),
         )
     }
 
     /**
      * [installed] が古い読み込み処理で作った保存データなら、端末に残した manifest と gz から通信せずに作り直す。
      * 作り直したら新しい記録を、作り直す必要が無いか、manifest か gz が無い・SHA-256 が合わない・読めないときは null を返す。
-     * null のときに作り直しが必要なら、次の [update] で取り直す。
+     * null のときに作り直しが必要なら、次の [check] で取り込める版として返す。
      */
     suspend fun rebuild(installed: InstalledPeakData?): InstalledPeakData? {
         if (installed == null || installed.readerVersion >= PeakData.READER_VERSION) return null

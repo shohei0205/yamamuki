@@ -25,6 +25,9 @@ public struct PeakManifest: Equatable, Sendable {
     public let mountainCount: Int
     /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。
     public let sourceTimestamp: String
+
+    /// データを作った日(UTC)。「2026/10/07」の形。`version` から読めなければ nil。
+    public var releaseDate: String? { PeakData.releaseDate(version) }
 }
 
 /// 取り込み済みの配信データ。設定画面に出し、次の確認で同じ版なら取り直さない。
@@ -42,6 +45,9 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
     public var dataSha256: String?
     /// 取り込んだときの manifest の SHA-256。端末に残した manifest がこの版のものかを確かめる。
     public var manifestSha256: String?
+
+    /// データを作った日(UTC)。「2026/10/07」の形。`version` から読めなければ nil。
+    public var releaseDate: String? { PeakData.releaseDate(version) }
 
     public init(version: String, sourceTimestamp: String, mountainCount: Int, manifestEtag: String?, installedAt: Date,
                 readerVersion: Int = 0, dataSha256: String? = nil, manifestSha256: String? = nil) {
@@ -71,6 +77,18 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
         dataSha256 = try c.decodeIfPresent(String.self, forKey: .dataSha256)
         manifestSha256 = try c.decodeIfPresent(String.self, forKey: .manifestSha256)
     }
+}
+
+/// 確認した manifest のうち、まだ取り込んでいない版。データ本体を取る前に、大きさを利用者に見せるのに使う。
+/// `PeakDataUpdater.install` に渡すと、この manifest のとおりに取り込む。
+public struct PeakDataOffer: Equatable, Sendable {
+    public let manifest: PeakManifest
+    /// 取ったときの manifest の中身。取り込んだら端末に残す。
+    let manifestBody: Data
+    let etag: String?
+
+    /// ダウンロードするデータ本体のバイト数。
+    public var sizeBytes: Int { manifest.sizeBytes }
 }
 
 /// 配信データが壊れている、または読めない形式だった。
@@ -261,6 +279,15 @@ public enum PeakData {
         guard sha256Hex(data) == manifest.sha256 else { throw PeakDataError("山データの SHA-256 が合いません") }
     }
 
+    /// データを作った日(UTC)を「2026/10/07」の形で返す。データの版の先頭の日時(例: 20261007T071401Z-…)から読む。
+    /// 版がこの形でなければ nil。
+    public static func releaseDate(_ version: String) -> String? {
+        let chars = Array(version)
+        guard chars.count >= 16, chars[8] == "T", chars[15] == "Z",
+              (chars[0..<8] + chars[9..<15]).allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return "\(String(chars[0..<4]))/\(String(chars[4..<6]))/\(String(chars[6..<8]))"
+    }
+
     static func sha256Hex(_ data: Data) -> String {
         #if canImport(CryptoKit)
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -407,18 +434,6 @@ public enum PeakData {
 /// 取り込む前に失敗したら、キャッシュの内容はそのまま残る。
 /// 取り込んだ manifest とデータ本体は `archive` に組で残し、読み込み処理の版が上がったら、そこから作り直す。
 public struct PeakDataUpdater: Sendable {
-    public enum Result: Equatable, Sendable {
-        /// 取り込み済みの版が最新だった。
-        case upToDate(InstalledPeakData)
-        case updated(InstalledPeakData)
-
-        public var installed: InstalledPeakData {
-            switch self {
-            case .upToDate(let installed), .updated(let installed): return installed
-            }
-        }
-    }
-
     private let source: PeakDataSource
     private let cache: MountainCache
     private let archive: PeakDataArchive?
@@ -432,9 +447,19 @@ public struct PeakDataUpdater: Sendable {
         self.clock = clock
     }
 
-    /// - Parameter installed: 取り込み済みの版。nil なら manifest の版によらず取得する。
-    ///   古い読み込み処理で作った保存データ(`rebuild` で作り直せなかったもの)も、版によらず取り直す。
-    public func update(installed: InstalledPeakData?) async throws -> Result {
+    /// 確認の結果。
+    public enum Check: Equatable, Sendable {
+        /// 取り込み済みの版が最新だった。
+        case upToDate(InstalledPeakData)
+        /// 取り込める版がある。データ本体はまだ取っていない。
+        case available(PeakDataOffer)
+    }
+
+    /// manifest だけを取って、取り込める版があるかを確かめる。データ本体は取りに行かないので、
+    /// 大きさ(`PeakDataOffer.sizeBytes`)を利用者に見せてから `install` で取り込める。
+    /// - Parameter installed: 取り込み済みの版。nil なら manifest の版によらず取り込める版として返す。
+    ///   古い読み込み処理で作った保存データ(`rebuild` で作り直せなかったもの)も、版によらず取り込める版として返す。
+    public func check(installed: InstalledPeakData?) async throws -> Check {
         let installed = installed.flatMap { $0.readerVersion >= PeakData.readerVersion ? $0 : nil }
         let response = try await source.fetchManifest(etag: installed?.manifestEtag)
         let body: Data
@@ -452,29 +477,34 @@ public struct PeakDataUpdater: Sendable {
             installed.manifestEtag = etag
             return .upToDate(installed)
         }
+        return .available(PeakDataOffer(manifest: manifest, manifestBody: body, etag: etag))
+    }
 
+    /// `check` で見つけた版のデータ本体を取得・検証して取り込む。
+    public func install(_ offer: PeakDataOffer) async throws -> InstalledPeakData {
+        let manifest = offer.manifest
         let data = try await source.fetchData(manifest.downloadUrl)
         try PeakData.verify(data, against: manifest)
         let mountains = try PeakData.parseMountains(data)
         guard !mountains.isEmpty else { throw PeakDataError("山データが空です") }
         try await cache.replaceTiles(PeakData.tiles(of: mountains), mountains: mountains, fetchedAt: clock())
         // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の組が残る。
-        await archive?.write(manifest: body, data: data)
-        return .updated(InstalledPeakData(
+        await archive?.write(manifest: offer.manifestBody, data: data)
+        return InstalledPeakData(
             version: manifest.version,
             sourceTimestamp: manifest.sourceTimestamp,
             mountainCount: mountains.count,
-            manifestEtag: etag,
+            manifestEtag: offer.etag,
             installedAt: clock(),
             readerVersion: PeakData.readerVersion,
             dataSha256: manifest.sha256,
-            manifestSha256: PeakData.sha256Hex(body)
-        ))
+            manifestSha256: PeakData.sha256Hex(offer.manifestBody)
+        )
     }
 
     /// `installed` が古い読み込み処理で作った保存データなら、端末に残した manifest と gz から通信せずに作り直す。
     /// 作り直したら新しい記録を、作り直す必要が無いか、manifest か gz が無い・SHA-256 が合わない・読めないときは nil を返す。
-    /// nil のときに作り直しが必要なら、次の `update` で取り直す。
+    /// nil のときに作り直しが必要なら、次の `check` で取り込める版として返す。
     public func rebuild(installed: InstalledPeakData?) async throws -> InstalledPeakData? {
         guard var installed, installed.readerVersion < PeakData.readerVersion,
               let archived = await archive?.read(),

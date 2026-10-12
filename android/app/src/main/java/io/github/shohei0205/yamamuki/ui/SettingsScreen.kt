@@ -268,13 +268,10 @@ private fun PeakDataSection(data: InstalledPeakData?, updating: Boolean, notice:
             if (data == null) {
                 stringResource(R.string.settings_peak_data_none)
             } else {
-                // 元データの日時は UTC なので、日付だけを出す。
-                stringResource(
-                    R.string.settings_peak_data_summary,
-                    data.mountainCount,
-                    data.sourceTimestamp.take(10).replace('-', '/'),
-                    SimpleDateFormat("yyyy/MM/dd", Locale.JAPAN).format(Date(data.installedAtMillis)),
-                )
+                // リリース日はデータを作った日(UTC)。版から読めなければ出さない。
+                val installedDate = SimpleDateFormat("yyyy/MM/dd", Locale.JAPAN).format(Date(data.installedAtMillis))
+                data.releaseDate?.let { stringResource(R.string.settings_peak_data_summary, data.mountainCount, it, installedDate) }
+                    ?: stringResource(R.string.settings_peak_data_summary_no_release, data.mountainCount, installedDate)
             },
             style = MaterialTheme.typography.bodyMedium,
         )

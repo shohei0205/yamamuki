@@ -27,7 +27,8 @@ final class PanGeometryTests: XCTestCase {
                     let fraction = t * t * (3 - 2 * t)
                     // 復帰中に GPS の現在地が少しずつ動いても、双眼鏡は画面上の直線に沿って戻る。
                     let observer = MapCenter(tokyo.latitude + 0.004 * t, tokyo.longitude + 0.006 * t)
-                    let heading = PanGeometry.returnHeading(350, target: targetHeading, fraction: fraction)
+                    var turn = HeadingTurn(start: 350, target: targetHeading)
+                    let heading = turn.heading(target: targetHeading, progress: t)
                     let viewport = PanGeometry.returnViewport(observer, initialOffset: offset, heading: heading, fraction: fraction)
                     let actual = PanGeometry.observerOffset(observer, viewport: viewport, heading: heading)
                     XCTAssertEqual(actual.x, offset.x * (1 - fraction), accuracy: 1e-7)
@@ -38,11 +39,13 @@ final class PanGeometryTests: XCTestCase {
         }
     }
 
-    func testReturnHeadingCrossesNorthTheShortWay() {
-        XCTAssertEqual(PanGeometry.returnHeading(350, target: 10, fraction: 0.5), 0, accuracy: 1e-8)
-        XCTAssertEqual(PanGeometry.returnHeading(10, target: 310, fraction: 0.5), 340, accuracy: 1e-8)
-        XCTAssertEqual(PanGeometry.returnHeading(350, target: 10, fraction: 0), 350, accuracy: 1e-8)
-        XCTAssertEqual(PanGeometry.returnHeading(350, target: 10, fraction: 1), 10, accuracy: 1e-8)
+    func testHeadingTurnCrossesNorthTheShortWay() {
+        var forward = HeadingTurn(start: 350, target: 10)
+        XCTAssertEqual(forward.heading(target: 10, progress: 0), 350, accuracy: 1e-8)
+        XCTAssertEqual(forward.heading(target: 10, progress: 0.5), 0, accuracy: 1e-8)
+        XCTAssertEqual(forward.heading(target: 10, progress: 1), 10, accuracy: 1e-8)
+        var backward = HeadingTurn(start: 10, target: 310)
+        XCTAssertEqual(backward.heading(target: 310, progress: 0.5), 340, accuracy: 1e-8)
     }
 
     func testHeadingDragKeepsChosenPivotAcrossNorthAndRepeatedUpdates() {

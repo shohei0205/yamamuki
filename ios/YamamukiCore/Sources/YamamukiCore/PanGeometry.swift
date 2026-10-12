@@ -25,11 +25,6 @@ public enum PanGeometry {
         return drag(observer, dx: initialOffset.x * remaining, dy: -initialOffset.y * remaining, scale: 1, heading: heading)
     }
 
-    /// 復帰中の方角。fraction に応じて heading から target へ、北をまたぐときも近い向きに回す。
-    public static func returnHeading(_ heading: Double, target: Double, fraction: Double) -> Double {
-        Heading.normalize(heading + Heading.delta(heading, target) * min(1, max(0, fraction)))
-    }
-
     /// 双眼鏡を画面の中央に置く表示範囲の原点。検索した山頂を中央に出すときに使う。高さはpt。
     /// 画面の大きさが分からないときは observer をそのまま返す(双眼鏡は下端の原点に出る)。
     public static func centeredViewport(_ observer: MapCenter, heading: Double, rangeKm: Double, canvasHeight: Double) -> MapCenter {

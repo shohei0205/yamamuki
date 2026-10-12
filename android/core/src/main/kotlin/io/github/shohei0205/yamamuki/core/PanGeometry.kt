@@ -21,10 +21,6 @@ object PanGeometry {
         return drag(observer, initialOffset.x * remaining, -initialOffset.y * remaining, 1.0, heading)
     }
 
-    /** 復帰中の方角。[fraction] に応じて [heading] から [target] へ、北をまたぐときも近い向きに回す。 */
-    fun returnHeading(heading: Double, target: Double, fraction: Double): Double =
-        Heading.normalize(heading + Heading.delta(heading, target) * fraction.coerceIn(0.0, 1.0))
-
     /**
      * 双眼鏡を画面の中央に置く表示範囲の原点。検索した山頂を中央に出すときに使う。高さはdp。
      * 画面の大きさが分からないときは [observer] をそのまま返す(双眼鏡は下端の原点に出る)。
