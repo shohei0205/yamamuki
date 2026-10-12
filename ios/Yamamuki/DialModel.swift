@@ -90,8 +90,6 @@ final class DialModel: ObservableObject {
     private var peaks: [Mountain] = []
     /// 現在地へ戻る動きの通し番号。取り消された古い動きが、新しく始めた動きの [returning] を消さないようにする。
     private var returnGeneration = 0
-    /// 検索位置モードを解除したあと、右下のボタンで最初に現在地へ戻るときは、双眼鏡を画面の中央に置く。
-    private var centerOnNextReturn = false
     private var fetchedCenter: GeoPoint?
     private var fetchedRadiusKm = 0.0
     private var fetchTask: Task<Void, Never>?
@@ -212,7 +210,6 @@ final class DialModel: ObservableObject {
     func enterManual() {
         northUpTask?.cancel()
         guard location != nil else { return }
-        centerOnNextReturn = false
         beginExploring()
     }
 
@@ -280,15 +277,8 @@ final class DialModel: ObservableObject {
         fetchForViewport()
     }
 
-    /// 手動位置モードから現在地へ戻る。ふだんはヘディングアップに戻す。
-    /// 検索位置モードを解除したあとの最初の 1 回だけは、向きを変えずに双眼鏡を画面の中央へ動かし、手動位置モードのままにする。
-    /// canvasHeight は pt。
-    func resetCenter(canvasHeight: Double) {
+    func resetCenter() {
         northUpTask?.cancel()
-        if centerOnNextReturn {
-            centerOnNextReturn = false
-            if centerOnObserver(canvasHeight: canvasHeight) { return }
-        }
         guard let startLocation = location, let startObserver = gpsLocation else { return }
         let startHeading = displayHeading
         // 双眼鏡は現在地に付いているので、表示範囲と方角だけを戻す。途中で止めても双眼鏡は現在地に残る。
@@ -317,34 +307,6 @@ final class DialModel: ObservableObject {
         }
     }
 
-    /// 向きを変えずに、表示範囲を約 0.5 秒で動かして双眼鏡を画面の中央に置く。動かせないときは false。
-    private func centerOnObserver(canvasHeight: Double) -> Bool {
-        guard let startLocation = location, let observer = gpsLocation, let heading = lockedHeading,
-              canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset else { return false }
-        // 中央に置いたときの表示範囲から見た、今の表示範囲のずれ。これを 0 へ縮めていく。
-        let range = rangeKm
-        let target = { (p: GeoPoint) in
-            PanGeometry.centeredViewport(MapCenter(p.latitude, p.longitude), heading: heading, rangeKm: range, canvasHeight: canvasHeight)
-        }
-        let initialOffset = PanGeometry.observerOffset(target(observer),
-            viewport: MapCenter(startLocation.latitude, startLocation.longitude), heading: heading)
-        // 手動位置モードのままなので、左上の表示とコンパスは出したままにする(returning は立てない)。
-        northUpTask = Task { @MainActor [weak self] in
-            let started = ProcessInfo.processInfo.systemUptime
-            while !Task.isCancelled {
-                guard let self, let gps = gpsLocation else { return }
-                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
-                let fraction = t * t * (3 - 2 * t)
-                let viewport = PanGeometry.returnViewport(target(gps), initialOffset: initialOffset, heading: heading, fraction: fraction)
-                location = GeoPoint(latitude: viewport.latitude, longitude: viewport.longitude, mslAltitudeM: nil)
-                if t >= 1 { break }
-                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
-            }
-            if !Task.isCancelled { self?.fetch() }
-        }
-        return true
-    }
-
     /// 検索で選んだ山を、検索位置モードで表示する。双眼鏡の代わりにその山頂を距離と方位の基準にし、画面の中央に置く。
     /// 向きは今の向きのまま止める(手動位置モードに入るときと同じ)。canvasHeight は pt。
     func showFromMountain(_ mountain: Mountain, canvasHeight: Double) {
@@ -358,7 +320,6 @@ final class DialModel: ObservableObject {
         lockedHeading = heading
         exploring = true
         returning = false
-        centerOnNextReturn = false
         // 読み込みが終わるまでは、前の場所の山を残さず、選んだ山頂だけを出す。
         peaks = [mountain]
         updatePeaks(at: GeoPoint(latitude: mountain.latitude, longitude: mountain.longitude, mslAltitudeM: mountain.elevationM))
@@ -366,15 +327,14 @@ final class DialModel: ObservableObject {
         fetch()
     }
 
-    /// 検索位置モードをやめ、双眼鏡を実際の現在地に置いて手動位置モードにする。
-    /// 画面が急に切り替わらないよう、表示範囲と地図の向きは動かさない(山頂は画面の同じ所に残る)。
-    /// 現在地がまだ分からないときは、手動位置モードで動かす基準が無いのでヘディングアップにする。
+    /// 検索位置モードをやめ、現在地のヘディングアップに戻す。
+    /// 画面が急に切り替わらないよう、手動位置モードから戻るときと同じく、約0.5秒で地図を現在地へ滑らせて端末の向きに回す。
+    /// 現在地がまだ分からないときは、動かす先が無いのでそのままヘディングアップにする。
     func leaveViewpoint() {
         northUpTask?.cancel()
         viewpoint = nil
         returning = false
         guard let gps = gpsLocation else {
-            centerOnNextReturn = false
             location = nil
             lockedHeading = nil
             exploring = false
@@ -384,10 +344,10 @@ final class DialModel: ObservableObject {
             fetchedCenter = nil
             return
         }
-        // 表示範囲は変えないので、読み込んだ山はそのまま使い、距離と方位だけを現在地から測り直す。
-        centerOnNextReturn = true
+        // 双眼鏡を現在地に戻してから、手動位置モードと同じ動きで現在地へ戻す。山は戻り終えたときに読み直す。
         exploring = true
         updatePeaks(at: gps)
+        resetCenter()
     }
 
     /// 山の検索画面を開き、端末に保存している山を読み込む。

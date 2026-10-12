@@ -59,7 +59,7 @@ val SEARCH_BUTTON_ICON_COLOR = Color(0xFF8E24AA)
 /** モード切替ボタンのアイコンの色(青)。 */
 private val MODE_BUTTON_ICON_COLOR = Color(0xFF1A73E8)
 
-/** 現在地・方位への追従と手動操作を切り替える。[searching] は検索位置モード(手動位置モードの一種で、押すと現在地に戻る)。 */
+/** 現在地・方位への追従と手動操作を切り替える。[searching] は検索位置モード(手動位置モードの一種で、押すと現在地のヘディングアップに戻る)。 */
 @Composable
 fun MapModeButton(manual: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, searching: Boolean = false) {
     val state = stringResource(
@@ -71,8 +71,7 @@ fun MapModeButton(manual: Boolean, enabled: Boolean, onClick: () -> Unit, modifi
     )
     val action = stringResource(
         when {
-            searching -> R.string.map_mode_to_manual_here
-            manual -> R.string.map_mode_to_heading_up
+            searching || manual -> R.string.map_mode_to_heading_up
             else -> R.string.map_mode_to_manual
         },
     )

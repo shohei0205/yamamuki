@@ -936,17 +936,6 @@
         }
       }
     },
-    "map_mode_to_manual_here": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "現在地に戻る（手動位置モード）"
-          }
-        }
-      }
-    },
     "osm_attribution": {
       "extractionState": "manual",
       "localizations": {

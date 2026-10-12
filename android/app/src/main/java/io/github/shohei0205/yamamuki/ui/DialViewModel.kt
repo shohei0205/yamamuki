@@ -123,8 +123,6 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     private var northUpJob: Job? = null
     /** 現在地へ戻る動きの通し番号。取り消された古い動きが、新しく始めた動きの [DialUiState.returning] を消さないようにする。 */
     private var returnGeneration = 0
-    /** 検索位置モードを解除したあと、右下のボタンで最初に現在地へ戻るときは、双眼鏡を画面の中央に置く。 */
-    private var centerOnNextReturn = false
 
     private var peaks: List<Mountain> = emptyList()
     private var fetchedCenter: GeoPoint? = null
@@ -218,21 +216,11 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun enterManual(headingDeg: Double) {
         northUpJob?.cancel()
         if (state.value.location == null) return
-        centerOnNextReturn = false
         _state.update { it.copy(exploring = true, lockedHeading = headingDeg) }
     }
 
-    /**
-     * 手動位置モードから現在地へ戻る。ふだんはヘディングアップに戻す。
-     * 検索位置モードを解除したあとの最初の 1 回だけは、向きを変えずに双眼鏡を画面の中央へ動かし、手動位置モードのままにする。
-     * [canvasHeight] は dp。
-     */
-    fun resetCenter(canvasHeight: Double, compassHeading: () -> Double) {
+    fun resetCenter(compassHeading: () -> Double) {
         northUpJob?.cancel()
-        if (centerOnNextReturn) {
-            centerOnNextReturn = false
-            if (centerOnObserver(canvasHeight)) return
-        }
         val initial = state.value
         val startLocation = initial.location ?: return
         val startObserver = initial.gpsLocation ?: return
@@ -265,35 +253,6 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 向きを変えずに、表示範囲を約 0.5 秒で動かして双眼鏡を画面の中央に置く。動かせないときは false。 */
-    private fun centerOnObserver(canvasHeight: Double): Boolean {
-        val initial = state.value
-        val startLocation = initial.location ?: return false
-        val observer = initial.gpsLocation ?: return false
-        val heading = initial.lockedHeading ?: return false
-        if (canvasHeight <= DialGeometry.CHART_INSET_DP) return false
-        // 中央に置いたときの表示範囲から見た、今の表示範囲のずれ。これを 0 へ縮めていく。
-        val range = initial.rangeKm
-        fun target(p: GeoPoint) = PanGeometry.centeredViewport(MapCenter(p.latitude, p.longitude), heading, range, canvasHeight)
-        val start = target(observer)
-        val initialOffset = PanGeometry.observerOffset(start, MapCenter(startLocation.latitude, startLocation.longitude), heading)
-        // 手動位置モードのままなので、左上の表示とコンパスは出したままにする([DialUiState.returning] は立てない)。
-        northUpJob = viewModelScope.launch {
-            val started = System.nanoTime()
-            do {
-                val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
-                val fraction = t * t * (3 - 2 * t)
-                val center = target(state.value.gpsLocation ?: return@launch)
-                val viewport = PanGeometry.returnViewport(center, initialOffset, heading, fraction)
-                _state.update { it.copy(location = GeoPoint(viewport.latitude, viewport.longitude)) }
-                if (t >= 1.0) break
-                delay(16)
-            } while (true)
-            fetch()
-        }
-        return true
-    }
-
     /**
      * 検索で選んだ山を、検索位置モードで表示する。双眼鏡の代わりにその山頂を距離と方位の基準にし、画面の中央に置く。
      * 向きは今の向きのまま止める(手動位置モードに入るときと同じ)。[canvasHeight] は dp。
@@ -305,7 +264,6 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val viewport = PanGeometry.centeredViewport(
             MapCenter(mountain.latitude, mountain.longitude), heading, state.value.rangeKm, canvasHeight,
         )
-        centerOnNextReturn = false
         // 読み込みが終わるまでは、前の場所の山を残さず、選んだ山頂だけを出す。
         peaks = listOf(mountain)
         fetchedCenter = null
@@ -319,15 +277,14 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 検索位置モードをやめ、双眼鏡を実際の現在地に置いて手動位置モードにする。
-     * 画面が急に切り替わらないよう、表示範囲と地図の向きは動かさない(山頂は画面の同じ所に残る)。
-     * 現在地がまだ分からないときは、手動位置モードで動かす基準が無いのでヘディングアップにする。
+     * 検索位置モードをやめ、現在地のヘディングアップに戻す。
+     * 画面が急に切り替わらないよう、手動位置モードから戻るときと同じく、約0.5秒で地図を現在地へ滑らせて端末の向きに回す。
+     * 現在地がまだ分からないときは、動かす先が無いのでそのままヘディングアップにする。
      */
-    fun leaveViewpoint() {
+    fun leaveViewpoint(compassHeading: () -> Double) {
         northUpJob?.cancel()
         val gps = state.value.gpsLocation
         if (gps == null) {
-            centerOnNextReturn = false
             peaks = emptyList()
             fetchedCenter = null
             _state.update {
@@ -336,9 +293,9 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             }
             return
         }
-        // 表示範囲は変えないので、読み込んだ山はそのまま使い、距離と方位だけを現在地から測り直す。
-        centerOnNextReturn = true
+        // 双眼鏡を現在地に戻してから、手動位置モードと同じ動きで現在地へ戻す。山は戻り終えたときに読み直す。
         _state.update { it.copy(viewpoint = null, exploring = true, returning = false).withPeaksAt(gps) }
+        resetCenter(compassHeading)
     }
 
     /** 山の検索画面を開き、端末に保存している山を読み込む。 */

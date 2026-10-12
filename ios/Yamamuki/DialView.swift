@@ -145,7 +145,7 @@ struct DialView: View {
                                 if model.viewpoint != nil {
                                     model.leaveViewpoint()
                                 } else if model.exploring {
-                                    model.resetCenter(canvasHeight: Double(geometry.size.height))
+                                    model.resetCenter()
                                 } else {
                                     model.enterManual()
                                 }
@@ -159,8 +159,7 @@ struct DialView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(!modeButtonEnabled(geometry))
-                            .accessibilityLabel(Strings.text(model.viewpoint != nil ? "map_mode_to_manual_here"
-                                : model.exploring ? "map_mode_to_heading_up" : "map_mode_to_manual"))
+                            .accessibilityLabel(Strings.text(model.exploring ? "map_mode_to_heading_up" : "map_mode_to_manual"))
                             .accessibilityValue(Strings.text(model.viewpoint != nil ? "map_mode_search"
                                 : model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
                             .padding(.trailing, 8)

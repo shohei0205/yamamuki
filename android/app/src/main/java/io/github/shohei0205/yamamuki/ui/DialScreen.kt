@@ -378,8 +378,8 @@ fun DialScreen(
                     (hasPermission && state.gpsLocation != null && canvasHeight > DialGeometry.CHART_INSET_DP),
                 onClick = {
                     // 検索位置モードは手動位置モードへ、手動位置モードはヘディングアップへ、ヘディングアップは手動位置モードへ。
-                    if (state.viewpoint != null) viewModel.leaveViewpoint()
-                    else if (state.exploring) viewModel.resetCenter(canvasHeight) { currentCompassHeading }
+                    if (state.viewpoint != null) viewModel.leaveViewpoint { currentCompassHeading }
+                    else if (state.exploring) viewModel.resetCenter { currentCompassHeading }
                     else viewModel.enterManual(heading ?: 0.0)
                 },
             )
