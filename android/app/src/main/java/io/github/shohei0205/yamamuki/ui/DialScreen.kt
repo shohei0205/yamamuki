@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -55,6 +56,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -72,6 +74,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -305,6 +308,11 @@ fun DialScreen(
                     labeled = true,
                 )
                 StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null))
+                // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
+                if (state.peakDataRefreshNeeded) {
+                    // 設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
+                    PeakDataRefreshLabel(onClick = viewModel::updatePeakData)
+                }
             }
         }
 
@@ -656,6 +664,29 @@ private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled:
             },
         ),
     )
+}
+
+/** 山データの取り直しが要ることを知らせるラベル。タップで更新を確かめる。ほかの知らせと見分けやすいよう、濃い白の札にする。 */
+@Composable
+private fun PeakDataRefreshLabel(onClick: () -> Unit) {
+    Row(
+        Modifier
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color.White.copy(alpha = 0.9f))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Filled.Refresh, contentDescription = null, tint = DOWNLOAD_BUTTON_ICON_COLOR, modifier = Modifier.size(18.dp))
+        Text(
+            stringResource(R.string.peak_data_refresh_needed),
+            style = MaterialTheme.typography.bodySmall,
+            color = TapeInk,
+            fontWeight = FontWeight.Bold,
+        )
+    }
 }
 
 @Composable

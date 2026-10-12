@@ -72,6 +72,7 @@
     <string name="peak_data_prompt_message">山データを取得します。保存後は圏外でも利用できます。\n\n今すぐ取得しますか？\nあとで取得する場合は設定画面から実行できます。</string>
     <string name="peak_data_prompt_fetch">取得する</string>
     <string name="peak_data_prompt_later">あとで</string>
+    <string name="peak_data_refresh_needed">山データの更新が必要です</string>
     <string name="peak_data_offer_title">山データのダウンロード</string>
     <string name="peak_data_offer_message">新しい山データが入手できます。\n%1$s\n今すぐダウンロードしますか？</string>
     <string name="peak_data_offer_detail">リリース：%1$s、約 %2$s</string>
