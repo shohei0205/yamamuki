@@ -981,6 +981,72 @@
         }
       }
     },
+    "peak_data_offer_detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リリース：%1$@、約 %2$@"
+          }
+        }
+      }
+    },
+    "peak_data_offer_download": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード"
+          }
+        }
+      }
+    },
+    "peak_data_offer_later": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "あとで"
+          }
+        }
+      }
+    },
+    "peak_data_offer_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しい山データが入手できます。\n%1$@\n今すぐダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "peak_data_offer_size": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "約 %1$@"
+          }
+        }
+      }
+    },
+    "peak_data_offer_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データのダウンロード"
+          }
+        }
+      }
+    },
     "peak_data_prompt_fetch": {
       "extractionState": "manual",
       "localizations": {
@@ -1025,28 +1091,6 @@
         }
       }
     },
-    "peak_data_refresh_confirm": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "更新する"
-          }
-        }
-      }
-    },
-    "peak_data_refresh_message": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "アプリの更新に合わせて、山データを取り直します（通信量は約 0.5 MB）。\n\n今すぐ更新しますか？"
-          }
-        }
-      }
-    },
     "peak_data_refresh_needed": {
       "extractionState": "manual",
       "localizations": {
@@ -1054,17 +1098,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "山データの更新が必要です"
-          }
-        }
-      }
-    },
-    "peak_data_refresh_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "山データの更新"
           }
         }
       }
@@ -1350,7 +1383,18 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山 %1$@ 件・元データ %2$@・取得日 %3$@"
+            "value": "山 %1$@ 件・リリース：%2$@・取得日 %3$@"
+          }
+        }
+      }
+    },
+    "settings_peak_data_summary_no_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山 %1$@ 件・取得日 %2$@"
           }
         }
       }

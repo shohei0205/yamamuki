@@ -232,6 +232,42 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(source.dataCalls, 1)
     }
 
+    func testReleaseDateComesFromVersion() {
+        func manifest(_ version: String) -> PeakManifest {
+            PeakManifest(schemaVersion: 5, version: version, downloadUrl: URL(string: "https://example.com/a.gz")!,
+                         sha256: "0", sizeBytes: 1, mountainCount: 1, sourceTimestamp: "")
+        }
+        XCTAssertEqual(manifest("20261007T071401Z-37585754546-1").releaseDate, "2026/10/07")
+        XCTAssertNil(manifest("v1").releaseDate)
+        let installed = InstalledPeakData(version: "20261007T071401Z-37585754546-1", sourceTimestamp: "", mountainCount: 1,
+                                          manifestEtag: nil, installedAt: Date())
+        XCTAssertEqual(installed.releaseDate, "2026/10/07")
+    }
+
+    func testCheckReportsSizeWithoutFetchingData() async throws {
+        let source = FakeSource(manifest: manifest(), data: gzip)
+        let cache = MemoryCache()
+        let updater = PeakDataUpdater(source: source, cache: cache)
+
+        // 確認では manifest だけを取り、データ本体は取らない。キャッシュにも触れない。
+        guard case .available(let offer) = try await updater.check(installed: nil) else { return XCTFail("取り込める版があるはず") }
+        XCTAssertEqual(offer.sizeBytes, gzip.count)
+        XCTAssertEqual(offer.manifest.version, "v1")
+        XCTAssertEqual(source.dataCalls, 0)
+        XCTAssertTrue(cache.mountains.isEmpty)
+
+        // 利用者が取得を選んだら、確認した版を取り込む。
+        let installed = try await updater.install(offer)
+        XCTAssertEqual(installed.version, "v1")
+        XCTAssertEqual(installed.manifestEtag, "\"e1\"")
+        XCTAssertEqual(source.dataCalls, 1)
+        XCTAssertEqual(Set(cache.mountains.keys), [3_403_990_450, 12])
+
+        // 取り込んだあとの確認は、最新として返す。
+        guard case .upToDate = try await updater.check(installed: installed) else { return XCTFail("最新のはず") }
+        XCTAssertEqual(source.dataCalls, 1)
+    }
+
     func testBrokenDataLeavesCacheUntouched() async {
         let source = FakeSource(manifest: manifest(), data: gzip.dropLast())
         let cache = MemoryCache()
@@ -375,5 +411,27 @@ final class PeakDataTests: XCTestCase {
         let decoded = try JSONDecoder().decode(InstalledPeakData.self, from: JSONSerialization.data(withJSONObject: json))
         XCTAssertEqual(decoded, old)
         XCTAssertEqual(decoded.readerVersion, 0)
+    }
+}
+
+/// 確認の結果と、取り込んだかどうか。テストで `update` の結果を見分けるのに使う。
+private enum UpdateResult: Equatable {
+    case upToDate(InstalledPeakData)
+    case updated(InstalledPeakData)
+
+    var installed: InstalledPeakData {
+        switch self {
+        case .upToDate(let installed), .updated(let installed): return installed
+        }
+    }
+}
+
+private extension PeakDataUpdater {
+    /// 確認して、取り込める版があれば続けて取り込む(アプリでは、利用者に大きさを見せて確かめてから取り込む)。
+    func update(installed: InstalledPeakData?) async throws -> UpdateResult {
+        switch try await check(installed: installed) {
+        case .upToDate(let installed): return .upToDate(installed)
+        case .available(let offer): return .updated(try await install(offer))
+        }
     }
 }

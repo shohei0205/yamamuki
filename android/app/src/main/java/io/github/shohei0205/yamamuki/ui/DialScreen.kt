@@ -91,6 +91,8 @@ import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.NearbyMountain
+import io.github.shohei0205.yamamuki.core.PeakManifest
+import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.core.degreeText
 import io.github.shohei0205.yamamuki.core.distanceText
 import io.github.shohei0205.yamamuki.core.elevationText
@@ -195,7 +197,6 @@ fun DialScreen(
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showDownload by rememberSaveable { mutableStateOf(false) }
     var showObserver by remember { mutableStateOf(false) }
-    var showPeakDataRefresh by remember { mutableStateOf(false) }
     // 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
     var groupIds by remember { mutableStateOf<List<Long>?>(null) }
     val group = groupIds?.mapNotNull { id -> state.mountains.firstOrNull { it.mountain.osmId == id } }?.takeIf { it.isNotEmpty() }
@@ -308,10 +309,8 @@ fun DialScreen(
                 StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null))
                 // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
                 if (state.peakDataRefreshNeeded) {
-                    PeakDataRefreshLabel(
-                        // 圏外なら確認を出さず、取得を試すときと同じ圏外の知らせを出す(通信はしない)。
-                        onClick = { if (state.connected) showPeakDataRefresh = true else viewModel.updatePeakData() },
-                    )
+                    // 設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
+                    PeakDataRefreshLabel(onClick = viewModel::updatePeakData)
                 }
             }
         }
@@ -432,13 +431,9 @@ fun DialScreen(
         PeakDataPrompt(onAnswer = viewModel::answerPeakDataPrompt)
     }
 
-    if (showPeakDataRefresh) {
-        PeakDataRefreshDialog(
-            onAnswer = { refresh ->
-                showPeakDataRefresh = false
-                if (refresh) viewModel.updatePeakData()
-            },
-        )
+    // 新しい山データの大きさを見せて、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
+    state.peakDataOffer?.let { manifest ->
+        PeakDataOfferDialog(manifest = manifest, onAnswer = viewModel::answerPeakDataOffer)
     }
 
     // 通信の失敗は、方位を待つ表示などに隠れて気づけないことがないよう、画面中央で知らせる。
@@ -483,15 +478,24 @@ private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
     )
 }
 
-/** 方位盤のラベルから山データを取り直すときの確認。 */
+/** 新しい山データを作った日と大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。 */
 @Composable
-private fun PeakDataRefreshDialog(onAnswer: (Boolean) -> Unit) {
+private fun PeakDataOfferDialog(manifest: PeakManifest, onAnswer: (Boolean) -> Unit) {
+    val size = byteSizeText(manifest.sizeBytes)
+    // データを作った日が版の文字列から読めなければ、大きさだけを出す。
+    val date = manifest.releaseDate
+    val detail = if (date == null) {
+        stringResource(R.string.peak_data_offer_size, size)
+    } else {
+        stringResource(R.string.peak_data_offer_detail, date, size)
+    }
     AlertDialog(
-        onDismissRequest = { onAnswer(false) },
-        title = { Text(stringResource(R.string.peak_data_refresh_title)) },
-        text = { Text(stringResource(R.string.peak_data_refresh_message)) },
-        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_refresh_confirm)) } },
-        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_prompt_later)) } },
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        title = { Text(stringResource(R.string.peak_data_offer_title)) },
+        text = { Text(stringResource(R.string.peak_data_offer_message, detail)) },
+        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_offer_download)) } },
+        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_offer_later)) } },
     )
 }
 
@@ -661,7 +665,7 @@ private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled:
     )
 }
 
-/** 山データの取り直しが要ることを知らせるラベル。タップで取り直しの確認を出す。ほかの知らせと見分けやすいよう、濃い白の札にする。 */
+/** 山データの取り直しが要ることを知らせるラベル。タップで更新を確かめる。ほかの知らせと見分けやすいよう、濃い白の札にする。 */
 @Composable
 private fun PeakDataRefreshLabel(onClick: () -> Unit) {
     Row(

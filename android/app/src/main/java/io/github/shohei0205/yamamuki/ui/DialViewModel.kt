@@ -18,7 +18,9 @@ import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.PeakData
 import io.github.shohei0205.yamamuki.core.PeakDataException
+import io.github.shohei0205.yamamuki.core.PeakDataOffer
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
+import io.github.shohei0205.yamamuki.core.PeakManifest
 import io.github.shohei0205.yamamuki.core.meetsMinElevation
 import io.github.shohei0205.yamamuki.core.seenFrom
 import io.github.shohei0205.yamamuki.core.summitAt
@@ -72,6 +74,8 @@ data class DialUiState(
     val peakData: InstalledPeakData? = null,
     /** 全国の山データを取得している。 */
     val peakDataUpdating: Boolean = false,
+    /** 新しい山データがあり、ダウンロードするかを聞いているときの、その版の manifest(作った日と大きさを出す)。聞いていなければ null。 */
+    val peakDataOffer: PeakManifest? = null,
     /** 設定画面に出す、山データの取得の結果(「山データは最新です」など)。 */
     val peakDataNotice: String? = null,
     /** 山データの取得に失敗したときに画面中央で知らせる文言。閉じるまで保つ。 */
@@ -111,6 +115,10 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     private var fetchedCenter: GeoPoint? = null
     private var fetchedRadiusKm = 0.0
     private var fetchJob: Job? = null
+    /** 確認した、まだ取り込んでいない山データの版。ダウンロードするかの答えを待っている間だけ持つ。 */
+    private var peakDataOffer: PeakDataOffer? = null
+    /** ダウンロードすると答えたのに取り込めなかった版。「もう一度取得」では確認を飛ばして、この版を取り直す。 */
+    private var failedOffer: PeakDataOffer? = null
 
     init {
         viewModelScope.launch { connectivityUpdates(application).collect(::onConnectivity) }
@@ -307,10 +315,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     /** 通信エラーの知らせを閉じる。 */
     fun dismissFetchError() = _state.update { it.copy(fetchErrorMessage = null) }
 
-    /** 通信エラーの知らせから取り直す。利用者が求めたので通信する。 */
+    /**
+     * 通信エラーの知らせから取り直す。利用者が求めたので通信する。
+     * ダウンロードに失敗したあとなら、もう答えをもらっているので、大きさを聞き直さずに同じ版を取り直す。
+     */
     fun retryAfterFetchError() {
         dismissFetchError()
-        updatePeakData()
+        failedOffer?.let(::installPeakData) ?: updatePeakData()
     }
 
     fun updateSettings(transform: (Settings) -> Settings) {
@@ -396,10 +407,52 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 全国の山データの最新版を確かめ、新しければ取得して取り込む。初回の問い合わせと設定画面のボタンから呼ぶ。
+     * 全国の山データの最新版を確かめる。初回の問い合わせと設定画面のボタンから呼ぶ。
+     * manifest だけを取り、新しい版があれば大きさを見せて、ダウンロードするかを聞く([answerPeakDataOffer])。
      * 圏外と分かっていれば通信を試さずに知らせる。失敗しても、取り込み済みのデータはそのまま残る。
      */
     fun updatePeakData() {
+        failedOffer = null
+        runPeakDataTask {
+            // 画面の状態ではなく保存した記録を使う(キャッシュが作り直されて記録が消えていることがある)。
+            // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
+            val installed = app.peakDataStore.load()?.takeIf { cacheManager.info().mountainCount > 0 }
+            when (val check = app.peakDataUpdater.check(installed)) {
+                is PeakDataUpdater.Check.UpToDate -> {
+                    app.peakDataStore.save(check.installed)
+                    _state.update { it.copy(peakData = check.installed, peakDataNotice = app.getString(R.string.peak_data_up_to_date)) }
+                }
+                is PeakDataUpdater.Check.Available -> {
+                    peakDataOffer = check.offer
+                    _state.update { it.copy(peakDataOffer = check.offer.manifest) }
+                }
+            }
+        }
+    }
+
+    /** 「山データをダウンロードしますか」への答え。はいなら、確認した版のデータ本体を取得して取り込む。 */
+    fun answerPeakDataOffer(download: Boolean) {
+        val offer = peakDataOffer ?: return
+        peakDataOffer = null
+        _state.update { it.copy(peakDataOffer = null) }
+        if (download) installPeakData(offer)
+    }
+
+    /** 確認した版のデータ本体を取得して取り込む。取り込めなければ、「もう一度取得」で取り直せるように残す。 */
+    private fun installPeakData(offer: PeakDataOffer) {
+        failedOffer = offer
+        runPeakDataTask {
+            val installed = app.peakDataUpdater.install(offer)
+            failedOffer = null
+            app.peakDataStore.save(installed)
+            _state.update { it.copy(peakData = installed, peakDataNotice = app.getString(R.string.peak_data_updated)) }
+            reloadFromCache()
+            refreshCacheInfo()
+        }
+    }
+
+    /** 山データの通信を、取得中の表示を出して行う。圏外なら通信せずに知らせ、失敗したら画面中央で知らせる。 */
+    private fun runPeakDataTask(task: suspend () -> Unit) {
         if (_state.value.peakDataUpdating) return
         if (!_state.value.connected) {
             _state.update { it.copy(fetchErrorMessage = offlineNotice(peaks.isNotEmpty()), peakDataNotice = null) }
@@ -408,19 +461,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _state.update { it.copy(peakDataUpdating = true, peakDataNotice = null) }
             try {
-                // 画面の状態ではなく保存した記録を使う(キャッシュが作り直されて記録が消えていることがある)。
-                // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
-                val installed = app.peakDataStore.load()?.takeIf { cacheManager.info().mountainCount > 0 }
-                val result = app.peakDataUpdater.update(installed)
-                app.peakDataStore.save(result.installed)
-                val updated = result is PeakDataUpdater.Result.Updated
-                _state.update {
-                    it.copy(peakData = result.installed, peakDataNotice = app.getString(if (updated) R.string.peak_data_updated else R.string.peak_data_up_to_date))
-                }
-                if (updated) {
-                    reloadFromCache()
-                    refreshCacheInfo()
-                }
+                task()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
