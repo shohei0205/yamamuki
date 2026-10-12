@@ -21,10 +21,6 @@ object PanGeometry {
         return drag(observer, initialOffset.x * remaining, -initialOffset.y * remaining, 1.0, heading)
     }
 
-    /** 復帰中の方角。[fraction] に応じて [heading] から [target] へ、北をまたぐときも近い向きに回す。 */
-    fun returnHeading(heading: Double, target: Double, fraction: Double): Double =
-        Heading.normalize(heading + Heading.delta(heading, target) * fraction.coerceIn(0.0, 1.0))
-
     /** 描画される双眼鏡の中心が画面内にあるか。寸法はdp。 */
     fun isObserverVisible(observer: MapCenter, viewport: MapCenter, heading: Double,
         rangeKm: Double, canvasWidth: Double, canvasHeight: Double): Boolean {

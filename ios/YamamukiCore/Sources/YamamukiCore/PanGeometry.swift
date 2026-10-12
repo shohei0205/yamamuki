@@ -25,11 +25,6 @@ public enum PanGeometry {
         return drag(observer, dx: initialOffset.x * remaining, dy: -initialOffset.y * remaining, scale: 1, heading: heading)
     }
 
-    /// 復帰中の方角。fraction に応じて heading から target へ、北をまたぐときも近い向きに回す。
-    public static func returnHeading(_ heading: Double, target: Double, fraction: Double) -> Double {
-        Heading.normalize(heading + Heading.delta(heading, target) * min(1, max(0, fraction)))
-    }
-
     /// 描画される双眼鏡の中心が画面内にあるか。寸法はpt。
     public static func isObserverVisible(_ observer: MapCenter, viewport: MapCenter, heading: Double,
         rangeKm: Double, canvasWidth: Double, canvasHeight: Double) -> Bool {

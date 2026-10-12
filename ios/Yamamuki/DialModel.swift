@@ -277,11 +277,13 @@ final class DialModel: ObservableObject {
         northUpTask = Task { @MainActor [weak self] in
             defer { if self?.returnGeneration == generation { self?.returning = false } }
             let started = ProcessInfo.processInfo.systemUptime
+            // 回している間に端末の向きが戻り先の真後ろをまたいでも、途中で逆回りしないようにする。
+            var turn = HeadingTurn(start: startHeading, target: self?.heading ?? startHeading)
             while !Task.isCancelled {
                 guard let self, let target = gpsLocation else { return }
                 let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
                 let fraction = t * t * (3 - 2 * t)
-                let nextHeading = PanGeometry.returnHeading(startHeading, target: heading ?? startHeading, fraction: fraction)
+                let nextHeading = turn.heading(target: heading ?? startHeading, progress: t)
                 let viewport = PanGeometry.returnViewport(MapCenter(target.latitude, target.longitude),
                     initialOffset: initialOffset, heading: nextHeading, fraction: fraction)
                 location = GeoPoint(latitude: viewport.latitude, longitude: viewport.longitude, mslAltitudeM: target.mslAltitudeM)

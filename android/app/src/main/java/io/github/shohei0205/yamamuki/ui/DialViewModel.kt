@@ -213,6 +213,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val initialOffset = PanGeometry.observerOffset(MapCenter(startObserver.latitude, startObserver.longitude),
             MapCenter(startLocation.latitude, startLocation.longitude), startHeading)
         val generation = ++returnGeneration
+        // 回している間に端末の向きが戻り先の真後ろをまたいでも、途中で逆回りしないようにする。
+        val turn = HeadingTurn(startHeading, compassHeading())
         _state.update { it.copy(returning = true) }
         northUpJob = viewModelScope.launch {
             try {
@@ -221,7 +223,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                     val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
                     val fraction = t * t * (3 - 2 * t)
                     val target = state.value.gpsLocation ?: return@launch
-                    val heading = PanGeometry.returnHeading(startHeading, compassHeading(), fraction)
+                    val heading = turn.headingAt(compassHeading(), t)
                     val viewport = PanGeometry.returnViewport(MapCenter(target.latitude, target.longitude), initialOffset, heading, fraction)
                     _state.update { it.copy(
                         location = target.copy(latitude = viewport.latitude, longitude = viewport.longitude),
