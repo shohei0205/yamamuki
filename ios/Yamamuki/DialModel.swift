@@ -58,6 +58,13 @@ final class DialModel: ObservableObject {
         authorization == .authorizedWhenInUse || authorization == .authorizedAlways
     }
 
+    /// 山データの取り直しが要る。保存データの読み込み処理の版がアプリより古く、起動時の作り直しもできなかったとき
+    /// (gz を残す前の版のアプリで取り込んだときなど)。取得中は出さない。
+    var peakDataRefreshNeeded: Bool {
+        guard let peakData, !peakDataUpdating else { return false }
+        return peakData.readerVersion < PeakData.readerVersion
+    }
+
     private let cache: FileMountainCache
     private let repository: MountainRepository
     /// yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。

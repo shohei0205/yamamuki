@@ -192,6 +192,7 @@ open Yamamuki.xcodeproj
 - 取り込んだ manifest とデータ本体(gz)は、保存データに取り込み終えてから端末に 1 組だけ残す。新しい版を取り込むと置き換えるので溜まらない(今は約 0.5 MB)。取り込みに失敗したときは、前の組をそのまま残す。アプリが読まない項目(manifest の `supplementSources` など)も、ここには残る。
   - 取り込み済みの記録には、保存データを作った読み込み処理の版(`PeakData.READER_VERSION` / `PeakData.readerVersion`)と、manifest と gz の SHA-256 も書く。読む項目を増やしたら、この版を上げる。
   - アプリの更新で読み込み処理の版が上がっていたら、起動時に残した manifest と gz から通信せずに保存データを作り直す。どちらかが無いか SHA-256 が合わないときは、次に更新を確かめたときに、データの版が同じでも取り直す。読み込み処理の版が変わらないうちは、残したファイルが消えても取り直さない。gz を残す前の版のアプリから更新したときも、最初の確認で一度だけ取り直す。
+  - 作り直せずに読み込み処理の版が古いままのときは、方位盤の上部に「山データの更新が必要です」のラベルを出す。タップすると通信量の目安を見せて確認し、「更新する」で設定の「更新を確認」と同じ処理を行う。自動では取り直さず、圏外ならタップしても通信せずに圏外の知らせを出す。
   - 置き場所は、Android がアプリの `noBackupFilesDir/peak-data/`、iOS が Application Support の `peak-data/`(バックアップから除外)。設定の「キャッシュを消去」では記録と一緒に消す(Android は、古い版のアプリでキャッシュを作り直したときも消す)。
 - 取り込みと取り込み済みの版の記録は `android/core/.../PeakData.kt` と `ios/YamamukiCore/.../PeakData.swift`、gz の保存は `PeakDataArchive.kt` / `PeakDataArchive.swift` にある。
 - OpenStreetMap の Overpass API から取得していたころに分かったことは [docs/peak-data-notes.md](docs/peak-data-notes.md) にまとめた。

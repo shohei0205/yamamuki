@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -54,6 +55,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -193,6 +195,7 @@ fun DialScreen(
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showDownload by rememberSaveable { mutableStateOf(false) }
     var showObserver by remember { mutableStateOf(false) }
+    var showPeakDataRefresh by remember { mutableStateOf(false) }
     // 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
     var groupIds by remember { mutableStateOf<List<Long>?>(null) }
     val group = groupIds?.mapNotNull { id -> state.mountains.firstOrNull { it.mountain.osmId == id } }?.takeIf { it.isNotEmpty() }
@@ -303,6 +306,13 @@ fun DialScreen(
                     labeled = true,
                 )
                 StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null))
+                // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
+                if (state.peakDataRefreshNeeded) {
+                    PeakDataRefreshLabel(
+                        // 圏外なら確認を出さず、取得を試すときと同じ圏外の知らせを出す(通信はしない)。
+                        onClick = { if (state.connected) showPeakDataRefresh = true else viewModel.updatePeakData() },
+                    )
+                }
             }
         }
 
@@ -422,6 +432,15 @@ fun DialScreen(
         PeakDataPrompt(onAnswer = viewModel::answerPeakDataPrompt)
     }
 
+    if (showPeakDataRefresh) {
+        PeakDataRefreshDialog(
+            onAnswer = { refresh ->
+                showPeakDataRefresh = false
+                if (refresh) viewModel.updatePeakData()
+            },
+        )
+    }
+
     // 通信の失敗は、方位を待つ表示などに隠れて気づけないことがないよう、画面中央で知らせる。
     state.fetchErrorMessage?.let { message ->
         FetchErrorDialog(
@@ -460,6 +479,18 @@ private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
         title = { Text(stringResource(R.string.peak_data_prompt_title)) },
         text = { Text(stringResource(R.string.peak_data_prompt_message)) },
         confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_prompt_fetch)) } },
+        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_prompt_later)) } },
+    )
+}
+
+/** 方位盤のラベルから山データを取り直すときの確認。 */
+@Composable
+private fun PeakDataRefreshDialog(onAnswer: (Boolean) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onAnswer(false) },
+        title = { Text(stringResource(R.string.peak_data_refresh_title)) },
+        text = { Text(stringResource(R.string.peak_data_refresh_message)) },
+        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_refresh_confirm)) } },
         dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_prompt_later)) } },
     )
 }
@@ -628,6 +659,29 @@ private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled:
             },
         ),
     )
+}
+
+/** 山データの取り直しが要ることを知らせるラベル。タップで取り直しの確認を出す。ほかの知らせと見分けやすいよう、濃い白の札にする。 */
+@Composable
+private fun PeakDataRefreshLabel(onClick: () -> Unit) {
+    Row(
+        Modifier
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color.White.copy(alpha = 0.9f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Filled.Refresh, contentDescription = null, tint = DOWNLOAD_BUTTON_ICON_COLOR, modifier = Modifier.size(18.dp))
+        Text(
+            stringResource(R.string.peak_data_refresh_needed),
+            style = MaterialTheme.typography.bodySmall,
+            color = TapeInk,
+            fontWeight = FontWeight.Bold,
+        )
+    }
 }
 
 @Composable

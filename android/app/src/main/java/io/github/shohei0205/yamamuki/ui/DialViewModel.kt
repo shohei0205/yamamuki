@@ -83,6 +83,13 @@ data class DialUiState(
     val cacheInfo: CacheInfo? = null,
 )
 
+/**
+ * 山データの取り直しが要る。保存データの読み込み処理の版がアプリより古く、起動時の作り直しもできなかったとき
+ * (gz を残す前の版のアプリで取り込んだときなど)。取得中は出さない。
+ */
+val DialUiState.peakDataRefreshNeeded: Boolean
+    get() = !peakDataUpdating && peakData != null && peakData.readerVersion < PeakData.READER_VERSION
+
 /** 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ。 */
 class DialViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as YamamukiApp

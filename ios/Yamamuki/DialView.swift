@@ -13,6 +13,7 @@ struct DialView: View {
     @State private var showSettings = false
     @State private var showDownload = false
     @State private var showObserver = false
+    @State private var showPeakDataRefresh = false
     /// 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
     @State private var groupIds: [Int64]?
 
@@ -67,6 +68,13 @@ struct DialView: View {
                             labeled: true
                         )
                         StatusLine(message: statusMessage)
+                        // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
+                        if model.peakDataRefreshNeeded {
+                            PeakDataRefreshLabel {
+                                // 圏外なら確認を出さず、取得を試すときと同じ圏外の知らせを出す(通信はしない)。
+                                if model.isConnected { showPeakDataRefresh = true } else { model.updatePeakData() }
+                            }
+                        }
                         Spacer()
                     }
                     .padding(.top, CGFloat(DialGeometry.chartTop))
@@ -161,6 +169,12 @@ struct DialView: View {
             Button(Strings.text("peak_data_prompt_fetch")) { model.answerPeakDataPrompt(allow: true) }
         } message: {
             Text(Strings.text("peak_data_prompt_message"))
+        }
+        .alert(Strings.text("peak_data_refresh_title"), isPresented: $showPeakDataRefresh) {
+            Button(Strings.text("peak_data_prompt_later"), role: .cancel) {}
+            Button(Strings.text("peak_data_refresh_confirm")) { model.updatePeakData() }
+        } message: {
+            Text(Strings.text("peak_data_refresh_message"))
         }
         .fetchErrorAlert(model)
         // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
@@ -350,6 +364,28 @@ private struct StatusLine: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
+    }
+}
+
+/// 山データの取り直しが要ることを知らせるラベル。タップで取り直しの確認を出す。ほかの知らせと見分けやすいよう、濃い白の札にする。
+private struct PeakDataRefreshLabel: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.clockwise").foregroundStyle(downloadButtonIconColor)
+                Text(Strings.text("peak_data_refresh_needed")).foregroundStyle(tapeInk)
+            }
+            .font(.footnote.bold())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color.white.opacity(0.9)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("peakDataRefreshLabel")
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 }
 

@@ -1025,6 +1025,50 @@
         }
       }
     },
+    "peak_data_refresh_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新する"
+          }
+        }
+      }
+    },
+    "peak_data_refresh_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリの更新に合わせて、山データを取り直します（通信量は約 0.5 MB）。\n\n今すぐ更新しますか？"
+          }
+        }
+      }
+    },
+    "peak_data_refresh_needed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データの更新が必要です"
+          }
+        }
+      }
+    },
+    "peak_data_refresh_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データの更新"
+          }
+        }
+      }
+    },
     "peak_data_up_to_date": {
       "extractionState": "manual",
       "localizations": {

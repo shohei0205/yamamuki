@@ -72,6 +72,10 @@
     <string name="peak_data_prompt_message">山データを取得します。保存後は圏外でも利用できます。\n\n今すぐ取得しますか？\nあとで取得する場合は設定画面から実行できます。</string>
     <string name="peak_data_prompt_fetch">取得する</string>
     <string name="peak_data_prompt_later">あとで</string>
+    <string name="peak_data_refresh_needed">山データの更新が必要です</string>
+    <string name="peak_data_refresh_title">山データの更新</string>
+    <string name="peak_data_refresh_message">アプリの更新に合わせて、山データを取り直します（通信量は約 0.5 MB）。\n\n今すぐ更新しますか？</string>
+    <string name="peak_data_refresh_confirm">更新する</string>
     <string name="peak_data_error_title">山データを取得できませんでした</string>
     <string name="peak_data_error_retry">もう一度取得</string>
     <string name="peak_data_updated">山データを更新しました</string>
