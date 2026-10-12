@@ -282,6 +282,7 @@ fun DialScreen(
             onGroupTap = { peaks -> groupIds = peaks.map { it.mountain.osmId } },
             onObserverTap = { showObserver = true },
             summit = state.summit,
+            summitLabel = state.viewpoint == null,
             altitudeM = location?.mslAltitudeM,
             maxPeaks = state.settings.maxPeaks,
             textScale = state.settings.textScale,

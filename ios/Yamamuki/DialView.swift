@@ -34,6 +34,8 @@ struct DialView: View {
                     mountains: model.mountains,
                     rangeKm: model.rangeKm,
                     summit: model.summit,
+                    // 検索位置モードでは、山名は左上の札に出すので、山頂アイコンの横には出さない。
+                    summitLabel: model.viewpoint == nil,
                     altitudeM: model.observer?.mslAltitudeM,
                     maxPeaks: model.settings.maxPeaks,
                     textScale: model.settings.textScale,

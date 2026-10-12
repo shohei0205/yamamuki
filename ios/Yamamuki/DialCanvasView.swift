@@ -57,6 +57,8 @@ struct DialCanvasView: View, Animatable {
     let rangeKm: Double
     /// 現在地がほぼ山頂のとき、その山。
     let summit: NearbyMountain?
+    /// 山頂アイコンの横に山名を出すか。検索位置モードでは左上の札に山名があるので出さない。
+    var summitLabel = true
     /// 現在地の標高(海抜)。方位の表示の後ろに添え、山の仰角の計算にも使う。nil なら出さない(仰角は 0m とみなす)。
     let altitudeM: Double?
     /// 1 画面に出す山名の上限。山名を出さない山はアイコンだけで描く。
@@ -155,7 +157,7 @@ struct DialCanvasView: View, Animatable {
             hitTargets.peaks = []
         }
         if let summit {
-            hitTargets.summit = drawSummit(ctx, center: observer, summit: summit, styles: styles)
+            hitTargets.summit = drawSummit(ctx, center: observer, summit: summit, styles: styles, showLabel: summitLabel)
             hitTargets.observer = nil
         } else {
             hitTargets.observerCenter = observer
@@ -514,7 +516,7 @@ struct DialCanvasView: View, Animatable {
     /// 現在地がほぼ山頂のとき(検索位置モードでは選んだ山頂)に双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
     /// 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ白い丸の中に置いて、同じ視野の扇形を前方へ描く。
     /// 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤のため)。タップの当たり判定用の範囲を返す。
-    private func drawSummit(_ ctx: GraphicsContext, center: CGPoint, summit: NearbyMountain, styles: TextStyles) -> PlacedPeak {
+    private func drawSummit(_ ctx: GraphicsContext, center: CGPoint, summit: NearbyMountain, styles: TextStyles, showLabel: Bool) -> PlacedPeak {
         // 岩山と旗(縦 -24〜10)を、双眼鏡と同じ白い丸の真ん中に収まるよう少し下げて描く。
         func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: center.x + x, y: center.y + y + 6) }
 
@@ -537,6 +539,9 @@ struct DialCanvasView: View, Animatable {
         ctx.stroke(pole, with: .color(flagPole), style: StrokeStyle(lineWidth: 2, lineCap: .round))
         ctx.fill(flag, with: .color(northRed))
 
+        // 白い丸の範囲。山名を出さないときは、これがタップの当たり判定になる。
+        let disc = ScreenBox(left: Double(center.x - 23), top: Double(center.y - 24), right: Double(center.x + 23), bottom: Double(center.y + 22))
+        guard showLabel else { return PlacedPeak(mountain: summit, position: center, box: disc) }
         let label = measuredText(ctx, summit.mountain.name, size: styles.label, color: tapeInk)
         let padX: CGFloat = 5
         let padY: CGFloat = 2
@@ -547,10 +552,10 @@ struct DialCanvasView: View, Animatable {
         ctx.draw(label.text, at: CGPoint(x: labelLeft, y: labelTop), anchor: .topLeading)
 
         let box = ScreenBox(
-            left: Double(center.x - 23),
-            top: Double(min(center.y - 24, labelTop - padY)),
+            left: disc.left,
+            top: min(disc.top, Double(labelTop - padY)),
             right: Double(labelLeft + label.size.width + padX),
-            bottom: Double(max(center.y + 22, labelTop + label.size.height + padY))
+            bottom: max(disc.bottom, Double(labelTop + label.size.height + padY))
         )
         return PlacedPeak(mountain: summit, position: center, box: box)
     }

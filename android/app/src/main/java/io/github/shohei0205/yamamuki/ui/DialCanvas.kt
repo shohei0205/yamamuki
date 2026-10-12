@@ -133,6 +133,8 @@ fun DialCanvas(
     onObserverTap: () -> Unit = {},
     /** 現在地がほぼ山頂のとき、その山。 */
     summit: NearbyMountain? = null,
+    /** 山頂アイコンの横に山名を出すか。検索位置モードでは左上の札に山名があるので出さない。 */
+    summitLabel: Boolean = true,
     /** 現在地の標高(海抜)。方位の表示の後ろに添え、山の仰角の計算にも使う。null なら出さない(仰角は 0m とみなす)。 */
     altitudeM: Double? = null,
     /** 1 画面に出す山名の上限。山名を出さない山はアイコンだけで描く。 */
@@ -210,7 +212,7 @@ fun DialCanvas(
                 emptyList()
             }
             if (summit != null) {
-                hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation, coneAlpha)
+                hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation, coneAlpha, summitLabel)
                 hitTargets.observer = null
             } else {
                 hitTargets.observerCenter = observer
@@ -817,6 +819,7 @@ private fun DrawScope.drawSummit(
     styles: DialTextStyles,
     observerRotation: Float,
     coneAlpha: Float,
+    showLabel: Boolean,
 ): PlacedPeak {
     val u = 1.dp.toPx()
     // 岩山と旗(縦 -24〜10)を、双眼鏡と同じ白い丸の真ん中に収まるよう少し下げて描く。
@@ -843,6 +846,9 @@ private fun DrawScope.drawSummit(
     drawPath(flag, NorthRed)
 
     val label = textMeasurer.measure(summit.mountain.name, styles.label)
+    // 白い丸の範囲。山名を出さないときは、これがタップの当たり判定になる。
+    val disc = Box(left = center.x - 23f * u, top = center.y - 24f * u, right = center.x + 23f * u, bottom = center.y + 22f * u)
+    if (!showLabel) return PlacedPeak(summit, center, label, disc)
     val padX = 5f * u
     val padY = 2f * u
     val labelLeft = center.x + 30f * u
@@ -856,10 +862,10 @@ private fun DrawScope.drawSummit(
     drawText(label, topLeft = Offset(labelLeft, labelTop))
 
     val box = Box(
-        left = center.x - 23f * u,
-        top = min(center.y - 24f * u, labelTop - padY),
+        left = disc.left,
+        top = min(disc.top, labelTop - padY),
         right = labelLeft + label.size.width + padX,
-        bottom = max(center.y + 22f * u, labelTop + label.size.height + padY),
+        bottom = max(disc.bottom, labelTop + label.size.height + padY),
     )
     return PlacedPeak(summit, center, label, box)
 }
