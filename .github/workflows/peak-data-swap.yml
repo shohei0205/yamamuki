@@ -20,7 +20,7 @@ on:
         type: string
         default: ""
       remove_dev:
-        description: 開発用アプリも配布用と同じ山データに戻す（配布用の山データを選ぶときだけ有効）
+        description: 開発用アプリも配布用と同じ山データに戻す（stable 操作のときだけ有効）
         type: boolean
         default: false
 
