@@ -22,7 +22,7 @@ class PanGeometryTest {
                     val fraction = t * t * (3 - 2 * t)
                     // 復帰中に GPS の現在地が少しずつ動いても、双眼鏡は画面上の直線に沿って戻る。
                     val observer = MapCenter(tokyo.latitude + 0.004 * t, tokyo.longitude + 0.006 * t)
-                    val heading = PanGeometry.returnHeading(350.0, targetHeading, fraction)
+                    val heading = HeadingTurn(350.0, targetHeading).headingAt(targetHeading, t)
                     val viewport = PanGeometry.returnViewport(observer, offset, heading, fraction)
                     val actual = PanGeometry.observerOffset(observer, viewport, heading)
                     assertEquals(offset.x * (1 - fraction), actual.x, 1e-7)
@@ -33,11 +33,11 @@ class PanGeometryTest {
         }
     }
 
-    @Test fun returnHeadingCrossesNorthTheShortWay() {
-        assertEquals(0.0, PanGeometry.returnHeading(350.0, 10.0, 0.5), 1e-8)
-        assertEquals(340.0, PanGeometry.returnHeading(10.0, 310.0, 0.5), 1e-8)
-        assertEquals(350.0, PanGeometry.returnHeading(350.0, 10.0, 0.0), 1e-8)
-        assertEquals(10.0, PanGeometry.returnHeading(350.0, 10.0, 1.0), 1e-8)
+    @Test fun headingTurnCrossesNorthTheShortWay() {
+        assertEquals(0.0, HeadingTurn(350.0, 10.0).headingAt(10.0, 0.5), 1e-8)
+        assertEquals(340.0, HeadingTurn(10.0, 310.0).headingAt(310.0, 0.5), 1e-8)
+        assertEquals(350.0, HeadingTurn(350.0, 10.0).headingAt(10.0, 0.0), 1e-8)
+        assertEquals(10.0, HeadingTurn(350.0, 10.0).headingAt(10.0, 1.0), 1e-8)
     }
 
     @Test fun headingDragKeepsChosenPivotAcrossNorthAndRepeatedUpdates() {
