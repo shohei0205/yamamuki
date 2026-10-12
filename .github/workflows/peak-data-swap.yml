@@ -16,7 +16,7 @@ on:
           - "remove-dev: 開発用アプリも配布用と同じ山データに戻す"
         default: "dev: 開発用アプリで試す山データを選ぶ"
       tag:
-        description: 差し替える Release のタグ（空欄なら最新。「同じ山データに戻す」では使いません）
+        description: 差し替える Release のタグ（空欄なら最新。remove-dev 操作では使いません）
         type: string
         default: ""
       remove_dev:
