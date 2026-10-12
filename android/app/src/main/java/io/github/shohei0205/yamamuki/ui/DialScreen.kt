@@ -13,6 +13,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.em
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -658,8 +663,8 @@ private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Flo
 }
 
 /**
- * 検索位置モードの左上に出す、選んだ山の札。山名と標高、緯度経度、端末の向きを出す。
- * 向きは手動位置モードの左上の表示と同じく、端末が向いている方位にする。
+ * 検索位置モードの左上に出す、選んだ山の札。山頂の標識をまねた木の横板に、山名と標高、緯度経度を書き、
+ * 支柱の横の白い小札に端末の向きを出す。向きは手動位置モードの左上の表示と同じく、端末が向いている方位にする。
  * そのまま画面を撮っても、どの山から見た方位盤かが分かるようにする。
  */
 @Composable
@@ -676,28 +681,90 @@ private fun ViewpointLabel(mountain: Mountain, headingDeg: Double?, textScale: F
     val heading = headingDeg?.let { stringResource(R.string.dial_heading, texts.readoutParts(it, null).first) }
         ?: stringResource(R.string.dial_heading_loading)
     val elevation = elevationListLabel(mountain.elevationM)
-    Column(
-        Modifier
-            .widthIn(max = 260.dp)
-            .shadow(4.dp, RoundedCornerShape(16.dp))
-            // 半透明にすると下の影が透けて文字のまわりに四角い跡が出るので、不透明にする。
-            .background(Color.White, RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            buildAnnotatedString {
-                append(mountain.name)
-                withStyle(SpanStyle(color = TapeSubtle, fontSize = 13.sp * textScale)) { append("  $elevation") }
-            },
-            color = TapeInk,
-            fontSize = 18.sp * textScale,
-            fontWeight = FontWeight.Bold,
-        )
-        Text("$lat  $lon", color = TapeSubtle, fontSize = 11.sp * textScale)
-        Text(heading, color = TapeInk, fontSize = 14.sp * textScale, fontWeight = FontWeight.Bold)
+    val boardShape = RoundedCornerShape(6.dp)
+    Column(Modifier.widthIn(max = 260.dp)) {
+        // 木の板。木目と、左右のビスを描く。
+        Column(
+            Modifier
+                .shadow(4.dp, boardShape)
+                .background(Brush.verticalGradient(listOf(WoodLight, WoodDark)), boardShape)
+                .drawBehind { drawWoodGrain() }
+                .border(2.dp, WoodEdge, boardShape)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Serif, fontWeight = FontWeight.Black, letterSpacing = 0.12.em)) {
+                        append(mountain.name)
+                    }
+                    withStyle(SpanStyle(fontSize = 11.sp * textScale, fontWeight = FontWeight.Bold)) { append("  $elevation") }
+                },
+                color = WoodInk,
+                fontSize = 19.sp * textScale,
+            )
+            Text("$lat  $lon", color = WoodInkSubtle, fontSize = 10.sp * textScale)
+        }
+        // 支柱と、その横の向きの小札。
+        Row(verticalAlignment = Alignment.Top) {
+            Box(
+                Modifier
+                    .padding(start = 24.dp)
+                    .size(width = 10.dp, height = 14.dp)
+                    .background(Brush.horizontalGradient(listOf(PostDark, PostLight)))
+                    .drawBehind {
+                        val w = 1.dp.toPx()
+                        drawRect(WoodEdge, size = Size(w, size.height))
+                        drawRect(WoodEdge, topLeft = Offset(size.width - w, 0f), size = Size(w, size.height))
+                    },
+            )
+            Text(
+                heading,
+                color = TapeInk,
+                fontSize = 12.sp * textScale,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(start = 10.dp, top = 3.dp)
+                    .shadow(2.dp, RoundedCornerShape(50))
+                    .background(Color.White, RoundedCornerShape(50))
+                    .padding(horizontal = 9.dp, vertical = 1.dp),
+            )
+        }
     }
 }
+
+/** 札の板の木目(細い縦の筋)と、左右の端のビス。 */
+private fun DrawScope.drawWoodGrain() {
+    val step = 5.dp.toPx()
+    var x = step / 2
+    var i = 0
+    while (x < size.width) {
+        // 筋の濃さと間隔を少しずつ変えて、木目らしくする。
+        val light = i % 3 == 0
+        drawRect(
+            if (light) Color.White.copy(alpha = 0.07f) else Color.Black.copy(alpha = 0.05f),
+            topLeft = Offset(x, 0f),
+            size = Size(if (light) 3.dp.toPx() else 2.dp.toPx(), size.height),
+        )
+        x += step + (i % 4) * 1.dp.toPx()
+        i++
+    }
+    val r = 2.5f.dp.toPx()
+    val inset = 6.5f.dp.toPx()
+    for (cx in listOf(inset, size.width - inset)) {
+        drawCircle(WoodScrew, radius = r, center = Offset(cx, size.height / 2))
+        drawCircle(Color.White.copy(alpha = 0.3f), radius = r / 2.5f, center = Offset(cx - r / 3, size.height / 2 - r / 3))
+    }
+}
+
+private val WoodLight = Color(0xFFC99A63)
+private val WoodDark = Color(0xFFB07E4A)
+private val WoodEdge = Color(0xFF7A5230)
+private val WoodScrew = Color(0xFF5B3A1E)
+private val WoodInk = Color(0xFF2B1D10)
+private val WoodInkSubtle = Color(0xFF3A2A18)
+private val PostDark = Color(0xFF8A6036)
+private val PostLight = Color(0xFFA57646)
 
 @Composable
 private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled: Boolean = false) {

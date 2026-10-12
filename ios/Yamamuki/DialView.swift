@@ -444,8 +444,8 @@ private struct MountainDetailView: View {
     }
 }
 
-/// 検索位置モードの左上に出す、選んだ山の札。山名と標高、緯度経度、端末の向きを出す。
-/// 向きは手動位置モードの左上の表示と同じく、端末が向いている方位にする。
+/// 検索位置モードの左上に出す、選んだ山の札。山頂の標識をまねた木の横板に、山名と標高、緯度経度を書き、
+/// 支柱の横の白い小札に端末の向きを出す。向きは手動位置モードの左上の表示と同じく、端末が向いている方位にする。
 /// そのまま画面を撮っても、どの山から見た方位盤かが分かるようにする。
 private struct ViewpointLabel: View {
     let mountain: Mountain
@@ -457,19 +457,74 @@ private struct ViewpointLabel: View {
         let lon = Strings.format(mountain.longitude >= 0 ? "detail_longitude_east" : "detail_longitude_west", degreeText(mountain.longitude))
         let heading = headingDeg.map { Strings.format("dial_heading", readoutParts(headingDeg: $0, altitudeM: nil).direction) }
             ?? Strings.text("dial_heading_loading")
-        VStack(alignment: .leading, spacing: 2) {
-            (Text(mountain.name).font(.system(size: 18 * textScale, weight: .bold)).foregroundColor(tapeInk)
-                + Text("  " + elevationListLabel(mountain.elevationM)).font(.system(size: 13 * textScale, weight: .bold)).foregroundColor(tapeSubtle))
-            Text(verbatim: "\(lat)  \(lon)").font(.system(size: 11 * textScale)).foregroundColor(tapeSubtle)
-            Text(heading).font(.system(size: 14 * textScale, weight: .bold)).foregroundColor(tapeInk)
+        let board = RoundedRectangle(cornerRadius: 6)
+        VStack(alignment: .leading, spacing: 0) {
+            // 木の板。木目と、左右のビスを描く。
+            VStack(alignment: .leading, spacing: 1) {
+                (Text(mountain.name).font(.system(size: 19 * textScale, weight: .black, design: .serif)).kerning(19 * textScale * 0.12)
+                    + Text("  " + elevationListLabel(mountain.elevationM)).font(.system(size: 11 * textScale, weight: .bold)))
+                    .foregroundColor(woodInk)
+                Text(verbatim: "\(lat)  \(lon)").font(.system(size: 10 * textScale)).foregroundColor(woodInkSubtle)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+                board.fill(LinearGradient(colors: [woodLight, woodDark], startPoint: .top, endPoint: .bottom))
+                    .overlay(WoodGrain().clipShape(board))
+                    .overlay(board.strokeBorder(woodEdge, lineWidth: 2))
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 2)
+            )
+            // 支柱と、その横の向きの小札。
+            HStack(alignment: .top, spacing: 10) {
+                LinearGradient(colors: [postDark, postLight], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: 10, height: 14)
+                    .overlay(HStack(spacing: 0) { woodEdge.frame(width: 1); Spacer(minLength: 0); woodEdge.frame(width: 1) })
+                    .padding(.leading, 24)
+                Text(heading)
+                    .font(.system(size: 12 * textScale, weight: .bold))
+                    .foregroundColor(tapeInk)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Color.white).shadow(color: .black.opacity(0.25), radius: 1.5, y: 1))
+                    .padding(.top, 3)
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
         .frame(maxWidth: 260, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white).shadow(color: .black.opacity(0.2), radius: 4, y: 2))
         .fixedSize(horizontal: false, vertical: true)
     }
 }
+
+/// 札の板の木目(細い縦の筋)と、左右の端のビス。
+private struct WoodGrain: View {
+    var body: some View {
+        Canvas { ctx, size in
+            var x: CGFloat = 2.5
+            var i = 0
+            while x < size.width {
+                // 筋の濃さと間隔を少しずつ変えて、木目らしくする。
+                let light = i % 3 == 0
+                ctx.fill(Path(CGRect(x: x, y: 0, width: light ? 3 : 2, height: size.height)),
+                         with: .color(light ? .white.opacity(0.07) : .black.opacity(0.05)))
+                x += 5 + CGFloat(i % 4)
+                i += 1
+            }
+            let r: CGFloat = 2.5
+            for cx in [6.5, size.width - 6.5] {
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - r, y: size.height / 2 - r, width: r * 2, height: r * 2)), with: .color(woodScrew))
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - r / 3 - 1, y: size.height / 2 - r / 3 - 1, width: 2, height: 2)), with: .color(.white.opacity(0.3)))
+            }
+        }
+    }
+}
+
+private let woodLight = Color(hex: 0xC99A63)
+private let woodDark = Color(hex: 0xB07E4A)
+private let woodEdge = Color(hex: 0x7A5230)
+private let woodScrew = Color(hex: 0x5B3A1E)
+private let woodInk = Color(hex: 0x2B1D10)
+private let woodInkSubtle = Color(hex: 0x3A2A18)
+private let postDark = Color(hex: 0x8A6036)
+private let postLight = Color(hex: 0xA57646)
 
 /// 重なる山をまとめた代表の山をタップしたときの一覧。山を選ぶと、その山の詳細を開く。
 private struct PeakGroupView: View {
