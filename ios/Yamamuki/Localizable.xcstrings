@@ -430,6 +430,17 @@
         }
       }
     },
+    "detail_go_to_summit": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山頂へ移動"
+          }
+        }
+      }
+    },
     "detail_group_item": {
       "extractionState": "manual",
       "localizations": {

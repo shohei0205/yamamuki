@@ -15,8 +15,9 @@ struct DialView: View {
     @State private var showObserver = false
     /// 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
     @State private var groupIds: [Int64]?
-    /// 検索ボタンを押したときの方位盤の高さ。選んだ山頂を中央に置くのに使う(検索画面のキーボードの影響を受けないよう、開く前に覚える)。
-    @State private var searchCanvasHeight = 0.0
+    /// 検索ボタンや山を押したときの方位盤の高さ。検索や山の詳細から山頂へ移るときに、山頂を中央に置くのに使う
+    /// (検索画面のキーボードやシートの影響を受けないよう、開く前に覚える)。
+    @State private var viewpointCanvasHeight = 0.0
 
     var body: some View {
         GeometryReader { geometry in
@@ -50,8 +51,14 @@ struct DialView: View {
                     bottomBleed: geometry.safeAreaInsets.bottom,
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
-                    onMountainTap: { selectedId = $0.mountain.osmId },
-                    onGroupTap: { groupIds = $0.map(\.mountain.osmId) },
+                    onMountainTap: {
+                        viewpointCanvasHeight = Double(geometry.size.height)
+                        selectedId = $0.mountain.osmId
+                    },
+                    onGroupTap: {
+                        viewpointCanvasHeight = Double(geometry.size.height)
+                        groupIds = $0.map(\.mountain.osmId)
+                    },
                     // 現在地を取れる前は出す値がないので開かない。
                     onObserverTap: { if model.gpsLocation != nil { showObserver = true } }
                 )
@@ -134,7 +141,7 @@ struct DialView: View {
                             RoundButton(label: Strings.text("search_open"), iconColor: searchButtonIconColor) {
                                 Image(systemName: "magnifyingglass")
                             } action: {
-                                searchCanvasHeight = Double(geometry.size.height)
+                                viewpointCanvasHeight = Double(geometry.size.height)
                                 model.openSearch()
                             }
                             .disabled(Double(geometry.size.height) <= DialGeometry.chartInset)
@@ -197,19 +204,32 @@ struct DialView: View {
             AreaDownloadView(model: model, download: model.areaDownload).fetchErrorAlert(model)
         }
         .sheet(item: selectedMountain) { nearby in
-            MountainDetailView(nearby: nearby, viewpoint: model.viewpoint).fetchErrorAlert(model)
+            MountainDetailView(nearby: nearby, viewpoint: model.viewpoint) {
+                selectedId = nil
+                goToSummit(nearby.mountain)
+            }
+            .fetchErrorAlert(model)
         }
         .sheet(isPresented: showGroup) {
-            PeakGroupView(peaks: group, viewpoint: model.viewpoint).fetchErrorAlert(model)
+            PeakGroupView(peaks: group, viewpoint: model.viewpoint) {
+                groupIds = nil
+                goToSummit($0)
+            }
+            .fetchErrorAlert(model)
         }
         // 開いている間も歩けば値が更新される。
         .sheet(isPresented: $showObserver) {
             ObserverDetailView(model: model).fetchErrorAlert(model)
         }
         .sheet(isPresented: showSearch) {
-            MountainSearchView(model: model) { model.showFromMountain($0, canvasHeight: searchCanvasHeight) }
+            MountainSearchView(model: model) { goToSummit($0) }
                 .fetchErrorAlert(model)
         }
+    }
+
+    /// 選んだ山頂を中心にした検索位置モードに移る。
+    private func goToSummit(_ mountain: Mountain) {
+        model.showFromMountain(mountain, canvasHeight: viewpointCanvasHeight)
     }
 
     /// 右下のモード切替ボタンを押せるか。検索位置モードからは、現在地が分からなくても抜けられるようにする。
@@ -423,9 +443,11 @@ private struct PermissionRequest: View {
 }
 
 /// タップした山の詳細。検索位置モード(viewpoint が非 nil)では、距離は選んだ山頂から測ったもの。
+/// 「山頂へ移動」で、その山頂を中心にした検索位置モードに移る(onGoToSummit)。
 private struct MountainDetailView: View {
     let nearby: NearbyMountain
     let viewpoint: Mountain?
+    let onGoToSummit: () -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -445,6 +467,10 @@ private struct MountainDetailView: View {
                 }
             } else {
                 DetailRow(label: Strings.text("detail_distance"), value: distanceText(nearby.distanceKm))
+            }
+            // 選んだ山頂にいるときは、移る先が今の場所と同じなので出さない。
+            if viewpoint?.osmId != m.osmId {
+                Button(Strings.text("detail_go_to_summit"), action: onGoToSummit)
             }
             Spacer()
         }
@@ -540,6 +566,8 @@ private struct PeakGroupView: View {
     let peaks: [NearbyMountain]
     /// 検索位置モードで選んだ山。詳細の距離の見出しを変えるのに使う。
     let viewpoint: Mountain?
+    /// 一覧から開いた詳細で「山頂へ移動」を押したとき。
+    let onGoToSummit: (Mountain) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -547,7 +575,7 @@ private struct PeakGroupView: View {
         NavigationView {
             List(peaks) { nearby in
                 NavigationLink {
-                    MountainDetailView(nearby: nearby, viewpoint: viewpoint)
+                    MountainDetailView(nearby: nearby, viewpoint: viewpoint) { onGoToSummit(nearby.mountain) }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(nearby.mountain.name).font(.body)

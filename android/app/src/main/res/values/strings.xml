@@ -62,6 +62,7 @@
     <string name="detail_coordinate">緯度経度</string>
     <string name="detail_distance">現在地からの距離</string>
     <string name="detail_distance_from_summit">山頂からの距離</string>
+    <string name="detail_go_to_summit">山頂へ移動</string>
     <string name="detail_latitude_north">北緯 %1$s</string>
     <string name="detail_latitude_south">南緯 %1$s</string>
     <string name="detail_longitude_east">東経 %1$s</string>

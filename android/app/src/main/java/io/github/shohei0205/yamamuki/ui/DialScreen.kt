@@ -30,6 +30,7 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -480,7 +481,15 @@ fun DialScreen(
 
     val overlay = showSettings || showDownload || showSearch
     if (selected != null && !overlay) {
-        MountainDetailDialog(selected, viewpoint = state.viewpoint, onDismiss = { selectedId = null })
+        MountainDetailDialog(
+            selected,
+            viewpoint = state.viewpoint,
+            onGoToSummit = {
+                selectedId = null
+                viewModel.showFromMountain(selected.mountain, heading ?: 0.0, canvasHeight)
+            },
+            onDismiss = { selectedId = null },
+        )
     } else if (group != null && !overlay) {
         PeakGroupDialog(
             group,
@@ -523,9 +532,17 @@ private fun FetchErrorDialog(message: String, onRetry: () -> Unit, onDismiss: ()
     )
 }
 
-/** タップした山の詳細。検索位置モード([viewpoint] が非 null)では、距離は選んだ山頂から測ったもの。 */
+/**
+ * タップした山の詳細。検索位置モード([viewpoint] が非 null)では、距離は選んだ山頂から測ったもの。
+ * 「山頂へ移動」で、その山頂を中心にした検索位置モードに移る([onGoToSummit])。
+ */
 @Composable
-private fun MountainDetailDialog(nearby: NearbyMountain, viewpoint: Mountain?, onDismiss: () -> Unit) {
+private fun MountainDetailDialog(
+    nearby: NearbyMountain,
+    viewpoint: Mountain?,
+    onGoToSummit: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val m = nearby.mountain
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -540,6 +557,12 @@ private fun MountainDetailDialog(nearby: NearbyMountain, viewpoint: Mountain?, o
                     // 選んだ山頂そのものは、山頂からの距離が 0 なので出さない。
                     viewpoint.osmId != m.osmId ->
                         DetailRow(stringResource(R.string.detail_distance_from_summit), distanceText(nearby.distanceKm))
+                }
+                // 選んだ山頂にいるときは、移る先が今の場所と同じなので出さない。
+                if (viewpoint?.osmId != m.osmId) {
+                    TextButton(onClick = onGoToSummit, contentPadding = PaddingValues(0.dp)) {
+                        Text(stringResource(R.string.detail_go_to_summit))
+                    }
                 }
             }
         },
