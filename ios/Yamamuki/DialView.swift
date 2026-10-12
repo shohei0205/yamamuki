@@ -282,7 +282,7 @@ private struct FetchErrorAlert: ViewModifier {
     }
 }
 
-/// 新しい山データの大きさを知らせ、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
+/// 新しい山データの元データの日付と大きさを知らせ、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
 private struct PeakDataOfferAlert: ViewModifier {
     @ObservedObject var model: DialModel
     /// この画面から確認を出す。シートの下になっている画面では false にする。
@@ -300,8 +300,18 @@ private struct PeakDataOfferAlert: ViewModifier {
             Button(Strings.text("peak_data_offer_later"), role: .cancel) { model.answerPeakDataOffer(download: false) }
             Button(Strings.text("peak_data_offer_download")) { model.answerPeakDataOffer(download: true) }
         } message: {
-            Text(Strings.format("peak_data_offer_message", byteSizeText(Int64(model.peakDataOffer?.sizeBytes ?? 0))))
+            Text(Strings.format("peak_data_offer_message", detail))
         }
+    }
+}
+
+private extension PeakDataOfferAlert {
+    /// 確認の 2 行目。元データの日時は UTC なので、日付だけを出す(設定画面と同じ)。版 5 で省略されていたら大きさだけを出す。
+    var detail: String {
+        guard let manifest = model.peakDataOffer?.manifest else { return "" }
+        let size = byteSizeText(Int64(manifest.sizeBytes))
+        let date = String(manifest.sourceTimestamp.prefix(10)).replacingOccurrences(of: "-", with: "/")
+        return date.isEmpty ? Strings.format("peak_data_offer_size", size) : Strings.format("peak_data_offer_detail", date, size)
     }
 }
 

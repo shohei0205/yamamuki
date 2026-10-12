@@ -161,8 +161,9 @@ open Yamamuki.xcodeproj
 
 全国の山頂データ(約 14,000 件、約 0.45 MB)を [yamamuki-data](https://github.com/shohei0205/yamamuki-data) から取得し、端末に保存する。方位盤は保存したデータだけで表示し、自分では通信しない。
 
-- 初回起動時に「山データを取得」を聞く。「取得する」を選ぶと manifest だけを取り、データ本体の大きさ（manifest の `sizeBytes`）を「約 441 KB」のように見せて、ダウンロードするかを聞く。「あとで」を選んだときは設定画面の「山データ」から取得できる。位置情報の許可はこのあとに聞く。
+- 初回起動時に「山データを取得」を聞く。「取得する」を選ぶと manifest だけを取り、元データの日付とデータ本体の大きさ（manifest の `sourceTimestamp` と `sizeBytes`）を「元データ 2026/09/30・約 493 KB」のように見せて、ダウンロードするかを聞く。「あとで」を選んだときは設定画面の「山データ」から取得できる。位置情報の許可はこのあとに聞く。
 - 設定画面の「山データを更新」(取得済みなら「更新を確認」)で取り直せる。新しい版があれば、初回と同じように大きさを見せてダウンロードするかを聞く。新しい版がなければ確認だけで終わる。
+- ダウンロードに失敗したときの「もう一度取得」は、確認を聞き直さずに同じ版を取り直す。確認の段階で失敗したときは、確認からやり直す。
 - 読む manifest は、yamamuki の Pages に置いた参照先ファイル `current.json`（https://shohei0205.github.io/yamamuki/data/osm-peaks/current.json ）で決める。URL は core の `PeakData` にある。
   - 配布用のビルド(Android の release、iOS の Release)は、`current.json` の `stable` が指す manifest を読む。
   - 開発用のビルド(Android の debug、iOS の Debug)は、既定では `current.json` の `dev` が指す manifest を読む(`dev` が無ければ `stable`)。配布版の `stable` を変えずに、新しい版のデータを試せる。

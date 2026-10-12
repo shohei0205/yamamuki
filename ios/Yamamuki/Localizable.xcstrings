@@ -981,6 +981,17 @@
         }
       }
     },
+    "peak_data_offer_detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "元データ %1$@・約 %2$@"
+          }
+        }
+      }
+    },
     "peak_data_offer_download": {
       "extractionState": "manual",
       "localizations": {
@@ -1009,7 +1020,18 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "新しい山データ（約 %1$@）が入手できます。\n今すぐダウンロードしますか？"
+            "value": "新しい山データが入手できます。\n%1$@\n今すぐダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "peak_data_offer_size": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "約 %1$@"
           }
         }
       }

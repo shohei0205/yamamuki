@@ -20,6 +20,7 @@ import io.github.shohei0205.yamamuki.core.PeakData
 import io.github.shohei0205.yamamuki.core.PeakDataException
 import io.github.shohei0205.yamamuki.core.PeakDataOffer
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
+import io.github.shohei0205.yamamuki.core.PeakManifest
 import io.github.shohei0205.yamamuki.core.meetsMinElevation
 import io.github.shohei0205.yamamuki.core.seenFrom
 import io.github.shohei0205.yamamuki.core.summitAt
@@ -73,8 +74,8 @@ data class DialUiState(
     val peakData: InstalledPeakData? = null,
     /** 全国の山データを取得している。 */
     val peakDataUpdating: Boolean = false,
-    /** 新しい山データがあり、ダウンロードするかを聞いているときの、データの大きさ(バイト数)。聞いていなければ null。 */
-    val peakDataOfferBytes: Long? = null,
+    /** 新しい山データがあり、ダウンロードするかを聞いているときの、その版の manifest(大きさと元データの日付を出す)。聞いていなければ null。 */
+    val peakDataOffer: PeakManifest? = null,
     /** 設定画面に出す、山データの取得の結果(「山データは最新です」など)。 */
     val peakDataNotice: String? = null,
     /** 山データの取得に失敗したときに画面中央で知らせる文言。閉じるまで保つ。 */
@@ -416,7 +417,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 is PeakDataUpdater.Check.Available -> {
                     peakDataOffer = check.offer
-                    _state.update { it.copy(peakDataOfferBytes = check.offer.sizeBytes) }
+                    _state.update { it.copy(peakDataOffer = check.offer.manifest) }
                 }
             }
         }
@@ -426,7 +427,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun answerPeakDataOffer(download: Boolean) {
         val offer = peakDataOffer ?: return
         peakDataOffer = null
-        _state.update { it.copy(peakDataOfferBytes = null) }
+        _state.update { it.copy(peakDataOffer = null) }
         if (download) installPeakData(offer)
     }
 

@@ -89,6 +89,7 @@ import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.NearbyMountain
+import io.github.shohei0205.yamamuki.core.PeakManifest
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.core.degreeText
 import io.github.shohei0205.yamamuki.core.distanceText
@@ -424,8 +425,8 @@ fun DialScreen(
     }
 
     // 新しい山データの大きさを見せて、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
-    state.peakDataOfferBytes?.let { bytes ->
-        PeakDataOfferDialog(sizeBytes = bytes, onAnswer = viewModel::answerPeakDataOffer)
+    state.peakDataOffer?.let { manifest ->
+        PeakDataOfferDialog(manifest = manifest, onAnswer = viewModel::answerPeakDataOffer)
     }
 
     // 通信の失敗は、方位を待つ表示などに隠れて気づけないことがないよう、画面中央で知らせる。
@@ -470,14 +471,22 @@ private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
     )
 }
 
-/** 新しい山データの大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。 */
+/** 新しい山データの元データの日付と大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。 */
 @Composable
-private fun PeakDataOfferDialog(sizeBytes: Long, onAnswer: (Boolean) -> Unit) {
+private fun PeakDataOfferDialog(manifest: PeakManifest, onAnswer: (Boolean) -> Unit) {
+    val size = byteSizeText(manifest.sizeBytes)
+    // 元データの日時は UTC なので、日付だけを出す(設定画面と同じ)。版 5 で省略されていたら大きさだけを出す。
+    val date = manifest.sourceTimestamp.take(10).replace('-', '/')
+    val detail = if (date.isEmpty()) {
+        stringResource(R.string.peak_data_offer_size, size)
+    } else {
+        stringResource(R.string.peak_data_offer_detail, date, size)
+    }
     AlertDialog(
         onDismissRequest = {},
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.peak_data_offer_title)) },
-        text = { Text(stringResource(R.string.peak_data_offer_message, byteSizeText(sizeBytes))) },
+        text = { Text(stringResource(R.string.peak_data_offer_message, detail)) },
         confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_offer_download)) } },
         dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_offer_later)) } },
     )
