@@ -25,6 +25,15 @@ public struct PeakManifest: Equatable, Sendable {
     public let mountainCount: Int
     /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。
     public let sourceTimestamp: String
+
+    /// データを作った日(UTC)を「2026/10/07」の形で返す。`version` の先頭の日時(例: 20261007T071401Z-…)から読む。
+    /// `version` がこの形でなければ nil。
+    public var releaseDate: String? {
+        let chars = Array(version)
+        guard chars.count >= 16, chars[8] == "T", chars[15] == "Z",
+              (chars[0..<8] + chars[9..<15]).allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return "\(String(chars[0..<4]))/\(String(chars[4..<6]))/\(String(chars[6..<8]))"
+    }
 }
 
 /// 取り込み済みの配信データ。設定画面に出し、次の確認で同じ版なら取り直さない。

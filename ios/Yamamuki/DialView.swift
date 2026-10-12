@@ -282,7 +282,7 @@ private struct FetchErrorAlert: ViewModifier {
     }
 }
 
-/// 新しい山データの元データの日付と大きさを知らせ、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
+/// 新しい山データを作った日と大きさを知らせ、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
 private struct PeakDataOfferAlert: ViewModifier {
     @ObservedObject var model: DialModel
     /// この画面から確認を出す。シートの下になっている画面では false にする。
@@ -306,12 +306,12 @@ private struct PeakDataOfferAlert: ViewModifier {
 }
 
 private extension PeakDataOfferAlert {
-    /// 確認の 2 行目。元データの日時は UTC なので、日付だけを出す(設定画面と同じ)。版 5 で省略されていたら大きさだけを出す。
+    /// 確認の 2 行目。データを作った日が版の文字列から読めなければ、大きさだけを出す。
     var detail: String {
         guard let manifest = model.peakDataOffer?.manifest else { return "" }
         let size = byteSizeText(Int64(manifest.sizeBytes))
-        let date = String(manifest.sourceTimestamp.prefix(10)).replacingOccurrences(of: "-", with: "/")
-        return date.isEmpty ? Strings.format("peak_data_offer_size", size) : Strings.format("peak_data_offer_detail", date, size)
+        guard let date = manifest.releaseDate else { return Strings.format("peak_data_offer_size", size) }
+        return Strings.format("peak_data_offer_detail", date, size)
     }
 }
 

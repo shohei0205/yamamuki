@@ -31,7 +31,18 @@ data class PeakManifest(
     val mountainCount: Int,
     /** 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。 */
     val sourceTimestamp: String,
-)
+) {
+    /**
+     * データを作った日(UTC)を「2026/10/07」の形で返す。[version] の先頭の日時(例: 20261007T071401Z-…)から読む。
+     * [version] がこの形でなければ null。
+     */
+    val releaseDate: String?
+        get() = RELEASE_DATE.find(version)?.destructured?.let { (y, m, d) -> "$y/$m/$d" }
+
+    private companion object {
+        val RELEASE_DATE = Regex("^(\\d{4})(\\d{2})(\\d{2})T\\d{6}Z")
+    }
+}
 
 /** 取り込み済みの配信データ。設定画面に出し、次の確認で同じ版なら取り直さない。 */
 data class InstalledPeakData(

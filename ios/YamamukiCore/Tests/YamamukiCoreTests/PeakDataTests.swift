@@ -232,6 +232,15 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(source.dataCalls, 1)
     }
 
+    func testReleaseDateComesFromVersion() {
+        func manifest(_ version: String) -> PeakManifest {
+            PeakManifest(schemaVersion: 5, version: version, downloadUrl: URL(string: "https://example.com/a.gz")!,
+                         sha256: "0", sizeBytes: 1, mountainCount: 1, sourceTimestamp: "")
+        }
+        XCTAssertEqual(manifest("20261007T071401Z-37585754546-1").releaseDate, "2026/10/07")
+        XCTAssertNil(manifest("v1").releaseDate)
+    }
+
     func testCheckReportsSizeWithoutFetchingData() async throws {
         let source = FakeSource(manifest: manifest(), data: gzip)
         let cache = MemoryCache()

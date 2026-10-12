@@ -471,13 +471,13 @@ private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
     )
 }
 
-/** 新しい山データの元データの日付と大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。 */
+/** 新しい山データを作った日と大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。 */
 @Composable
 private fun PeakDataOfferDialog(manifest: PeakManifest, onAnswer: (Boolean) -> Unit) {
     val size = byteSizeText(manifest.sizeBytes)
-    // 元データの日時は UTC なので、日付だけを出す(設定画面と同じ)。版 5 で省略されていたら大きさだけを出す。
-    val date = manifest.sourceTimestamp.take(10).replace('-', '/')
-    val detail = if (date.isEmpty()) {
+    // データを作った日が版の文字列から読めなければ、大きさだけを出す。
+    val date = manifest.releaseDate
+    val detail = if (date == null) {
         stringResource(R.string.peak_data_offer_size, size)
     } else {
         stringResource(R.string.peak_data_offer_detail, date, size)

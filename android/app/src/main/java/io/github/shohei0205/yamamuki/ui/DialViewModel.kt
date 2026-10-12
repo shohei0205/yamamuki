@@ -74,7 +74,7 @@ data class DialUiState(
     val peakData: InstalledPeakData? = null,
     /** 全国の山データを取得している。 */
     val peakDataUpdating: Boolean = false,
-    /** 新しい山データがあり、ダウンロードするかを聞いているときの、その版の manifest(大きさと元データの日付を出す)。聞いていなければ null。 */
+    /** 新しい山データがあり、ダウンロードするかを聞いているときの、その版の manifest(作った日と大きさを出す)。聞いていなければ null。 */
     val peakDataOffer: PeakManifest? = null,
     /** 設定画面に出す、山データの取得の結果(「山データは最新です」など)。 */
     val peakDataNotice: String? = null,
