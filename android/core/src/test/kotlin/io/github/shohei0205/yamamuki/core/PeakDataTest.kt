@@ -247,6 +247,32 @@ class PeakDataTest {
     }
 
     @Test
+    fun checkReportsSizeWithoutFetchingData() = runTest {
+        val source = FakeSource(manifest(), gzip)
+        val cache = InMemoryMountainCache()
+        val updater = PeakDataUpdater(source, cache)
+
+        // 確認では manifest だけを取り、データ本体は取らない。キャッシュにも触れない。
+        val check = updater.check(installed = null)
+        assertIs<PeakDataUpdater.Check.Available>(check)
+        assertEquals(gzip.size.toLong(), check.offer.sizeBytes)
+        assertEquals("v1", check.offer.manifest.version)
+        assertEquals(0, source.dataCalls)
+        assertTrue(cache.mountains.isEmpty())
+
+        // 利用者が取得を選んだら、確認した版を取り込む。
+        val installed = updater.install(check.offer)
+        assertEquals("v1", installed.version)
+        assertEquals("\"e1\"", installed.manifestEtag)
+        assertEquals(1, source.dataCalls)
+        assertEquals(setOf(3403990450L, 12L), cache.mountains.keys)
+
+        // 取り込んだあとの確認は、最新として返す。
+        assertIs<PeakDataUpdater.Check.UpToDate>(updater.check(installed))
+        assertEquals(1, source.dataCalls)
+    }
+
+    @Test
     fun newVersionReplacesOldMountains() = runTest {
         val cache = InMemoryMountainCache()
         val source = FakeSource(manifest(), gzip)

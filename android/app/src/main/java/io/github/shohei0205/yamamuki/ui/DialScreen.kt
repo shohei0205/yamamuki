@@ -89,6 +89,7 @@ import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.NearbyMountain
+import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.core.degreeText
 import io.github.shohei0205.yamamuki.core.distanceText
 import io.github.shohei0205.yamamuki.core.elevationText
@@ -422,6 +423,11 @@ fun DialScreen(
         PeakDataPrompt(onAnswer = viewModel::answerPeakDataPrompt)
     }
 
+    // 新しい山データの大きさを見せて、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
+    state.peakDataOfferBytes?.let { bytes ->
+        PeakDataOfferDialog(sizeBytes = bytes, onAnswer = viewModel::answerPeakDataOffer)
+    }
+
     // 通信の失敗は、方位を待つ表示などに隠れて気づけないことがないよう、画面中央で知らせる。
     state.fetchErrorMessage?.let { message ->
         FetchErrorDialog(
@@ -461,6 +467,19 @@ private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
         text = { Text(stringResource(R.string.peak_data_prompt_message)) },
         confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_prompt_fetch)) } },
         dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_prompt_later)) } },
+    )
+}
+
+/** 新しい山データの大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。 */
+@Composable
+private fun PeakDataOfferDialog(sizeBytes: Long, onAnswer: (Boolean) -> Unit) {
+    AlertDialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        title = { Text(stringResource(R.string.peak_data_offer_title)) },
+        text = { Text(stringResource(R.string.peak_data_offer_message, byteSizeText(sizeBytes))) },
+        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_offer_download)) } },
+        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_offer_later)) } },
     )
 }
 

@@ -73,6 +73,18 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
     }
 }
 
+/// 確認した manifest のうち、まだ取り込んでいない版。データ本体を取る前に、大きさを利用者に見せるのに使う。
+/// `PeakDataUpdater.install` に渡すと、この manifest のとおりに取り込む。
+public struct PeakDataOffer: Equatable, Sendable {
+    public let manifest: PeakManifest
+    /// 取ったときの manifest の中身。取り込んだら端末に残す。
+    let manifestBody: Data
+    let etag: String?
+
+    /// ダウンロードするデータ本体のバイト数。
+    public var sizeBytes: Int { manifest.sizeBytes }
+}
+
 /// 配信データが壊れている、または読めない形式だった。
 public struct PeakDataError: Error, CustomStringConvertible, Equatable {
     public let message: String
@@ -432,9 +444,19 @@ public struct PeakDataUpdater: Sendable {
         self.clock = clock
     }
 
-    /// - Parameter installed: 取り込み済みの版。nil なら manifest の版によらず取得する。
-    ///   古い読み込み処理で作った保存データ(`rebuild` で作り直せなかったもの)も、版によらず取り直す。
-    public func update(installed: InstalledPeakData?) async throws -> Result {
+    /// 確認の結果。
+    public enum Check: Equatable, Sendable {
+        /// 取り込み済みの版が最新だった。
+        case upToDate(InstalledPeakData)
+        /// 取り込める版がある。データ本体はまだ取っていない。
+        case available(PeakDataOffer)
+    }
+
+    /// manifest だけを取って、取り込める版があるかを確かめる。データ本体は取りに行かないので、
+    /// 大きさ(`PeakDataOffer.sizeBytes`)を利用者に見せてから `install` で取り込める。
+    /// - Parameter installed: 取り込み済みの版。nil なら manifest の版によらず取り込める版として返す。
+    ///   古い読み込み処理で作った保存データ(`rebuild` で作り直せなかったもの)も、版によらず取り込める版として返す。
+    public func check(installed: InstalledPeakData?) async throws -> Check {
         let installed = installed.flatMap { $0.readerVersion >= PeakData.readerVersion ? $0 : nil }
         let response = try await source.fetchManifest(etag: installed?.manifestEtag)
         let body: Data
@@ -452,24 +474,37 @@ public struct PeakDataUpdater: Sendable {
             installed.manifestEtag = etag
             return .upToDate(installed)
         }
+        return .available(PeakDataOffer(manifest: manifest, manifestBody: body, etag: etag))
+    }
 
+    /// `check` で見つけた版のデータ本体を取得・検証して取り込む。
+    public func install(_ offer: PeakDataOffer) async throws -> InstalledPeakData {
+        let manifest = offer.manifest
         let data = try await source.fetchData(manifest.downloadUrl)
         try PeakData.verify(data, against: manifest)
         let mountains = try PeakData.parseMountains(data)
         guard !mountains.isEmpty else { throw PeakDataError("山データが空です") }
         try await cache.replaceTiles(PeakData.tiles(of: mountains), mountains: mountains, fetchedAt: clock())
         // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の組が残る。
-        await archive?.write(manifest: body, data: data)
-        return .updated(InstalledPeakData(
+        await archive?.write(manifest: offer.manifestBody, data: data)
+        return InstalledPeakData(
             version: manifest.version,
             sourceTimestamp: manifest.sourceTimestamp,
             mountainCount: mountains.count,
-            manifestEtag: etag,
+            manifestEtag: offer.etag,
             installedAt: clock(),
             readerVersion: PeakData.readerVersion,
             dataSha256: manifest.sha256,
-            manifestSha256: PeakData.sha256Hex(body)
-        ))
+            manifestSha256: PeakData.sha256Hex(offer.manifestBody)
+        )
+    }
+
+    /// `check` して、取り込める版があれば続けて `install` する(利用者に確かめずに取り込む)。
+    public func update(installed: InstalledPeakData?) async throws -> Result {
+        switch try await check(installed: installed) {
+        case .upToDate(let installed): return .upToDate(installed)
+        case .available(let offer): return .updated(try await install(offer))
+        }
     }
 
     /// `installed` が古い読み込み処理で作った保存データなら、端末に残した manifest と gz から通信せずに作り直す。

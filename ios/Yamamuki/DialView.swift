@@ -162,23 +162,23 @@ struct DialView: View {
         } message: {
             Text(Strings.text("peak_data_prompt_message"))
         }
-        .fetchErrorAlert(model)
+        .peakDataAlerts(model)
         // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
         .sheet(isPresented: $showSettings) {
-            SettingsView(model: model).fetchErrorAlert(model)
+            SettingsView(model: model).peakDataAlerts(model)
         }
         .sheet(isPresented: $showDownload) {
-            AreaDownloadView(model: model, download: model.areaDownload).fetchErrorAlert(model)
+            AreaDownloadView(model: model, download: model.areaDownload).peakDataAlerts(model)
         }
         .sheet(item: selectedMountain) { nearby in
-            MountainDetailView(nearby: nearby).fetchErrorAlert(model)
+            MountainDetailView(nearby: nearby).peakDataAlerts(model)
         }
         .sheet(isPresented: showGroup) {
-            PeakGroupView(peaks: group).fetchErrorAlert(model)
+            PeakGroupView(peaks: group).peakDataAlerts(model)
         }
         // 開いている間も歩けば値が更新される。
         .sheet(isPresented: $showObserver) {
-            ObserverDetailView(model: model).fetchErrorAlert(model)
+            ObserverDetailView(model: model).peakDataAlerts(model)
         }
     }
 
@@ -273,9 +273,31 @@ private struct FetchErrorAlert: ViewModifier {
     }
 }
 
+/// 新しい山データの大きさを知らせ、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
+private struct PeakDataOfferAlert: ViewModifier {
+    @ObservedObject var model: DialModel
+
+    func body(content: Content) -> some View {
+        content.alert(
+            Strings.text("peak_data_offer_title"),
+            // 閉じるのはボタンの答えだけで行う(閉じる通知で「あとで」と扱うと、ダウンロードのボタンより先に届いたときに取り消してしまう)。
+            isPresented: Binding(
+                get: { model.peakDataOffer != nil },
+                set: { _ in }
+            )
+        ) {
+            Button(Strings.text("peak_data_offer_later"), role: .cancel) { model.answerPeakDataOffer(download: false) }
+            Button(Strings.text("peak_data_offer_download")) { model.answerPeakDataOffer(download: true) }
+        } message: {
+            Text(Strings.format("peak_data_offer_message", byteSizeText(Int64(model.peakDataOffer?.sizeBytes ?? 0))))
+        }
+    }
+}
+
 private extension View {
-    func fetchErrorAlert(_ model: DialModel) -> some View {
-        modifier(FetchErrorAlert(model: model))
+    /// 山データの通信に関わる知らせ(ダウンロードの確認と、通信の失敗)。
+    func peakDataAlerts(_ model: DialModel) -> some View {
+        modifier(PeakDataOfferAlert(model: model)).modifier(FetchErrorAlert(model: model))
     }
 }
 

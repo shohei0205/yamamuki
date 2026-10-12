@@ -52,6 +52,20 @@ data class InstalledPeakData(
     val manifestSha256: String? = null,
 )
 
+/**
+ * 確認した manifest のうち、まだ取り込んでいない版。データ本体を取る前に、大きさを利用者に見せるのに使う。
+ * [PeakDataUpdater.install] に渡すと、この manifest のとおりに取り込む。
+ */
+class PeakDataOffer(
+    val manifest: PeakManifest,
+    /** 取ったときの manifest の中身。取り込んだら端末に残す。 */
+    internal val manifestBody: String,
+    internal val etag: String?,
+) {
+    /** ダウンロードするデータ本体のバイト数。 */
+    val sizeBytes: Long get() = manifest.sizeBytes
+}
+
 /** 配信データが壊れている、または読めない形式だった。 */
 class PeakDataException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -354,41 +368,61 @@ class PeakDataUpdater(
         data class Updated(override val installed: InstalledPeakData) : Result
     }
 
+    /** 確認の結果。 */
+    sealed interface Check {
+        /** 取り込み済みの版が最新だった。 */
+        data class UpToDate(val installed: InstalledPeakData) : Check
+
+        /** 取り込める版がある。データ本体はまだ取っていない。 */
+        data class Available(val offer: PeakDataOffer) : Check
+    }
+
     /**
-     * @param installed 取り込み済みの版。null なら manifest の版によらず取得する。
-     * 古い読み込み処理で作った保存データ([rebuild] で作り直せなかったもの)も、版によらず取り直す。
+     * manifest だけを取って、取り込める版があるかを確かめる。データ本体は取りに行かないので、
+     * 大きさ([PeakDataOffer.sizeBytes])を利用者に見せてから [install] で取り込める。
+     * @param installed 取り込み済みの版。null なら manifest の版によらず取り込める版として返す。
+     * 古い読み込み処理で作った保存データ([rebuild] で作り直せなかったもの)も、版によらず取り込める版として返す。
      */
-    suspend fun update(installed: InstalledPeakData?): Result {
+    suspend fun check(installed: InstalledPeakData?): Check {
         val current = installed?.takeIf { it.readerVersion >= PeakData.READER_VERSION }
         val response = source.fetchManifest(current?.manifestEtag)
-        if (response is ManifestResponse.NotModified && current != null) return Result.UpToDate(current)
+        if (response is ManifestResponse.NotModified && current != null) return Check.UpToDate(current)
         val fetched = response as? ManifestResponse.Fetched
             ?: throw PeakDataException("manifest が返ってきませんでした")
         val manifest = PeakData.parseManifest(fetched.body)
         if (current != null && current.version == manifest.version) {
-            return Result.UpToDate(current.copy(manifestEtag = fetched.etag))
+            return Check.UpToDate(current.copy(manifestEtag = fetched.etag))
         }
+        return Check.Available(PeakDataOffer(manifest, fetched.body, fetched.etag))
+    }
 
+    /** [check] で見つけた版のデータ本体を取得・検証して取り込む。 */
+    suspend fun install(offer: PeakDataOffer): InstalledPeakData {
+        val manifest = offer.manifest
         val data = source.fetchData(manifest.downloadUrl)
         PeakData.verify(data, manifest)
         val mountains = PeakData.parseMountains(data)
         if (mountains.isEmpty()) throw PeakDataException("山データが空です")
         cache.replaceTiles(PeakData.tilesOf(mountains), mountains, clock())
         // 保存データを作り直せてから置き換える。途中で失敗したら、前の版の組が残る。
-        val manifestBytes = fetched.body.toByteArray(Charsets.UTF_8)
+        val manifestBytes = offer.manifestBody.toByteArray(Charsets.UTF_8)
         archive?.write(manifestBytes, data)
-        return Result.Updated(
-            InstalledPeakData(
-                version = manifest.version,
-                sourceTimestamp = manifest.sourceTimestamp,
-                mountainCount = mountains.size,
-                manifestEtag = fetched.etag,
-                installedAtMillis = clock(),
-                readerVersion = PeakData.READER_VERSION,
-                dataSha256 = manifest.sha256,
-                manifestSha256 = PeakData.sha256Hex(manifestBytes),
-            ),
+        return InstalledPeakData(
+            version = manifest.version,
+            sourceTimestamp = manifest.sourceTimestamp,
+            mountainCount = mountains.size,
+            manifestEtag = offer.etag,
+            installedAtMillis = clock(),
+            readerVersion = PeakData.READER_VERSION,
+            dataSha256 = manifest.sha256,
+            manifestSha256 = PeakData.sha256Hex(manifestBytes),
         )
+    }
+
+    /** [check] して、取り込める版があれば続けて [install] する(利用者に確かめずに取り込む)。 */
+    suspend fun update(installed: InstalledPeakData?): Result = when (val check = check(installed)) {
+        is Check.UpToDate -> Result.UpToDate(check.installed)
+        is Check.Available -> Result.Updated(install(check.offer))
     }
 
     /**

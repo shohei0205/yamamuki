@@ -981,6 +981,50 @@
         }
       }
     },
+    "peak_data_offer_download": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード"
+          }
+        }
+      }
+    },
+    "peak_data_offer_later": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "あとで"
+          }
+        }
+      }
+    },
+    "peak_data_offer_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データの大きさは約 %1$@ です。\n今すぐダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "peak_data_offer_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データのダウンロード"
+          }
+        }
+      }
+    },
     "peak_data_prompt_fetch": {
       "extractionState": "manual",
       "localizations": {
@@ -1009,7 +1053,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得します。保存後は圏外でも利用できます。\n\n今すぐ取得しますか？\nあとで取得する場合は設定画面から実行できます。"
+            "value": "山データを取得します。保存後は圏外でも利用できます。\n\n今すぐ取得しますか？\nダウンロードの前に、データの大きさをお知らせします。\nあとで取得する場合は設定画面から実行できます。"
           }
         }
       }
@@ -1262,7 +1306,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得して端末に保存します。新しいデータがなければ確認のみ行います。"
+            "value": "山データを取得して端末に保存します。新しいデータがあれば、大きさをお知らせしてからダウンロードします。"
           }
         }
       }

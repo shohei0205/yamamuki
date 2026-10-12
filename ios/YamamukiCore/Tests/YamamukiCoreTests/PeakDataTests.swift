@@ -232,6 +232,30 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(source.dataCalls, 1)
     }
 
+    func testCheckReportsSizeWithoutFetchingData() async throws {
+        let source = FakeSource(manifest: manifest(), data: gzip)
+        let cache = MemoryCache()
+        let updater = PeakDataUpdater(source: source, cache: cache)
+
+        // 確認では manifest だけを取り、データ本体は取らない。キャッシュにも触れない。
+        guard case .available(let offer) = try await updater.check(installed: nil) else { return XCTFail("取り込める版があるはず") }
+        XCTAssertEqual(offer.sizeBytes, gzip.count)
+        XCTAssertEqual(offer.manifest.version, "v1")
+        XCTAssertEqual(source.dataCalls, 0)
+        XCTAssertTrue(cache.mountains.isEmpty)
+
+        // 利用者が取得を選んだら、確認した版を取り込む。
+        let installed = try await updater.install(offer)
+        XCTAssertEqual(installed.version, "v1")
+        XCTAssertEqual(installed.manifestEtag, "\"e1\"")
+        XCTAssertEqual(source.dataCalls, 1)
+        XCTAssertEqual(Set(cache.mountains.keys), [3_403_990_450, 12])
+
+        // 取り込んだあとの確認は、最新として返す。
+        guard case .upToDate = try await updater.check(installed: installed) else { return XCTFail("最新のはず") }
+        XCTAssertEqual(source.dataCalls, 1)
+    }
+
     func testBrokenDataLeavesCacheUntouched() async {
         let source = FakeSource(manifest: manifest(), data: gzip.dropLast())
         let cache = MemoryCache()
