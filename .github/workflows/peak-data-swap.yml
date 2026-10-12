@@ -11,10 +11,10 @@ on:
         description: 行う操作
         type: choice
         options:
-          - 開発用アプリで試す山データを選ぶ
-          - 配布用アプリで使う山データを選ぶ
-          - 開発用アプリも配布用と同じ山データに戻す
-        default: 開発用アプリで試す山データを選ぶ
+          - "dev: 開発用アプリで試す山データを選ぶ"
+          - "stable: 配布用アプリで使う山データを選ぶ"
+          - "remove-dev: 開発用アプリも配布用と同じ山データに戻す"
+        default: "dev: 開発用アプリで試す山データを選ぶ"
       tag:
         description: 差し替える Release のタグ（空欄なら最新。「同じ山データに戻す」では使いません）
         type: string
@@ -54,9 +54,9 @@ jobs:
           REMOVE_DEV: ${{ inputs.remove_dev }}
         run: |
           case "$TARGET" in
-            "開発用アプリで試す山データを選ぶ") target=dev ;;
-            "配布用アプリで使う山データを選ぶ") target=stable ;;
-            "開発用アプリも配布用と同じ山データに戻す") target=remove-dev ;;
+            "dev: 開発用アプリで試す山データを選ぶ") target=dev ;;
+            "stable: 配布用アプリで使う山データを選ぶ") target=stable ;;
+            "remove-dev: 開発用アプリも配布用と同じ山データに戻す") target=remove-dev ;;
             *) echo "::error::行う操作が不明です: $TARGET"; exit 1 ;;
           esac
           args=(--target "$target" --tag "$TAG")
