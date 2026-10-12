@@ -85,6 +85,7 @@ import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.Heading
+import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.NearbyMountain
@@ -324,9 +325,15 @@ fun DialScreen(
             exit = slideOutHorizontally(tween(MODE_ANIMATION_MS)) { it } + fadeOut(tween(MODE_ANIMATION_MS)),
             modifier = Modifier.align(Alignment.TopEnd).padding(top = DialGeometry.HEADER_HEIGHT_DP.dp + 8.dp, end = 8.dp),
         ) {
+            // 北が上なら地図を端末の向きに合わせ、それ以外なら北を上にする。方位が未取得なら北を上にするだけ。
+            val tapFacesDevice = compassHeading != null && PanGeometry.compassTapFacesDevice(heading ?: 0.0)
             CompassIndicator(
                 heading = heading,
-                onClick = { viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight) },
+                tapFacesDevice = tapFacesDevice,
+                onClick = {
+                    if (tapFacesDevice) viewModel.faceDevice({ currentCompassHeading }, canvasWidth, canvasHeight)
+                    else viewModel.faceNorth(heading ?: 0.0, canvasWidth, canvasHeight)
+                },
                 enabled = state.location != null && canvasHeight > DialGeometry.CHART_INSET_DP,
             )
         }

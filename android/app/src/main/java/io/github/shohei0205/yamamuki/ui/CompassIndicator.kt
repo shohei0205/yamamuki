@@ -26,13 +26,20 @@ import io.github.shohei0205.yamamuki.R
 /**
  * 表示中の地図に対する北の方向。方位が未取得の間は針を出さない。
  * 左上の向きの表示や方位目盛りの下の札と同じく、淡い白の地に濃い色で描く。
+ * [tapFacesDevice] はタップで地図を端末の向きに合わせるか(false なら北を上にする)。
  */
 @Composable
-fun CompassIndicator(heading: Double?, onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+fun CompassIndicator(
+    heading: Double?,
+    tapFacesDevice: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val description = stringResource(if (heading == null) R.string.compass_loading else R.string.compass_ready)
     Box(
         modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f))
-            .clickable(enabled = enabled, role = Role.Button, onClickLabel = stringResource(R.string.compass_face_north), onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClickLabel = stringResource(if (tapFacesDevice) R.string.compass_face_device else R.string.compass_face_north), onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {

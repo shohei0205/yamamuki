@@ -32,6 +32,7 @@
     <string name="map_mode_heading_up">ヘディングアップモード</string>
     <string name="map_mode_to_heading_up">現在地に戻る（進行方向が上）</string>
     <string name="map_mode_to_manual">現在の向きのまま操作する</string>
+    <string name="compass_face_device">端末の向きに合わせる</string>
     <string name="compass_face_north">北を上にする</string>
     <string name="compass_loading">コンパス：方位を確認中</string>
     <string name="compass_ready">コンパス：赤い針が北を示します</string>

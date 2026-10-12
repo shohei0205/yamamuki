@@ -7,6 +7,14 @@ class PanGeometryTest {
     /** 高さ 800dp の画面で 1km = 10dp になる表示範囲。 */
     private val range800 = (800.0 - DialGeometry.CHART_INSET_DP) / 10.0
 
+    /** コンパスのタップで北へ回すときの、進み具合 [progress] での向き。 */
+    private fun northUpHeading(heading: Double, progress: Double) = HeadingTurn(heading, 0.0).headingAt(0.0, progress)
+
+    /** コンパスのタップで北へ回すときの、進み具合 [progress] での表示位置。 */
+    private fun northUpViewport(observer: MapCenter, viewport: MapCenter, heading: Double,
+        rangeKm: Double, canvasHeight: Double, progress: Double = 1.0, aroundCenter: Boolean = true) =
+        PanGeometry.rotateViewport(observer, viewport, heading, northUpHeading(heading, progress), rangeKm, canvasHeight, aroundCenter)
+
     @Test fun returnPathIsStraightOnScreenWhileHeadingAndGpsChange() {
         for (offset in listOf(PlanOffset(12.0, -8.0), PlanOffset(-30.0, 20.0), PlanOffset(0.0, 0.0))) {
             for (targetHeading in listOf(10.0, 90.0, 180.0, 270.0)) {
@@ -56,8 +64,8 @@ class PanGeometryTest {
             assertTrue(PanGeometry.isObserverVisible(tokyo, viewport, heading, range800, 360.0, 800.0))
             val before = screenPoint(tokyo, viewport, heading, 10.0)
             for (progress in listOf(0.0, 0.25, 0.5, 0.75, 1.0)) {
-                val next = PanGeometry.northUpViewport(tokyo, viewport, heading, range800, 800.0, progress, aroundCenter = false)
-                val after = screenPoint(tokyo, next, PanGeometry.northUpHeading(heading, progress), 10.0)
+                val next = northUpViewport(tokyo, viewport, heading, range800, 800.0, progress, aroundCenter = false)
+                val after = screenPoint(tokyo, next, northUpHeading(heading, progress), 10.0)
                 assertEquals(before.x, after.x, 1e-6)
                 assertEquals(before.y, after.y, 1e-6)
             }
@@ -85,21 +93,21 @@ class PanGeometryTest {
                 assertEquals(0.0, before.x, 1e-6)
                 assertEquals(pivotY, before.y, 1e-6)
                 for (progress in listOf(0.0, 0.25, 0.5, 0.75, 1.0)) {
-                    val animated = PanGeometry.northUpViewport(tokyo, viewport, heading, range, height, progress)
-                    val position = screenPoint(landmark, animated, PanGeometry.northUpHeading(heading, progress), scale)
+                    val animated = northUpViewport(tokyo, viewport, heading, range, height, progress)
+                    val position = screenPoint(landmark, animated, northUpHeading(heading, progress), scale)
                     assertEquals(before.x, position.x, 1e-6)
                     assertEquals(before.y, position.y, 1e-6)
-                    val normal = PanGeometry.northUpViewport(tokyo, tokyo, heading, range, height, progress, aroundCenter = false)
+                    val normal = northUpViewport(tokyo, tokyo, heading, range, height, progress, aroundCenter = false)
                     assertEquals(tokyo, normal)
-                    val binoculars = screenPoint(tokyo, normal, PanGeometry.northUpHeading(heading, progress), scale)
+                    val binoculars = screenPoint(tokyo, normal, northUpHeading(heading, progress), scale)
                     assertEquals(0.0, binoculars.x, 1e-6)
                     assertEquals(0.0, binoculars.y, 1e-6)
                 }
-                val next = PanGeometry.northUpViewport(tokyo, viewport, heading, range, height)
+                val next = northUpViewport(tokyo, viewport, heading, range, height)
                 val after = screenPoint(landmark, next, 0.0, scale)
                 assertEquals(before.x, after.x, 1e-6)
                 assertEquals(before.y, after.y, 1e-6)
-                assertEquals(next, PanGeometry.northUpViewport(tokyo, next, 0.0, range, height))
+                assertEquals(next, northUpViewport(tokyo, next, 0.0, range, height))
             }
         }
     }
@@ -116,11 +124,11 @@ class PanGeometryTest {
     }
 
     @Test fun northUpAnimationUsesShortestTurnAndStopsExactlyAtNorth() {
-        assertEquals(45.0, PanGeometry.northUpHeading(90.0, 0.5), 1e-8)
-        assertEquals(315.0, PanGeometry.northUpHeading(270.0, 0.5), 1e-8)
-        assertEquals(359.5, PanGeometry.northUpHeading(359.0, 0.5), 1e-8)
-        assertEquals(90.0, PanGeometry.northUpHeading(90.0, 0.0))
-        assertEquals(0.0, PanGeometry.northUpHeading(359.0, 1.0))
+        assertEquals(45.0, northUpHeading(90.0, 0.5), 1e-8)
+        assertEquals(315.0, northUpHeading(270.0, 0.5), 1e-8)
+        assertEquals(359.5, northUpHeading(359.0, 0.5), 1e-8)
+        assertEquals(90.0, northUpHeading(90.0, 0.0))
+        assertEquals(0.0, northUpHeading(359.0, 1.0))
     }
 
     private fun screenPoint(point: MapCenter, viewport: MapCenter, heading: Double, scale: Double): PlanOffset {
@@ -191,5 +199,54 @@ class PanGeometryTest {
     @Test fun wrapsLongitudeAcrossDateLine() {
         val p = PanGeometry.drag(MapCenter(0.0, 179.99), -100.0, 0.0, 10.0, 0.0)
         assertTrue(p.longitude < -179 && p.longitude >= -180)
+    }
+
+    @Test fun compassTapFacesDeviceOnlyWhenNorthIsUp() {
+        // 北が上なら端末の向きに合わせる。
+        assertTrue(PanGeometry.compassTapFacesDevice(0.0))
+        assertTrue(PanGeometry.compassTapFacesDevice(0.3))
+        assertTrue(PanGeometry.compassTapFacesDevice(359.8))
+        // 北が上でなければ北を上にする。
+        assertFalse(PanGeometry.compassTapFacesDevice(45.0))
+        assertFalse(PanGeometry.compassTapFacesDevice(180.0))
+        assertFalse(PanGeometry.compassTapFacesDevice(359.0))
+        // 境界(±0.5° ちょうど)は北が上とみなさない。
+        assertTrue(PanGeometry.compassTapFacesDevice(0.49))
+        assertTrue(PanGeometry.compassTapFacesDevice(359.51))
+        assertFalse(PanGeometry.compassTapFacesDevice(0.5))
+        assertFalse(PanGeometry.compassTapFacesDevice(359.5))
+    }
+
+    @Test fun headingTurnKeepsDirectionWhenTargetCrossesBehind() {
+        // 時計回りに回し始めたら、行き先が 180° をまたいでも時計回りのまま。
+        val clockwise = HeadingTurn(0.0, 179.9)
+        assertEquals(89.95, clockwise.headingAt(179.9, 0.5), 1e-8)
+        assertEquals(90.05, clockwise.headingAt(180.1, 0.5), 1e-8)
+        assertEquals(180.1, clockwise.headingAt(180.1, 1.0), 1e-8)
+        // 反時計回りも同じ。
+        val counter = HeadingTurn(0.0, 180.1)
+        assertEquals(270.05, counter.headingAt(180.1, 0.5), 1e-8)
+        assertEquals(269.95, counter.headingAt(179.9, 0.5), 1e-8)
+        assertEquals(179.9, counter.headingAt(179.9, 1.0), 1e-8)
+    }
+
+    @Test fun headingTurnFollowsMovingTargetAcrossNorth() {
+        val turn = HeadingTurn(90.0, 10.0)
+        assertEquals(90.0, turn.headingAt(10.0, 0.0), 1e-8)
+        // 行き先が北をまたいで 350° へ動いても、近い向きで付いていく。
+        assertEquals(40.0, turn.headingAt(350.0, 0.5), 1e-8)
+        assertEquals(350.0, turn.headingAt(350.0, 1.0), 1e-8)
+        // 読めなかった向きは無視する。
+        assertEquals(350.0, turn.headingAt(Double.NaN, 1.0), 1e-8)
+    }
+
+    @Test fun headingTurnStartsInPlaceWhenFirstTargetIsUnreadable() {
+        val turn = HeadingTurn(0.0, Double.NaN)
+        assertEquals(0.0, turn.headingAt(Double.NaN, 0.5), 1e-8)
+        // あとから読めた向きへ回す。
+        assertEquals(45.0, turn.headingAt(90.0, 0.5), 1e-8)
+        assertEquals(90.0, turn.headingAt(90.0, 1.0), 1e-8)
+        val infinite = HeadingTurn(10.0, Double.POSITIVE_INFINITY)
+        assertEquals(10.0, infinite.headingAt(Double.NaN, 1.0), 1e-8)
     }
 }

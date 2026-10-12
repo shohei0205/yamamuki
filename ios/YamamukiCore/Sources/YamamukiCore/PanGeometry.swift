@@ -10,6 +10,15 @@ public struct MapCenter: Equatable, Sendable {
 }
 
 public enum PanGeometry {
+    /// 北が上とみなす角度の幅。
+    public static let northUpToleranceDeg = 0.5
+
+    /// 手動位置モードでコンパスをタップしたとき、地図を端末の向きに合わせるか。
+    /// 北が上のときは端末の向きに合わせ、それ以外のときは北を上にする。合わせたあとは端末の向きに付いていかない。
+    public static func compassTapFacesDevice(heading: Double) -> Bool {
+        abs(Heading.delta(heading, 0)) < northUpToleranceDeg
+    }
+
     /// 方角が変わっても双眼鏡を画面上の直線に沿って描画原点へ戻す。offsetはkm、yは上向き。
     public static func returnViewport(_ observer: MapCenter, initialOffset: PlanOffset, heading: Double, fraction: Double) -> MapCenter {
         let remaining = 1 - min(1, max(0, fraction))
@@ -21,11 +30,6 @@ public enum PanGeometry {
         Heading.normalize(heading + Heading.delta(heading, target) * min(1, max(0, fraction)))
     }
 
-    public static func northUpHeading(_ heading: Double, progress: Double) -> Double {
-        let t = min(1, max(0, progress))
-        return t == 1 ? 0 : Heading.normalize(heading + Heading.delta(heading, 0) * t * t * (3 - 2 * t))
-    }
-
     /// 描画される双眼鏡の中心が画面内にあるか。寸法はpt。
     public static func isObserverVisible(_ observer: MapCenter, viewport: MapCenter, heading: Double,
         rangeKm: Double, canvasWidth: Double, canvasHeight: Double) -> Bool {
@@ -35,14 +39,6 @@ public enum PanGeometry {
         let x = canvasWidth / 2 + offset.x * scale
         let y = canvasHeight - DialGeometry.originBottom - offset.y * scale
         return x >= 0 && x <= canvasWidth && y >= DialGeometry.chartTop && y <= canvasHeight
-    }
-
-    /// 選んだ回転中心をアニメーション中も固定する。高さはpt。
-    public static func northUpViewport(_ observer: MapCenter, viewport: MapCenter, heading: Double,
-        rangeKm: Double, canvasHeight: Double, progress: Double = 1, aroundCenter: Bool = true) -> MapCenter {
-        guard progress > 0, aroundCenter || observer != viewport else { return viewport }
-        return rotateViewport(observer, viewport: viewport, heading: heading, nextHeading: northUpHeading(heading, progress: progress),
-            rangeKm: rangeKm, canvasHeight: canvasHeight, aroundCenter: aroundCenter)
     }
 
     /// 双眼鏡または画面中央を固定して方角を変える。
@@ -96,5 +92,31 @@ public enum PanGeometry {
         let after = world(midpoint, newScale, newHeading)
         return drag(observer, dx: offset.x - before.x + after.x,
             dy: -offset.y + before.y - after.y, scale: 1, heading: 0)
+    }
+}
+
+/// 地図の向きを start から、動いていく行き先(端末の向きなど)へ回す。
+/// 回す量はタップした時点の最短の回転から始め、その後は行き先が動いた分だけ足していく。
+/// 行き先が真後ろ(180° 先)をまたいでも、途中で逆回りして地図が半回転して見えることはない。
+/// 最初の行き先が読めない(NaN など)ときは回さずに始め、読めた行き先へあとから回す。
+public struct HeadingTurn {
+    private let start: Double
+    private var target: Double
+    private var sweep: Double
+
+    public init(start: Double, target: Double) {
+        self.start = start
+        self.target = Heading.normalize(target.isFinite ? target : start)
+        sweep = Heading.delta(start, self.target)
+    }
+
+    /// 行き先を target に更新し、進み具合 progress(0〜1)での向きを返す。終わり(1)では行き先そのものを返す。
+    public mutating func heading(target newTarget: Double, progress: Double) -> Double {
+        if newTarget.isFinite {
+            sweep += Heading.delta(target, newTarget)
+            target = Heading.normalize(newTarget)
+        }
+        let t = min(1, max(0, progress))
+        return t == 1 ? target : Heading.normalize(start + sweep * t * t * (3 - 2 * t))
     }
 }
