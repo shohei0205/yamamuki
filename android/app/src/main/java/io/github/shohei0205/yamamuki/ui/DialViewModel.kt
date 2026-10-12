@@ -109,6 +109,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     private var fetchJob: Job? = null
     /** 確認した、まだ取り込んでいない山データの版。ダウンロードするかの答えを待っている間だけ持つ。 */
     private var peakDataOffer: PeakDataOffer? = null
+    /** ダウンロードすると答えたのに取り込めなかった版。「もう一度取得」では確認を飛ばして、この版を取り直す。 */
+    private var failedOffer: PeakDataOffer? = null
 
     init {
         viewModelScope.launch { connectivityUpdates(application).collect(::onConnectivity) }
@@ -305,10 +307,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     /** 通信エラーの知らせを閉じる。 */
     fun dismissFetchError() = _state.update { it.copy(fetchErrorMessage = null) }
 
-    /** 通信エラーの知らせから取り直す。利用者が求めたので通信する。 */
+    /**
+     * 通信エラーの知らせから取り直す。利用者が求めたので通信する。
+     * ダウンロードに失敗したあとなら、もう答えをもらっているので、大きさを聞き直さずに同じ版を取り直す。
+     */
     fun retryAfterFetchError() {
         dismissFetchError()
-        updatePeakData()
+        failedOffer?.let(::installPeakData) ?: updatePeakData()
     }
 
     fun updateSettings(transform: (Settings) -> Settings) {
@@ -399,6 +404,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
      * 圏外と分かっていれば通信を試さずに知らせる。失敗しても、取り込み済みのデータはそのまま残る。
      */
     fun updatePeakData() {
+        failedOffer = null
         runPeakDataTask {
             // 画面の状態ではなく保存した記録を使う(キャッシュが作り直されて記録が消えていることがある)。
             // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
@@ -421,9 +427,15 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val offer = peakDataOffer ?: return
         peakDataOffer = null
         _state.update { it.copy(peakDataOfferBytes = null) }
-        if (!download) return
+        if (download) installPeakData(offer)
+    }
+
+    /** 確認した版のデータ本体を取得して取り込む。取り込めなければ、「もう一度取得」で取り直せるように残す。 */
+    private fun installPeakData(offer: PeakDataOffer) {
+        failedOffer = offer
         runPeakDataTask {
             val installed = app.peakDataUpdater.install(offer)
+            failedOffer = null
             app.peakDataStore.save(installed)
             _state.update { it.copy(peakData = installed, peakDataNotice = app.getString(R.string.peak_data_updated)) }
             reloadFromCache()

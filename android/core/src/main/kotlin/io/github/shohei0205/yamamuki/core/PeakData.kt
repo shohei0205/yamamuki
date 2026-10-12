@@ -359,15 +359,6 @@ class PeakDataUpdater(
     private val archive: PeakDataArchive? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    sealed interface Result {
-        val installed: InstalledPeakData
-
-        /** 取り込み済みの版が最新だった。 */
-        data class UpToDate(override val installed: InstalledPeakData) : Result
-
-        data class Updated(override val installed: InstalledPeakData) : Result
-    }
-
     /** 確認の結果。 */
     sealed interface Check {
         /** 取り込み済みの版が最新だった。 */
@@ -419,16 +410,10 @@ class PeakDataUpdater(
         )
     }
 
-    /** [check] して、取り込める版があれば続けて [install] する(利用者に確かめずに取り込む)。 */
-    suspend fun update(installed: InstalledPeakData?): Result = when (val check = check(installed)) {
-        is Check.UpToDate -> Result.UpToDate(check.installed)
-        is Check.Available -> Result.Updated(install(check.offer))
-    }
-
     /**
      * [installed] が古い読み込み処理で作った保存データなら、端末に残した manifest と gz から通信せずに作り直す。
      * 作り直したら新しい記録を、作り直す必要が無いか、manifest か gz が無い・SHA-256 が合わない・読めないときは null を返す。
-     * null のときに作り直しが必要なら、次の [update] で取り直す。
+     * null のときに作り直しが必要なら、次の [check] で取り込める版として返す。
      */
     suspend fun rebuild(installed: InstalledPeakData?): InstalledPeakData? {
         if (installed == null || installed.readerVersion >= PeakData.READER_VERSION) return null

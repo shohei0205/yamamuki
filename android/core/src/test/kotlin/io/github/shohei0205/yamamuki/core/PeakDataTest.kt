@@ -225,7 +225,7 @@ class PeakDataTest {
         val updater = PeakDataUpdater(source, cache, clock = { 1_000L })
 
         val first = updater.update(installed = null)
-        assertIs<PeakDataUpdater.Result.Updated>(first)
+        assertIs<UpdateResult.Updated>(first)
         assertEquals("v1", first.installed.version)
         assertEquals(2, first.installed.mountainCount)
         assertEquals(setOf(3403990450L, 12L), cache.mountains.keys)
@@ -234,14 +234,14 @@ class PeakDataTest {
 
         // ETag が同じなら manifest もデータも取り直さない。
         val second = updater.update(first.installed)
-        assertIs<PeakDataUpdater.Result.UpToDate>(second)
+        assertIs<UpdateResult.UpToDate>(second)
         assertEquals("\"e1\"", source.sentEtags.last())
         assertEquals(1, source.dataCalls)
 
         // ETag が変わっても版が同じなら、データは取り直さない。
         source.etag = "\"e2\""
         val third = updater.update(second.installed)
-        assertIs<PeakDataUpdater.Result.UpToDate>(third)
+        assertIs<UpdateResult.UpToDate>(third)
         assertEquals("\"e2\"", third.installed.manifestEtag)
         assertEquals(1, source.dataCalls)
     }
@@ -285,7 +285,7 @@ class PeakDataTest {
         source.etag = "\"e2\""
         val result = updater.update(installed)
 
-        assertIs<PeakDataUpdater.Result.Updated>(result)
+        assertIs<UpdateResult.Updated>(result)
         assertEquals(1406.0, cache.mountains.getValue(3403990450).elevationM)
         assertEquals(setOf(3403990450L), cache.mountains.keys, "新しい版で消えた山はキャッシュからも消す")
     }
@@ -350,7 +350,7 @@ class PeakDataTest {
 
         // 作り直したあとは、同じ版なら取り直さない。
         assertNull(updater.rebuild(rebuilt))
-        assertIs<PeakDataUpdater.Result.UpToDate>(updater.update(rebuilt))
+        assertIs<UpdateResult.UpToDate>(updater.update(rebuilt))
         assertEquals(0, source.dataCalls)
     }
 
@@ -373,7 +373,7 @@ class PeakDataTest {
             assertTrue(cache.mountains.isEmpty())
             // 作り直せなかったら、データの版が同じでも ETag を送らずに取り直す。
             val result = updater.update(installed)
-            assertIs<PeakDataUpdater.Result.Updated>(result)
+            assertIs<UpdateResult.Updated>(result)
             assertNull(source.sentEtags.single())
             assertEquals(1, source.dataCalls)
             assertEquals(PeakData.READER_VERSION, result.installed.readerVersion)
@@ -516,3 +516,19 @@ class PeakDataTest {
         assertFailsWith<IllegalArgumentException> { SimpleJson.parse("[1] x") }
     }
 }
+
+/** 確認の結果と、取り込んだかどうか。テストで [update] の結果を見分けるのに使う。 */
+private sealed interface UpdateResult {
+    val installed: InstalledPeakData
+
+    data class UpToDate(override val installed: InstalledPeakData) : UpdateResult
+
+    data class Updated(override val installed: InstalledPeakData) : UpdateResult
+}
+
+/** 確認して、取り込める版があれば続けて取り込む(アプリでは、利用者に大きさを見せて確かめてから取り込む)。 */
+private suspend fun PeakDataUpdater.update(installed: InstalledPeakData?): UpdateResult =
+    when (val check = check(installed)) {
+        is PeakDataUpdater.Check.UpToDate -> UpdateResult.UpToDate(check.installed)
+        is PeakDataUpdater.Check.Available -> UpdateResult.Updated(install(check.offer))
+    }

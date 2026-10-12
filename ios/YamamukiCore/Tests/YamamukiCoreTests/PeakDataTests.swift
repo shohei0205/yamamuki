@@ -401,3 +401,25 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(decoded.readerVersion, 0)
     }
 }
+
+/// 確認の結果と、取り込んだかどうか。テストで `update` の結果を見分けるのに使う。
+private enum UpdateResult: Equatable {
+    case upToDate(InstalledPeakData)
+    case updated(InstalledPeakData)
+
+    var installed: InstalledPeakData {
+        switch self {
+        case .upToDate(let installed), .updated(let installed): return installed
+        }
+    }
+}
+
+private extension PeakDataUpdater {
+    /// 確認して、取り込める版があれば続けて取り込む(アプリでは、利用者に大きさを見せて確かめてから取り込む)。
+    func update(installed: InstalledPeakData?) async throws -> UpdateResult {
+        switch try await check(installed: installed) {
+        case .upToDate(let installed): return .upToDate(installed)
+        case .available(let offer): return .updated(try await install(offer))
+        }
+    }
+}

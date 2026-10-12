@@ -162,9 +162,9 @@ struct DialView: View {
         } message: {
             Text(Strings.text("peak_data_prompt_message"))
         }
-        // シートを開いている間は、ダウンロードの確認をシートの中身からだけ出す。下の画面からも出そうとすると、
-        // シートの上に出た確認とぶつかり、確認がシートごと閉じてしまう。
-        .peakDataAlerts(model, offersDownload: !sheetShown)
+        // シートを開いている間は、ダウンロードの確認と通信の失敗の知らせをシートの中身からだけ出す。下の画面からも
+        // 出そうとすると、シートの上に出た知らせとぶつかり、知らせがシートごと閉じてしまう。
+        .peakDataAlerts(model, presents: !sheetShown)
         // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
         .sheet(isPresented: $showSettings) {
             SettingsView(model: model).peakDataAlerts(model)
@@ -263,12 +263,14 @@ struct DialView: View {
 /// 通信に失敗したら画面中央で知らせる。方位を待つ表示などに隠れて気づけないことがないようにする。
 private struct FetchErrorAlert: ViewModifier {
     @ObservedObject var model: DialModel
+    /// この画面から知らせを出す。シートの下になっている画面では false にする。
+    var enabled = true
 
     func body(content: Content) -> some View {
         content.alert(
             Strings.text("peak_data_error_title"),
             isPresented: Binding(
-                get: { model.fetchErrorMessage != nil },
+                get: { enabled && model.fetchErrorMessage != nil },
                 set: { if !$0 { model.dismissFetchError() } }
             )
         ) {
@@ -305,8 +307,8 @@ private struct PeakDataOfferAlert: ViewModifier {
 
 private extension View {
     /// 山データの通信に関わる知らせ(ダウンロードの確認と、通信の失敗)。
-    func peakDataAlerts(_ model: DialModel, offersDownload: Bool = true) -> some View {
-        modifier(PeakDataOfferAlert(model: model, enabled: offersDownload)).modifier(FetchErrorAlert(model: model))
+    func peakDataAlerts(_ model: DialModel, presents: Bool = true) -> some View {
+        modifier(PeakDataOfferAlert(model: model, enabled: presents)).modifier(FetchErrorAlert(model: model, enabled: presents))
     }
 }
 

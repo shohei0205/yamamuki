@@ -419,18 +419,6 @@ public enum PeakData {
 /// 取り込む前に失敗したら、キャッシュの内容はそのまま残る。
 /// 取り込んだ manifest とデータ本体は `archive` に組で残し、読み込み処理の版が上がったら、そこから作り直す。
 public struct PeakDataUpdater: Sendable {
-    public enum Result: Equatable, Sendable {
-        /// 取り込み済みの版が最新だった。
-        case upToDate(InstalledPeakData)
-        case updated(InstalledPeakData)
-
-        public var installed: InstalledPeakData {
-            switch self {
-            case .upToDate(let installed), .updated(let installed): return installed
-            }
-        }
-    }
-
     private let source: PeakDataSource
     private let cache: MountainCache
     private let archive: PeakDataArchive?
@@ -499,17 +487,9 @@ public struct PeakDataUpdater: Sendable {
         )
     }
 
-    /// `check` して、取り込める版があれば続けて `install` する(利用者に確かめずに取り込む)。
-    public func update(installed: InstalledPeakData?) async throws -> Result {
-        switch try await check(installed: installed) {
-        case .upToDate(let installed): return .upToDate(installed)
-        case .available(let offer): return .updated(try await install(offer))
-        }
-    }
-
     /// `installed` が古い読み込み処理で作った保存データなら、端末に残した manifest と gz から通信せずに作り直す。
     /// 作り直したら新しい記録を、作り直す必要が無いか、manifest か gz が無い・SHA-256 が合わない・読めないときは nil を返す。
-    /// nil のときに作り直しが必要なら、次の `update` で取り直す。
+    /// nil のときに作り直しが必要なら、次の `check` で取り込める版として返す。
     public func rebuild(installed: InstalledPeakData?) async throws -> InstalledPeakData? {
         guard var installed, installed.readerVersion < PeakData.readerVersion,
               let archived = await archive?.read(),
