@@ -705,12 +705,12 @@ private fun ViewpointLabel(mountain: Mountain, headingDeg: Double?, textScale: F
                     withStyle(SpanStyle(fontFamily = FontFamily.Serif, fontWeight = FontWeight.Black, letterSpacing = 0.12.em)) {
                         append(mountain.name)
                     }
-                    withStyle(SpanStyle(fontSize = 11.sp * textScale, fontWeight = FontWeight.Bold)) { append("  $elevation") }
+                    withStyle(SpanStyle(fontSize = 12.5.sp * textScale, fontWeight = FontWeight.Bold)) { append("  $elevation") }
                 },
                 color = WoodInk,
-                fontSize = 19.sp * textScale,
+                fontSize = 21.sp * textScale,
             )
-            Text("$lat  $lon", color = WoodInkSubtle, fontSize = 10.sp * textScale)
+            Text("$lat  $lon", color = WoodInkSubtle, fontSize = 11.sp * textScale, fontWeight = FontWeight.Medium)
         }
         // 支柱と、その横の向きの小札。
         Row(verticalAlignment = Alignment.Top) {
@@ -746,10 +746,10 @@ private fun DrawScope.drawWoodGrain() {
     var x = step / 2
     var i = 0
     while (x < size.width) {
-        // 筋の濃さと間隔を少しずつ変えて、木目らしくする。
+        // 筋の濃さと間隔を少しずつ変えて、木目らしくする。文字が読みにくくならないよう、筋は薄くする。
         val light = i % 3 == 0
         drawRect(
-            if (light) Color.White.copy(alpha = 0.07f) else Color.Black.copy(alpha = 0.05f),
+            if (light) Color.White.copy(alpha = 0.04f) else Color.Black.copy(alpha = 0.025f),
             topLeft = Offset(x, 0f),
             size = Size(if (light) 3.dp.toPx() else 2.dp.toPx(), size.height),
         )
@@ -764,12 +764,12 @@ private fun DrawScope.drawWoodGrain() {
     }
 }
 
-private val WoodLight = Color(0xFFC99A63)
-private val WoodDark = Color(0xFFB07E4A)
+private val WoodLight = Color(0xFFE9CFA2)
+private val WoodDark = Color(0xFFDDBB86)
 private val WoodEdge = Color(0xFF7A5230)
 private val WoodScrew = Color(0xFF5B3A1E)
-private val WoodInk = Color(0xFF2B1D10)
-private val WoodInkSubtle = Color(0xFF3A2A18)
+private val WoodInk = Color(0xFF1E140A)
+private val WoodInkSubtle = Color(0xFF2B1D10)
 private val PostDark = Color(0xFF8A6036)
 private val PostLight = Color(0xFFA57646)
 

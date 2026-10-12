@@ -470,10 +470,10 @@ private struct ViewpointLabel: View {
         VStack(alignment: .leading, spacing: 0) {
             // 木の板。木目と、左右のビスを描く。
             VStack(alignment: .leading, spacing: 1) {
-                (Text(mountain.name).font(.system(size: 19 * textScale, weight: .black, design: .serif)).kerning(19 * textScale * 0.12)
-                    + Text("  " + elevationListLabel(mountain.elevationM)).font(.system(size: 11 * textScale, weight: .bold)))
+                (Text(mountain.name).font(.system(size: 21 * textScale, weight: .black, design: .serif)).kerning(21 * textScale * 0.12)
+                    + Text("  " + elevationListLabel(mountain.elevationM)).font(.system(size: 12.5 * textScale, weight: .bold)))
                     .foregroundColor(woodInk)
-                Text(verbatim: "\(lat)  \(lon)").font(.system(size: 10 * textScale)).foregroundColor(woodInkSubtle)
+                Text(verbatim: "\(lat)  \(lon)").font(.system(size: 11 * textScale, weight: .medium)).foregroundColor(woodInkSubtle)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
@@ -510,10 +510,10 @@ private struct WoodGrain: View {
             var x: CGFloat = 2.5
             var i = 0
             while x < size.width {
-                // 筋の濃さと間隔を少しずつ変えて、木目らしくする。
+                // 筋の濃さと間隔を少しずつ変えて、木目らしくする。文字が読みにくくならないよう、筋は薄くする。
                 let light = i % 3 == 0
                 ctx.fill(Path(CGRect(x: x, y: 0, width: light ? 3 : 2, height: size.height)),
-                         with: .color(light ? .white.opacity(0.07) : .black.opacity(0.05)))
+                         with: .color(light ? .white.opacity(0.04) : .black.opacity(0.025)))
                 x += 5 + CGFloat(i % 4)
                 i += 1
             }
@@ -526,12 +526,12 @@ private struct WoodGrain: View {
     }
 }
 
-private let woodLight = Color(hex: 0xC99A63)
-private let woodDark = Color(hex: 0xB07E4A)
+private let woodLight = Color(hex: 0xE9CFA2)
+private let woodDark = Color(hex: 0xDDBB86)
 private let woodEdge = Color(hex: 0x7A5230)
 private let woodScrew = Color(hex: 0x5B3A1E)
-private let woodInk = Color(hex: 0x2B1D10)
-private let woodInkSubtle = Color(hex: 0x3A2A18)
+private let woodInk = Color(hex: 0x1E140A)
+private let woodInkSubtle = Color(hex: 0x2B1D10)
 private let postDark = Color(hex: 0x8A6036)
 private let postLight = Color(hex: 0xA57646)
 
