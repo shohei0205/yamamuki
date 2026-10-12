@@ -85,7 +85,6 @@ private val BinocularBody = Color(0xFF333333)
 private val BinocularHinge = Color(0xFF777777)
 private val LensBlue = Color(0xFF5B8DB8)
 private val SummitRock = Color(0xFF5D6D7E)
-private val SummitRockLight = Color(0xFF8A99A8)
 private val FlagPole = Color(0xFF333333)
 private val FanShade = Color(0xFFB08D57)
 private val FanEdge = Color(0xFFF2A65A)
@@ -808,7 +807,7 @@ private fun polygon(points: List<Offset>): Path = Path().apply {
 }
 
 /**
- * 現在地がほぼ山頂のとき(検索位置モードでは選んだ山頂)に双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
+ * 現在地がほぼ山頂のとき(検索位置モードでは選んだ山頂)に双眼鏡の代わりに描く、頂上に赤い旗を立てた灰色の三角の山と山名。
  * 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ白い丸の中に置いて、同じ視野の扇形を前方へ描く。
  * 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤のため)。タップの当たり判定用の範囲を返す。
  */
@@ -822,26 +821,18 @@ private fun DrawScope.drawSummit(
     showLabel: Boolean,
 ): PlacedPeak {
     val u = 1.dp.toPx()
-    // 岩山と旗(縦 -24〜10)を、双眼鏡と同じ白い丸の真ん中に収まるよう少し下げて描く。
-    fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + (y + 6f) * u)
+    fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + y * u)
 
-    val rock = polygon(listOf(at(-16f, 10f), at(-8f, -2f), at(-4f, 1f), at(2f, -8f), at(16f, 10f)))
-    // 日の当たる面。右の尾根を明るくして立体に見せる。
-    val lit = polygon(listOf(at(2f, -8f), at(16f, 10f), at(7f, 10f)))
-    val flag = polygon(listOf(at(2f, -24f), at(13f, -20.5f), at(2f, -17f)))
-    val poleTop = at(2f, -24f)
-    val poleBottom = at(2f, -8f)
+    // 白い丸の真ん中に、灰色の三角の山と、頂上に立てた赤い旗を描く。
+    val peak = polygon(listOf(at(-15f, 12f), at(0f, -8f), at(15f, 12f)))
+    val flag = polygon(listOf(at(1f, -19f), at(10f, -15.5f), at(1f, -12f)))
+    val poleTop = at(1f, -19f)
+    val poleBottom = at(1f, -7f)
 
     if (coneAlpha > 0f) rotate(observerRotation, pivot = center) { drawViewCone(Offset(center.x, center.y - 10f * u), coneAlpha) }
     drawObserverDisc(center)
 
-    // 白い縁取り → 本体の順に描く。
-    val halo = Stroke(width = 4f * u, join = StrokeJoin.Round)
-    drawPath(rock, Color.White, style = halo)
-    drawPath(flag, Color.White, style = halo)
-    drawLine(Color.White, poleTop, poleBottom, strokeWidth = 5f * u, cap = StrokeCap.Round)
-    drawPath(rock, SummitRock)
-    drawPath(lit, SummitRockLight)
+    drawPath(peak, SummitRock)
     drawLine(FlagPole, poleTop, poleBottom, strokeWidth = 2f * u, cap = StrokeCap.Round)
     drawPath(flag, NorthRed)
 

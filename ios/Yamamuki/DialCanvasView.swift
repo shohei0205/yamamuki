@@ -13,7 +13,6 @@ private let binocularBody = Color(hex: 0x333333)
 private let binocularHinge = Color(hex: 0x777777)
 private let lensBlue = Color(hex: 0x5B8DB8)
 private let summitRock = Color(hex: 0x5D6D7E)
-private let summitRockLight = Color(hex: 0x8A99A8)
 private let flagPole = Color(hex: 0x333333)
 private let fanShade = Color(hex: 0xB08D57)
 private let fanEdge = Color(hex: 0xF2A65A)
@@ -513,29 +512,21 @@ struct DialCanvasView: View, Animatable {
         ctx.draw(label.text, at: CGPoint(x: p.x - label.size.width / 2, y: rect.minY + labelPadY), anchor: .topLeading)
     }
 
-    /// 現在地がほぼ山頂のとき(検索位置モードでは選んだ山頂)に双眼鏡の代わりに描く、赤い旗を立てた灰色の岩山と山名。
+    /// 現在地がほぼ山頂のとき(検索位置モードでは選んだ山頂)に双眼鏡の代わりに描く、頂上に赤い旗を立てた灰色の三角の山と山名。
     /// 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ白い丸の中に置いて、同じ視野の扇形を前方へ描く。
     /// 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤のため)。タップの当たり判定用の範囲を返す。
     private func drawSummit(_ ctx: GraphicsContext, center: CGPoint, summit: NearbyMountain, styles: TextStyles, showLabel: Bool) -> PlacedPeak {
-        // 岩山と旗(縦 -24〜10)を、双眼鏡と同じ白い丸の真ん中に収まるよう少し下げて描く。
-        func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: center.x + x, y: center.y + y + 6) }
+        func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: center.x + x, y: center.y + y) }
 
-        let rock = polygon([at(-16, 10), at(-8, -2), at(-4, 1), at(2, -8), at(16, 10)])
-        // 日の当たる面。右の尾根を明るくして立体に見せる。
-        let lit = polygon([at(2, -8), at(16, 10), at(7, 10)])
-        let flag = polygon([at(2, -24), at(13, -20.5), at(2, -17)])
-        let pole = line(at(2, -24), at(2, -8))
+        // 白い丸の真ん中に、灰色の三角の山と、頂上に立てた赤い旗を描く。
+        let peak = polygon([at(-15, 12), at(0, -8), at(15, 12)])
+        let flag = polygon([at(1, -19), at(10, -15.5), at(1, -12)])
+        let pole = line(at(1, -19), at(1, -7))
 
         drawViewCone(rotatedObserver(ctx, center: center), apex: CGPoint(x: center.x, y: center.y - 10))
         drawObserverDisc(ctx, center: center)
 
-        // 白い縁取り → 本体の順に描く。
-        let halo = StrokeStyle(lineWidth: 4, lineJoin: .round)
-        ctx.stroke(rock, with: .color(.white), style: halo)
-        ctx.stroke(flag, with: .color(.white), style: halo)
-        ctx.stroke(pole, with: .color(.white), style: StrokeStyle(lineWidth: 5, lineCap: .round))
-        ctx.fill(rock, with: .color(summitRock))
-        ctx.fill(lit, with: .color(summitRockLight))
+        ctx.fill(peak, with: .color(summitRock))
         ctx.stroke(pole, with: .color(flagPole), style: StrokeStyle(lineWidth: 2, lineCap: .round))
         ctx.fill(flag, with: .color(northRed))
 
