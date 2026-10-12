@@ -43,6 +43,10 @@ final class DialModel: ObservableObject {
     @Published private(set) var peakData: InstalledPeakData?
     /// 全国の山データを取得している。
     @Published private(set) var peakDataUpdating = false
+    /// 新しい山データがあり、ダウンロードするかを聞いているときの、確認した版。聞いていなければ nil。
+    @Published private(set) var peakDataOffer: PeakDataOffer?
+    /// ダウンロードすると答えたのに取り込めなかった版。「もう一度取得」では確認を飛ばして、この版を取り直す。
+    private var failedOffer: PeakDataOffer?
     /// 設定画面に出す、山データの取得の結果(「山データは最新です」など)。
     @Published private(set) var peakDataNotice: String?
     /// 山データの取得に失敗したときに画面中央で知らせる文言。閉じるまで保つ。
@@ -295,9 +299,14 @@ final class DialModel: ObservableObject {
     func dismissFetchError() { fetchErrorMessage = nil }
 
     /// 通信エラーの知らせから、山データを取り直す。
+    /// ダウンロードに失敗したあとなら、もう答えをもらっているので、大きさを聞き直さずに同じ版を取り直す。
     func retryAfterFetchError() {
         fetchErrorMessage = nil
-        updatePeakData()
+        if let failedOffer {
+            installPeakData(failedOffer)
+        } else {
+            updatePeakData()
+        }
     }
 
     func updateSettings(_ transform: (inout Settings) -> Void) {
@@ -419,9 +428,49 @@ final class DialModel: ObservableObject {
         }
     }
 
-    /// 全国の山データの最新版を確かめ、新しければ取得して取り込む。初回の問い合わせと設定画面のボタンから呼ぶ。
+    /// 全国の山データの最新版を確かめる。初回の問い合わせと設定画面のボタンから呼ぶ。
+    /// manifest だけを取り、新しい版があれば大きさを見せて、ダウンロードするかを聞く(`answerPeakDataOffer`)。
     /// 圏外と分かっていれば通信を試さずに知らせる。失敗しても、取り込み済みのデータはそのまま残る。
     func updatePeakData() {
+        failedOffer = nil
+        let installed = peakData
+        runPeakDataTask { [self] in
+            // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
+            let hasMountains = await cache.info().mountainCount > 0
+            switch try await peakDataUpdater.check(installed: hasMountains ? installed : nil) {
+            case .upToDate(let latest):
+                peakDataStore.save(latest)
+                peakData = latest
+                peakDataNotice = Strings.text("peak_data_up_to_date")
+            case .available(let offer):
+                peakDataOffer = offer
+            }
+        }
+    }
+
+    /// 「山データをダウンロードしますか」への答え。はいなら、確認した版のデータ本体を取得して取り込む。
+    func answerPeakDataOffer(download: Bool) {
+        guard let offer = peakDataOffer else { return }
+        peakDataOffer = nil
+        if download { installPeakData(offer) }
+    }
+
+    /// 確認した版のデータ本体を取得して取り込む。取り込めなければ、「もう一度取得」で取り直せるように残す。
+    private func installPeakData(_ offer: PeakDataOffer) {
+        failedOffer = offer
+        runPeakDataTask { [self] in
+            let installed = try await peakDataUpdater.install(offer)
+            failedOffer = nil
+            peakDataStore.save(installed)
+            peakData = installed
+            peakDataNotice = Strings.text("peak_data_updated")
+            reloadFromCache()
+            refreshCacheInfo()
+        }
+    }
+
+    /// 山データの通信を、取得中の表示を出して行う。圏外なら通信せずに知らせ、失敗したら画面中央で知らせる。
+    private func runPeakDataTask(_ task: @escaping @MainActor () async throws -> Void) {
         guard !peakDataUpdating else { return }
         guard isConnected else {
             fetchErrorMessage = Self.offlineNotice(hasCache: !peaks.isEmpty)
@@ -430,23 +479,11 @@ final class DialModel: ObservableObject {
         }
         peakDataUpdating = true
         peakDataNotice = nil
-        let installed = peakData
         Task { @MainActor [weak self] in
             guard let self else { return }
             defer { peakDataUpdating = false }
             do {
-                // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
-                let hasMountains = await cache.info().mountainCount > 0
-                let result = try await peakDataUpdater.update(installed: hasMountains ? installed : nil)
-                peakDataStore.save(result.installed)
-                peakData = result.installed
-                if case .updated = result {
-                    peakDataNotice = Strings.text("peak_data_updated")
-                    reloadFromCache()
-                    refreshCacheInfo()
-                } else {
-                    peakDataNotice = Strings.text("peak_data_up_to_date")
-                }
+                try await task()
             } catch {
                 logger.warning("山データの取得に失敗: \(String(describing: error), privacy: .public)")
                 fetchErrorMessage = Self.errorNotice(for: error, hasCache: !peaks.isEmpty)

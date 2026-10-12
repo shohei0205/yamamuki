@@ -162,24 +162,31 @@ struct DialView: View {
         } message: {
             Text(Strings.text("peak_data_prompt_message"))
         }
-        .fetchErrorAlert(model)
+        // シートを開いている間は、ダウンロードの確認と通信の失敗の知らせをシートの中身からだけ出す。下の画面からも
+        // 出そうとすると、シートの上に出た知らせとぶつかり、知らせがシートごと閉じてしまう。
+        .peakDataAlerts(model, presents: !sheetShown)
         // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
         .sheet(isPresented: $showSettings) {
-            SettingsView(model: model).fetchErrorAlert(model)
+            SettingsView(model: model).peakDataAlerts(model)
         }
         .sheet(isPresented: $showDownload) {
-            AreaDownloadView(model: model, download: model.areaDownload).fetchErrorAlert(model)
+            AreaDownloadView(model: model, download: model.areaDownload).peakDataAlerts(model)
         }
         .sheet(item: selectedMountain) { nearby in
-            MountainDetailView(nearby: nearby).fetchErrorAlert(model)
+            MountainDetailView(nearby: nearby).peakDataAlerts(model)
         }
         .sheet(isPresented: showGroup) {
-            PeakGroupView(peaks: group).fetchErrorAlert(model)
+            PeakGroupView(peaks: group).peakDataAlerts(model)
         }
         // 開いている間も歩けば値が更新される。
         .sheet(isPresented: $showObserver) {
-            ObserverDetailView(model: model).fetchErrorAlert(model)
+            ObserverDetailView(model: model).peakDataAlerts(model)
         }
+    }
+
+    /// いずれかのシートを開いている。
+    private var sheetShown: Bool {
+        showSettings || showDownload || selectedMountain.wrappedValue != nil || showGroup.wrappedValue || showObserver
     }
 
     /// 手動位置モードの表示(上部の目盛りを隠し、向きの表示とコンパスを出す)。現在地へ戻り始めたらすぐ戻す。
@@ -256,12 +263,14 @@ struct DialView: View {
 /// 通信に失敗したら画面中央で知らせる。方位を待つ表示などに隠れて気づけないことがないようにする。
 private struct FetchErrorAlert: ViewModifier {
     @ObservedObject var model: DialModel
+    /// この画面から知らせを出す。シートの下になっている画面では false にする。
+    var enabled = true
 
     func body(content: Content) -> some View {
         content.alert(
             Strings.text("peak_data_error_title"),
             isPresented: Binding(
-                get: { model.fetchErrorMessage != nil },
+                get: { enabled && model.fetchErrorMessage != nil },
                 set: { if !$0 { model.dismissFetchError() } }
             )
         ) {
@@ -273,9 +282,43 @@ private struct FetchErrorAlert: ViewModifier {
     }
 }
 
+/// 新しい山データを作った日と大きさを知らせ、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
+private struct PeakDataOfferAlert: ViewModifier {
+    @ObservedObject var model: DialModel
+    /// この画面から確認を出す。シートの下になっている画面では false にする。
+    var enabled = true
+
+    func body(content: Content) -> some View {
+        content.alert(
+            Strings.text("peak_data_offer_title"),
+            // 閉じるのはボタンの答えだけで行う(閉じる通知で「あとで」と扱うと、ダウンロードのボタンより先に届いたときに取り消してしまう)。
+            isPresented: Binding(
+                get: { enabled && model.peakDataOffer != nil },
+                set: { _ in }
+            )
+        ) {
+            Button(Strings.text("peak_data_offer_later"), role: .cancel) { model.answerPeakDataOffer(download: false) }
+            Button(Strings.text("peak_data_offer_download")) { model.answerPeakDataOffer(download: true) }
+        } message: {
+            Text(Strings.format("peak_data_offer_message", detail))
+        }
+    }
+}
+
+private extension PeakDataOfferAlert {
+    /// 確認の 2 行目。データを作った日が版の文字列から読めなければ、大きさだけを出す。
+    var detail: String {
+        guard let manifest = model.peakDataOffer?.manifest else { return "" }
+        let size = byteSizeText(Int64(manifest.sizeBytes))
+        guard let date = manifest.releaseDate else { return Strings.format("peak_data_offer_size", size) }
+        return Strings.format("peak_data_offer_detail", date, size)
+    }
+}
+
 private extension View {
-    func fetchErrorAlert(_ model: DialModel) -> some View {
-        modifier(FetchErrorAlert(model: model))
+    /// 山データの通信に関わる知らせ(ダウンロードの確認と、通信の失敗)。
+    func peakDataAlerts(_ model: DialModel, presents: Bool = true) -> some View {
+        modifier(PeakDataOfferAlert(model: model, enabled: presents)).modifier(FetchErrorAlert(model: model, enabled: presents))
     }
 }
 

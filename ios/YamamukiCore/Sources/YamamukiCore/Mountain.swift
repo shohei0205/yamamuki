@@ -148,7 +148,7 @@ public func distanceText(_ distanceKm: Double) -> String {
     return "\(groupedInteger(Int(parts[0]) ?? 0)).\(parts[1]) km"
 }
 
-/// キャッシュ容量の表示。「820 KB」「1.3 MB」。
+/// キャッシュ容量や、ダウンロードするデータの大きさの表示。「820 KB」「1.3 MB」。
 public func byteSizeText(_ bytes: Int64) -> String {
     if bytes < 1024 { return "\(bytes) B" }
     if bytes < 1024 * 1024 { return "\(Int((Double(bytes) / 1024).rounded())) KB" }

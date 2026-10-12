@@ -108,7 +108,7 @@ fun Mountain.meetsMinElevation(minElevationM: Int): Boolean {
     return ele >= minElevationM
 }
 
-/** キャッシュ容量の表示。「820 KB」「1.3 MB」。 */
+/** キャッシュ容量や、ダウンロードするデータの大きさの表示。「820 KB」「1.3 MB」。 */
 fun byteSizeText(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
     bytes < 1024 * 1024 -> "${Math.round(bytes / 1024.0)} KB"
