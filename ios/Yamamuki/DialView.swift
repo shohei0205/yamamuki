@@ -162,7 +162,9 @@ struct DialView: View {
         } message: {
             Text(Strings.text("peak_data_prompt_message"))
         }
-        .peakDataAlerts(model)
+        // シートを開いている間は、ダウンロードの確認をシートの中身からだけ出す。下の画面からも出そうとすると、
+        // シートの上に出た確認とぶつかり、確認がシートごと閉じてしまう。
+        .peakDataAlerts(model, offersDownload: !sheetShown)
         // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
         .sheet(isPresented: $showSettings) {
             SettingsView(model: model).peakDataAlerts(model)
@@ -180,6 +182,11 @@ struct DialView: View {
         .sheet(isPresented: $showObserver) {
             ObserverDetailView(model: model).peakDataAlerts(model)
         }
+    }
+
+    /// いずれかのシートを開いている。
+    private var sheetShown: Bool {
+        showSettings || showDownload || selectedMountain.wrappedValue != nil || showGroup.wrappedValue || showObserver
     }
 
     /// 手動位置モードの表示(上部の目盛りを隠し、向きの表示とコンパスを出す)。現在地へ戻り始めたらすぐ戻す。
@@ -276,13 +283,15 @@ private struct FetchErrorAlert: ViewModifier {
 /// 新しい山データの大きさを知らせ、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
 private struct PeakDataOfferAlert: ViewModifier {
     @ObservedObject var model: DialModel
+    /// この画面から確認を出す。シートの下になっている画面では false にする。
+    var enabled = true
 
     func body(content: Content) -> some View {
         content.alert(
             Strings.text("peak_data_offer_title"),
             // 閉じるのはボタンの答えだけで行う(閉じる通知で「あとで」と扱うと、ダウンロードのボタンより先に届いたときに取り消してしまう)。
             isPresented: Binding(
-                get: { model.peakDataOffer != nil },
+                get: { enabled && model.peakDataOffer != nil },
                 set: { _ in }
             )
         ) {
@@ -296,8 +305,8 @@ private struct PeakDataOfferAlert: ViewModifier {
 
 private extension View {
     /// 山データの通信に関わる知らせ(ダウンロードの確認と、通信の失敗)。
-    func peakDataAlerts(_ model: DialModel) -> some View {
-        modifier(PeakDataOfferAlert(model: model)).modifier(FetchErrorAlert(model: model))
+    func peakDataAlerts(_ model: DialModel, offersDownload: Bool = true) -> some View {
+        modifier(PeakDataOfferAlert(model: model, enabled: offersDownload)).modifier(FetchErrorAlert(model: model))
     }
 }
 
