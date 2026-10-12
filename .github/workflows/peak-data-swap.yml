@@ -53,10 +53,9 @@ jobs:
           TAG: ${{ inputs.tag }}
           REMOVE_DEV: ${{ inputs.remove_dev }}
         run: |
-          case "$TARGET" in
-            "dev: 開発用アプリで試す山データを選ぶ") target=dev ;;
-            "stable: 配布用アプリで使う山データを選ぶ") target=stable ;;
-            "remove-dev: 開発用アプリも配布用と同じ山データに戻す") target=remove-dev ;;
+          target="${TARGET%%:*}"
+          case "$target" in
+            dev|stable|remove-dev) ;;
             *) echo "::error::行う操作が不明です: $TARGET"; exit 1 ;;
           esac
           args=(--target "$target" --tag "$TAG")
