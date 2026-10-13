@@ -30,7 +30,11 @@ struct PeakGroupsList: View {
             Button(Strings.text("settings_peak_groups_clear")) { onChange([]) }
                 .disabled(selected.isEmpty)
         } header: {
-            Text(Strings.text("settings_peak_groups_description")).textCase(nil)
+            // 見出しの太い字にせず、フッターと同じ小さな字で出す。
+            Text(Strings.text("settings_peak_groups_description"))
+                .font(.footnote)
+                .fontWeight(.regular)
+                .textCase(nil)
         }
         Section {
             ForEach(groups, id: \.name) { group in
