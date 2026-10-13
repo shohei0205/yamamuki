@@ -26,6 +26,14 @@ struct MountainSearchView: View {
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
+                if let groups = model.search?.groups, !groups.isEmpty {
+                    Text(Strings.format("search_groups", groups.joined(separator: Strings.text("common_list_separator"))))
+                        .font(.footnote)
+                        .foregroundStyle(Color.accentColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
+                }
                 content
             }
             .navigationTitle(Strings.text("search_title"))

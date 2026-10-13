@@ -24,6 +24,8 @@ data class Settings(
     val sensorPrecision: SensorPrecision = SensorPrecision.STANDARD,
     /** 初回起動時の「山データを取得しますか」に答えた。答えるまでは位置情報の許可を求めない(ダイアログを重ねない)。 */
     val peakDataAsked: Boolean = false,
+    /** 方位盤に出す山のグループ(地点のタグ)。どれかを持つ山だけを出す。空なら絞り込まない。 */
+    val peakGroups: Set<String> = emptySet(),
 ) {
     companion object {
         val TEXT_SCALES = listOf(0.85f, 1.0f, 1.2f, 1.4f)
@@ -60,6 +62,7 @@ class AppSettings(context: Context) {
             .putInt(KEY_INITIAL_RANGE, next.initialRangeKm)
             .putInt(KEY_SENSOR_PRECISION, next.sensorPrecision.ordinal)
             .putBoolean(KEY_PEAK_DATA_ASKED, next.peakDataAsked)
+            .putStringSet(KEY_PEAK_GROUPS, next.peakGroups)
             .apply()
     }
 
@@ -75,6 +78,8 @@ class AppSettings(context: Context) {
             sensorPrecision = SensorPrecision.entries.getOrNull(prefs.getInt(KEY_SENSOR_PRECISION, -1))
                 ?: d.sensorPrecision,
             peakDataAsked = prefs.getBoolean(KEY_PEAK_DATA_ASKED, d.peakDataAsked),
+            // getStringSet が返す集合は書き換えてはいけないので写す。
+            peakGroups = prefs.getStringSet(KEY_PEAK_GROUPS, null)?.toSet() ?: d.peakGroups,
         )
     }
 
@@ -86,5 +91,6 @@ class AppSettings(context: Context) {
         const val KEY_INITIAL_RANGE = "initial_range_km"
         const val KEY_SENSOR_PRECISION = "sensor_precision"
         const val KEY_PEAK_DATA_ASKED = "peak_data_asked"
+        const val KEY_PEAK_GROUPS = "peak_groups"
     }
 }

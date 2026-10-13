@@ -16,6 +16,17 @@ struct SettingsView: View {
         NavigationView {
             Form {
                 Section(Strings.text("settings_section_peaks")) {
+                    // データにタグが無いとき(読み込み中も)は行を出さない。
+                    if let groups = model.peakGroups, !groups.isEmpty {
+                        NavigationLink {
+                            PeakGroupsView(model: model)
+                        } label: {
+                            LabeledContent(
+                                Strings.text("settings_peak_groups"),
+                                value: peakGroupsSummary(TagGroups.effective(selected: settings.peakGroups, groups: groups))
+                            )
+                        }
+                    }
                     StepSlider(
                         value: settings.minElevationM,
                         range: 0...maxMinElevationM,

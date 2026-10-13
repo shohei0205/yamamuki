@@ -76,6 +76,10 @@ interface MountainDao {
     @Query("SELECT * FROM mountains")
     suspend fun allMountains(): List<MountainEntity>
 
+    /** タグのある山の、タグの列(JSON の配列の文字列)。山のグループの一覧を作るのに使う。 */
+    @Query("SELECT tags FROM mountains WHERE tags != '[]'")
+    suspend fun tagColumns(): List<String>
+
     @Query(
         "SELECT * FROM fetched_tiles WHERE tileLat BETWEEN :minLat AND :maxLat AND tileLon BETWEEN :minLon AND :maxLon"
     )

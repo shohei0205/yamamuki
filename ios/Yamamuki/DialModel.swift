@@ -19,6 +19,8 @@ struct SearchState {
     var noData = false
     /// 入力した文字を含む山。先頭が一致した山と途中に含む山に分け、それぞれ現在地から近い順(現在地が分からなければ標高の高い順)。
     var results = MountainSearch.Results.empty
+    /// 設定の「山のグループ」で絞り込んでいるときの、探す対象のグループ(名前順)。空ならすべての山から探す。
+    var groups: [String] = []
 }
 
 /// 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ
@@ -76,6 +78,8 @@ final class DialModel: ObservableObject {
     @Published private(set) var authorization: CLAuthorizationStatus = .notDetermined
     /// 山の検索画面の状態。開いていなければ nil。
     @Published private(set) var search: SearchState?
+    /// 保存している山データにある山のグループ(名前順)。読み込むまでは nil。
+    @Published private(set) var peakGroups: [TagGroup]?
 
     var hasLocationPermission: Bool {
         authorization == .authorizedWhenInUse || authorization == .authorizedAlways
@@ -148,13 +152,17 @@ final class DialModel: ObservableObject {
         locationService.onHeadingAccuracyLow = { [weak self] in self?.headingAccuracyLow = $0 }
         networkMonitor.onChange = { [weak self] in self?.onConnectivity($0) }
         // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
-        areaDownload.onCacheChanged = { [weak self] in self?.reloadFromCache() }
+        areaDownload.onCacheChanged = { [weak self] in
+            self?.reloadFromCache()
+            self?.refreshPeakGroups()
+        }
         locationService.onAuthorizationChange = { [weak self] status in
             guard let self else { return }
             authorization = status
             if hasLocationPermission { locationService.start() }
         }
         rebuildPeakData()
+        refreshPeakGroups()
     }
 
     /// 画面が前面に出たとき。初回は「山データを取得しますか」に答えてから位置情報の許可を求める(ダイアログを重ねない)。
@@ -371,11 +379,15 @@ final class DialModel: ObservableObject {
         searchTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let all = await cache.allMountains()
-            let index = await Task.detached { MountainSearch(all) }.value
+            // 方位盤と同じく、設定の「山のグループ」で選んだグループの山だけから探す。
+            let groups = TagGroups.effective(selected: settings.peakGroups, groups: TagGroups.of(all.map(\.tags)))
+            let targets = all.filter { $0.inTagGroups(groups) }
+            let index = await Task.detached { MountainSearch(targets) }.value
             guard !Task.isCancelled, search != nil else { return }
             searchIndex = index
             search?.loading = false
             search?.noData = all.isEmpty
+            search?.groups = groups
             runSearch()
         }
     }
@@ -432,7 +444,7 @@ final class DialModel: ObservableObject {
         if after.sensorPrecision != before.sensorPrecision {
             locationService.apply(after.sensorPrecision)
         }
-        if after.minElevationM != before.minElevationM, let here = observer {
+        if after.minElevationM != before.minElevationM || after.peakGroups != before.peakGroups, let here = observer {
             updatePeaks(at: here)
         }
         // 起動時の範囲を変えたら、試しやすいよう今の表示にもすぐ反映する。
@@ -445,6 +457,17 @@ final class DialModel: ObservableObject {
     func refreshCacheInfo() {
         Task { @MainActor in
             cacheInfo = await cache.info()
+        }
+        refreshPeakGroups()
+    }
+
+    /// 保存している山データから山のグループの一覧を作り直し、方位盤の絞り込みにも反映する。
+    private func refreshPeakGroups() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let groups = TagGroups.of(await cache.allMountains().map(\.tags))
+            peakGroups = groups
+            if let here = observer { updatePeaks(at: here) }
         }
     }
 
@@ -464,6 +487,7 @@ final class DialModel: ObservableObject {
             mountains = []
             summit = nil
             cacheInfo = await cache.info()
+            refreshPeakGroups()
             fetch()
         }
     }
@@ -638,8 +662,12 @@ final class DialModel: ObservableObject {
         let all = peaks.map { $0.seen(fromLatitude: p.latitude, longitude: p.longitude) }
         let top = summitAt(all)
         let minElevation = settings.minElevationM
-        mountains = all
-            .filter { $0.mountain.osmId != top?.mountain.osmId && $0.mountain.meetsMinElevation(minElevation) }
+        let groups = TagGroups.effective(selected: settings.peakGroups, groups: peakGroups)
+        mountains = all.filter {
+            $0.mountain.osmId != top?.mountain.osmId
+                && $0.mountain.meetsMinElevation(minElevation)
+                && $0.mountain.inTagGroups(groups)
+        }
         summit = top
     }
 }

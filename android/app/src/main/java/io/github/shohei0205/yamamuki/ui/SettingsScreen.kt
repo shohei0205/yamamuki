@@ -1,7 +1,9 @@
 package io.github.shohei0205.yamamuki.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.compose.ui.Alignment
@@ -42,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.InstalledPeakData
+import io.github.shohei0205.yamamuki.core.TagGroup
+import io.github.shohei0205.yamamuki.core.TagGroups
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.data.CacheInfo
 import io.github.shohei0205.yamamuki.settings.SensorPrecision
@@ -71,11 +76,16 @@ fun SettingsScreen(
     onClearCache: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 保存している山データにある山のグループ。読み込み中は null、データにタグが無ければ空で、どちらも行を出さない。 */
+    peakGroups: List<TagGroup>? = null,
 ) {
     BackHandler(onBack = onClose)
     LaunchedEffect(Unit) { onOpen() }
+    var showPeakGroups by rememberSaveable { mutableStateOf(false) }
 
-    Surface(modifier.fillMaxSize()) {
+    // グループの選択画面は、設定画面の上に重ねて出す。
+    Box(modifier.fillMaxSize()) {
+    Surface(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .verticalScroll(rememberScrollState())
@@ -88,6 +98,13 @@ fun SettingsScreen(
             }
 
             SectionTitle(stringResource(R.string.settings_section_peaks))
+            if (!peakGroups.isNullOrEmpty()) {
+                NavigationRow(
+                    title = stringResource(R.string.settings_peak_groups),
+                    value = peakGroupsSummary(TagGroups.effective(settings.peakGroups, peakGroups)),
+                    onClick = { showPeakGroups = true },
+                )
+            }
             StepSlider(
                 value = settings.minElevationM,
                 range = 0..MAX_MIN_ELEVATION_M,
@@ -152,6 +169,33 @@ fun SettingsScreen(
             SectionTitle(stringResource(R.string.settings_section_about))
             AboutSection()
         }
+    }
+
+    if (showPeakGroups && peakGroups != null) {
+        PeakGroupsScreen(
+            groups = peakGroups,
+            selected = settings.peakGroups,
+            onChange = { v -> onSettingsChange { it.copy(peakGroups = v) } },
+            onBack = { showPeakGroups = false },
+        )
+    }
+    }
+}
+
+/** 次の画面へ進む行。右に今の値を出す。 */
+@Composable
+private fun NavigationRow(title: String, value: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+        Text("›", style = MaterialTheme.typography.titleLarge) // 文言チェック対象外
     }
 }
 

@@ -443,6 +443,7 @@ fun DialScreen(
                 onOpen = viewModel::refreshCacheInfo,
                 onClearCache = viewModel::clearCache,
                 onClose = { showSettings = false },
+                peakGroups = state.peakGroups,
             )
         }
 

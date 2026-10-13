@@ -320,6 +320,17 @@
         }
       }
     },
+    "common_list_separator": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "、"
+          }
+        }
+      }
+    },
     "common_loading": {
       "extractionState": "manual",
       "localizations": {
@@ -1168,6 +1179,17 @@
         }
       }
     },
+    "search_groups": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ の山から探します"
+          }
+        }
+      }
+    },
     "search_loading": {
       "extractionState": "manual",
       "localizations": {
@@ -1549,6 +1571,72 @@
           "stringUnit": {
             "state": "translated",
             "value": "取得した山データ"
+          }
+        }
+      }
+    },
+    "settings_peak_group_count": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$ld 山"
+          }
+        }
+      }
+    },
+    "settings_peak_groups": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山のグループ"
+          }
+        }
+      }
+    },
+    "settings_peak_groups_all": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべての山"
+          }
+        }
+      }
+    },
+    "settings_peak_groups_clear": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのチェックを外す"
+          }
+        }
+      }
+    },
+    "settings_peak_groups_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "チェックしたグループのどれかに入る山だけを方位盤に表示します。チェックが無いときは、すべての山を表示します。"
+          }
+        }
+      }
+    },
+    "settings_peak_groups_more": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ ほか %2$ld"
           }
         }
       }
