@@ -29,7 +29,7 @@ struct MountainSearchView: View {
                 if let search = model.search, !search.loading, !search.noData {
                     Text(search.groups.isEmpty
                         ? Strings.text("search_scope_all")
-                        : Strings.format("search_scope", search.groups.joined(separator: ", ")))
+                        : Strings.format("search_scope", search.groups.joined(separator: Strings.text("search_scope_separator"))))
                         .font(.footnote)
                         .foregroundStyle(Color.accentColor)
                         .frame(maxWidth: .infinity, alignment: .leading)

@@ -183,5 +183,6 @@
     <string name="search_no_results">見つかりませんでした</string>
     <string name="search_scope_all">検索範囲：すべて</string>
     <string name="search_scope">検索範囲：%1$s</string>
+    <string name="search_scope_separator">、</string>
     <string name="search_result_direction">%1$s %2$s</string>
 </resources>

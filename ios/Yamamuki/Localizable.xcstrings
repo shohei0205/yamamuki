@@ -1256,6 +1256,17 @@
         }
       }
     },
+    "search_scope_separator": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "、"
+          }
+        }
+      }
+    },
     "search_section_partial": {
       "extractionState": "manual",
       "localizations": {

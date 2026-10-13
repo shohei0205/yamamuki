@@ -88,7 +88,8 @@ fun MountainSearchScreen(
                     if (search.groups.isEmpty()) {
                         stringResource(R.string.search_scope_all)
                     } else {
-                        stringResource(R.string.search_scope, search.groups.joinToString(", "))
+                        val separator = stringResource(R.string.search_scope_separator)
+                        stringResource(R.string.search_scope, search.groups.joinToString(separator))
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
