@@ -1608,17 +1608,6 @@
         }
       }
     },
-    "settings_peak_groups_all": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "なし"
-          }
-        }
-      }
-    },
     "settings_peak_groups_clear": {
       "extractionState": "manual",
       "localizations": {
@@ -1648,6 +1637,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ ほか %2$ld"
+          }
+        }
+      }
+    },
+    "settings_peak_groups_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "なし"
           }
         }
       }

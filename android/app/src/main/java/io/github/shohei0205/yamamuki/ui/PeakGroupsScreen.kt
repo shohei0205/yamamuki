@@ -94,7 +94,7 @@ fun PeakGroupsList(groups: List<TagGroup>, selected: Set<String>, onChange: (Set
 /** 設定画面の行に出す、今の絞り込み。「なし」「日本百名山」「九州百名山 ほか 1」。[groups] は名前順。 */
 @Composable
 fun peakGroupsSummary(groups: List<String>): String = when (groups.size) {
-    0 -> stringResource(R.string.settings_peak_groups_all)
+    0 -> stringResource(R.string.settings_peak_groups_none)
     1 -> groups[0]
     else -> stringResource(R.string.settings_peak_groups_more, groups[0], groups.size - 1)
 }

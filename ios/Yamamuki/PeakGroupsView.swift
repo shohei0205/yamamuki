@@ -63,7 +63,7 @@ struct PeakGroupsList: View {
 /// 設定画面の行に出す、今の絞り込み。「なし」「日本百名山」「九州百名山 ほか 1」。`groups` は名前順。
 func peakGroupsSummary(_ groups: [String]) -> String {
     switch groups.count {
-    case 0: return Strings.text("settings_peak_groups_all")
+    case 0: return Strings.text("settings_peak_groups_none")
     case 1: return groups[0]
     default: return Strings.format("settings_peak_groups_more", groups[0], groups.count - 1)
     }
