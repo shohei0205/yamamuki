@@ -21,10 +21,14 @@ struct SettingsView: View {
                         NavigationLink {
                             PeakGroupsView(model: model)
                         } label: {
-                            LabeledContent(
-                                Strings.text("settings_peak_groups"),
-                                value: peakGroupsSummary(TagGroups.effective(selected: settings.peakGroups, groups: groups))
-                            )
+                            // LabeledContent は iOS 16 からなので、同じ並びを HStack で作る。
+                            HStack {
+                                Text(Strings.text("settings_peak_groups"))
+                                Spacer()
+                                Text(peakGroupsSummary(TagGroups.effective(selected: settings.peakGroups, groups: groups)))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
                     }
                     StepSlider(
