@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -79,7 +80,7 @@ fun SettingsScreen(
     onClearCache: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
-    /** 保存している山データにある山のグループ。読み込み中は null、データにタグが無ければ空で、どちらも行を出さない。 */
+    /** 保存している山データにある山のグループ。読み込み中は null、データにタグが無ければ空で、どちらも行を押せなくする。 */
     peakGroups: List<TagGroup>? = null,
 ) {
     BackHandler(onBack = onClose)
@@ -101,13 +102,14 @@ fun SettingsScreen(
             }
 
             SectionTitle(stringResource(R.string.settings_section_peaks))
-            if (!peakGroups.isNullOrEmpty()) {
-                NavigationRow(
-                    title = stringResource(R.string.settings_peak_groups),
-                    value = peakGroupsSummary(TagGroups.effective(settings.peakGroups, peakGroups)),
-                    onClick = { showPeakGroups = true },
-                )
-            }
+            // 山データにタグが無くても、機能があることが分かるように行は出す（押せなくして「すべての山」と出す）。
+            val hasPeakGroups = !peakGroups.isNullOrEmpty()
+            NavigationRow(
+                title = stringResource(R.string.settings_peak_groups),
+                value = peakGroupsSummary(if (hasPeakGroups) TagGroups.effective(settings.peakGroups, peakGroups) else emptyList()),
+                enabled = hasPeakGroups,
+                onClick = { showPeakGroups = true },
+            )
             StepSlider(
                 value = settings.minElevationM,
                 range = 0..MAX_MIN_ELEVATION_M,
@@ -174,7 +176,7 @@ fun SettingsScreen(
         }
     }
 
-    if (showPeakGroups && peakGroups != null) {
+    if (showPeakGroups && !peakGroups.isNullOrEmpty()) {
         PeakGroupsScreen(
             groups = peakGroups,
             selected = settings.peakGroups,
@@ -185,13 +187,14 @@ fun SettingsScreen(
     }
 }
 
-/** 次の画面へ進む行。右に今の値を出す。 */
+/** 次の画面へ進む行。右に今の値を出す。[enabled] が false のときは灰色にして押せなくする。 */
 @Composable
-private fun NavigationRow(title: String, value: String, onClick: () -> Unit) {
+private fun NavigationRow(title: String, value: String, enabled: Boolean = true, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else DISABLED_ALPHA)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -201,6 +204,9 @@ private fun NavigationRow(title: String, value: String, onClick: () -> Unit) {
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
     }
 }
+
+/** 押せない行の不透明度。Material の無効な部品と同じ値。 */
+private const val DISABLED_ALPHA = 0.38f
 
 @Composable
 private fun AboutSection() {
