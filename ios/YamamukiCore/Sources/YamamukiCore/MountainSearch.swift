@@ -1,6 +1,6 @@
 import Foundation
 
-/// 山の検索。山名・よみがな・別名のどれかに、入力した文字を含む山を探す。
+/// 山の検索。山名・よみがな・別名のどれかに、入力した文字を含む山を探す。先頭が一致した山を先に並べる。
 /// 作るときに全件の文字をそろえておき、入力が変わるたびに search で絞り込む。
 public struct MountainSearch: Sendable {
     /// 一度に返す件数の上限。
@@ -20,25 +20,51 @@ public struct MountainSearch: Sendable {
         }
     }
 
-    /// query を含む山を、(latitude, longitude) から近い順に最大 limit 件返す。
-    /// 地点が無ければ標高の高い順(標高不明は最後)。並びが同じなら osmId の順。入力が空白だけなら空。
-    public func search(_ query: String, latitude: Double?, longitude: Double?, limit: Int = MountainSearch.maxResults) -> [Mountain] {
+    /// 検索の結果。山名・よみがな・別名のどれかの先頭が入力と一致した山(prefix)と、途中に含む山(partial)に分ける。
+    /// 「や」で「槍ヶ岳(やりがたけ)」を探すときに、「〜山(やま)」の山が先に並ばないようにするため。
+    public struct Results: Equatable, Sendable {
+        public var prefix: [Mountain]
+        public var partial: [Mountain]
+
+        public init(prefix: [Mountain], partial: [Mountain]) {
+            self.prefix = prefix
+            self.partial = partial
+        }
+
+        public static let empty = Results(prefix: [], partial: [])
+
+        /// 先頭が一致した山、途中に含む山の順に並べたもの。
+        public var all: [Mountain] { prefix + partial }
+
+        public var isEmpty: Bool { prefix.isEmpty && partial.isEmpty }
+    }
+
+    /// query を含む山を、先頭が一致した山、途中に含む山の順に、合わせて最大 limit 件返す。
+    /// それぞれの中は (latitude, longitude) から近い順。地点が無ければ標高の高い順(標高不明は最後)。
+    /// 並びが同じなら osmId の順。入力が空白だけなら空。
+    /// 入力が 1 文字だけのときは、途中に含む山は多すぎて探しにくいので返さない。
+    public func search(_ query: String, latitude: Double?, longitude: Double?, limit: Int = MountainSearch.maxResults) -> Results {
         let key = MountainSearch.normalize(query)
-        if key.isEmpty { return [] }
-        let hits = entries.filter { e in e.keys.contains { $0.contains(key) } }.map(\.mountain)
-        let sorted: [Mountain]
+        if key.isEmpty { return .empty }
+        let hits = entries.filter { e in e.keys.contains { $0.contains(key) } }
+        let isPrefix = { (e: Entry) in e.keys.contains { $0.hasPrefix(key) } }
+        let prefix = Array(sort(hits.filter(isPrefix).map(\.mountain), latitude, longitude).prefix(limit))
+        if key.count <= 1 { return Results(prefix: prefix, partial: []) }
+        let partial = Array(sort(hits.filter { !isPrefix($0) }.map(\.mountain), latitude, longitude).prefix(limit - prefix.count))
+        return Results(prefix: prefix, partial: partial)
+    }
+
+    private func sort(_ hits: [Mountain], _ latitude: Double?, _ longitude: Double?) -> [Mountain] {
         if let latitude, let longitude {
-            sorted = hits.map { ($0, GeoMath.distanceKm(latitude, longitude, $0.latitude, $0.longitude)) }
+            return hits.map { ($0, GeoMath.distanceKm(latitude, longitude, $0.latitude, $0.longitude)) }
                 .sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.osmId < $1.0.osmId }
                 .map(\.0)
-        } else {
-            sorted = hits.sorted {
-                let a = $0.elevationM ?? -.infinity
-                let b = $1.elevationM ?? -.infinity
-                return a != b ? a > b : $0.osmId < $1.osmId
-            }
         }
-        return Array(sorted.prefix(limit))
+        return hits.sorted {
+            let a = $0.elevationM ?? -.infinity
+            let b = $1.elevationM ?? -.infinity
+            return a != b ? a > b : $0.osmId < $1.osmId
+        }
     }
 
     /// 比べるための文字の形。全角と半角(NFKC)、大文字と小文字、カタカナとひらがなの違いをなくし、空白を除く。

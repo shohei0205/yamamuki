@@ -41,8 +41,8 @@ import io.github.shohei0205.yamamuki.core.distanceText
 import io.github.shohei0205.yamamuki.core.seenFrom
 
 /**
- * 山の検索画面。方位盤の右下の検索ボタンで開く。入力した文字を含む山を現在地から近い順に並べ、
- * 選ぶとその山頂を中心にした方位盤(検索位置モード)にする。
+ * 山の検索画面。方位盤の右下の検索ボタンで開く。入力した文字を含む山を、先頭が一致した山と途中に含む山に分けて
+ * それぞれ現在地から近い順に並べ、選ぶとその山頂を中心にした方位盤(検索位置モード)にする。
  */
 @Composable
 fun MountainSearchScreen(
@@ -88,14 +88,34 @@ fun MountainSearchScreen(
                 search.noData -> SearchNote(stringResource(R.string.search_no_data))
                 query.isNotBlank() && search.results.isEmpty() -> SearchNote(stringResource(R.string.search_no_results))
                 else -> LazyColumn(Modifier.fillMaxWidth()) {
-                    items(search.results, key = { it.osmId }) { mountain ->
-                        SearchResultRow(mountain, from, onClick = { onSelect(mountain) })
-                        HorizontalDivider()
+                    // 先頭が一致した山を先に、途中に含む山をあとに、見出しで分けて並べる。
+                    val sections = listOf(
+                        R.string.search_section_prefix to search.results.prefix,
+                        R.string.search_section_partial to search.results.partial,
+                    )
+                    for ((title, mountains) in sections) {
+                        if (mountains.isEmpty()) continue
+                        item(key = "section-$title") { SearchSectionHeader(stringResource(title)) }
+                        items(mountains, key = { it.osmId }) { mountain ->
+                            SearchResultRow(mountain, from, onClick = { onSelect(mountain) })
+                            HorizontalDivider()
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/** 検索結果の見出し(「先頭一致」「部分一致」)。 */
+@Composable
+private fun SearchSectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
+    )
 }
 
 @Composable

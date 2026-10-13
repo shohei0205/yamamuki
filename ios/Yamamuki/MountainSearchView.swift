@@ -1,8 +1,8 @@
 import SwiftUI
 import YamamukiCore
 
-/// 山の検索画面。方位盤の右下の検索ボタンで開く。入力した文字を含む山を現在地から近い順に並べ、
-/// 選ぶとその山頂を中心にした方位盤(検索位置モード)にする。
+/// 山の検索画面。方位盤の右下の検索ボタンで開く。入力した文字を含む山を、先頭が一致した山と途中に含む山に分けて
+/// それぞれ現在地から近い順に並べ、選ぶとその山頂を中心にした方位盤(検索位置モード)にする。
 struct MountainSearchView: View {
     @ObservedObject var model: DialModel
     let onSelect: (Mountain) -> Void
@@ -52,11 +52,26 @@ struct MountainSearchView: View {
         } else if !query.trimmingCharacters(in: .whitespaces).isEmpty && search.results.isEmpty {
             note(Strings.text("search_no_results"))
         } else {
-            List(search.results, id: \.osmId) { mountain in
-                Button { onSelect(mountain) } label: { row(mountain) }
-                    .buttonStyle(.plain)
+            // 先頭が一致した山を先に、途中に含む山をあとに、見出しで分けて並べる。
+            List {
+                section(Strings.text("search_section_prefix"), search.results.prefix)
+                section(Strings.text("search_section_partial"), search.results.partial)
             }
             .listStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func section(_ title: String, _ mountains: [Mountain]) -> some View {
+        if !mountains.isEmpty {
+            Section {
+                ForEach(mountains, id: \.osmId) { mountain in
+                    Button { onSelect(mountain) } label: { row(mountain) }
+                        .buttonStyle(.plain)
+                }
+            } header: {
+                Text(title)
+            }
         }
     }
 

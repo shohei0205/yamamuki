@@ -107,8 +107,8 @@ data class SearchUiState(
     val loading: Boolean = true,
     /** 端末に山データが 1 件も無い(まだ取得していない)。 */
     val noData: Boolean = false,
-    /** 入力した文字を含む山。現在地から近い順(現在地が分からなければ標高の高い順)。 */
-    val results: List<Mountain> = emptyList(),
+    /** 入力した文字を含む山。先頭が一致した山と途中に含む山に分け、それぞれ現在地から近い順(現在地が分からなければ標高の高い順)。 */
+    val results: MountainSearch.Results = MountainSearch.Results.EMPTY,
 )
 
 /**

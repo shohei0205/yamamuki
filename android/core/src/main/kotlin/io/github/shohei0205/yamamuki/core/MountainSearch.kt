@@ -4,7 +4,7 @@ import java.text.Normalizer
 import java.util.Locale
 
 /**
- * 山の検索。山名・よみがな・別名のどれかに、入力した文字を含む山を探す。
+ * 山の検索。山名・よみがな・別名のどれかに、入力した文字を含む山を探す。先頭が一致した山を先に並べる。
  * 作るときに全件の文字をそろえておき、入力が変わるたびに [search] で絞り込む。
  */
 class MountainSearch(mountains: List<Mountain>) {
@@ -15,22 +15,45 @@ class MountainSearch(mountains: List<Mountain>) {
     }
 
     /**
-     * [query] を含む山を、([latitude], [longitude]) から近い順に最大 [limit] 件返す。
-     * 地点が無ければ標高の高い順(標高不明は最後)。並びが同じなら osmId の順。入力が空白だけなら空。
+     * 検索の結果。山名・よみがな・別名のどれかの先頭が入力と一致した山([prefix])と、途中に含む山([partial])に分ける。
+     * 「や」で「槍ヶ岳(やりがたけ)」を探すときに、「〜山(やま)」の山が先に並ばないようにするため。
      */
-    fun search(query: String, latitude: Double?, longitude: Double?, limit: Int = MAX_RESULTS): List<Mountain> {
+    data class Results(val prefix: List<Mountain>, val partial: List<Mountain>) {
+        /** 先頭が一致した山、途中に含む山の順に並べたもの。 */
+        val all: List<Mountain> get() = prefix + partial
+
+        fun isEmpty(): Boolean = prefix.isEmpty() && partial.isEmpty()
+
+        companion object {
+            val EMPTY = Results(emptyList(), emptyList())
+        }
+    }
+
+    /**
+     * [query] を含む山を、先頭が一致した山、途中に含む山の順に、合わせて最大 [limit] 件返す。
+     * それぞれの中は ([latitude], [longitude]) から近い順。地点が無ければ標高の高い順(標高不明は最後)。
+     * 並びが同じなら osmId の順。入力が空白だけなら空。
+     * 入力が 1 文字だけのときは、途中に含む山は多すぎて探しにくいので返さない。
+     */
+    fun search(query: String, latitude: Double?, longitude: Double?, limit: Int = MAX_RESULTS): Results {
         val key = normalize(query)
-        if (key.isEmpty()) return emptyList()
-        val hits = entries.filter { e -> e.keys.any { it.contains(key) } }.map { it.mountain }
-        val sorted = if (latitude != null && longitude != null) {
+        if (key.isEmpty()) return Results.EMPTY
+        val (prefix, partial) = entries.filter { e -> e.keys.any { it.contains(key) } }
+            .partition { e -> e.keys.any { it.startsWith(key) } }
+        val prefixSorted = sort(prefix.map { it.mountain }, latitude, longitude).take(limit)
+        if (key.codePointCount(0, key.length) <= 1) return Results(prefixSorted, emptyList())
+        val partialSorted = sort(partial.map { it.mountain }, latitude, longitude).take(limit - prefixSorted.size)
+        return Results(prefixSorted, partialSorted)
+    }
+
+    private fun sort(hits: List<Mountain>, latitude: Double?, longitude: Double?): List<Mountain> =
+        if (latitude != null && longitude != null) {
             hits.map { it to GeoMath.distanceKm(latitude, longitude, it.latitude, it.longitude) }
                 .sortedWith(compareBy<Pair<Mountain, Double>> { it.second }.thenBy { it.first.osmId })
                 .map { it.first }
         } else {
             hits.sortedWith(compareByDescending<Mountain> { it.elevationM ?: Double.NEGATIVE_INFINITY }.thenBy { it.osmId })
         }
-        return sorted.take(limit)
-    }
 
     companion object {
         /** 一度に返す件数の上限。 */

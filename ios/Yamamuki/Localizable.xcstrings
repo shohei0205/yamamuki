@@ -1234,6 +1234,28 @@
         }
       }
     },
+    "search_section_partial": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分一致"
+          }
+        }
+      }
+    },
+    "search_section_prefix": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先頭一致"
+          }
+        }
+      }
+    },
     "search_title": {
       "extractionState": "manual",
       "localizations": {

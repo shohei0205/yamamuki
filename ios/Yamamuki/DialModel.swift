@@ -17,8 +17,8 @@ struct SearchState {
     var loading = true
     /// 端末に山データが 1 件も無い(まだ取得していない)。
     var noData = false
-    /// 入力した文字を含む山。現在地から近い順(現在地が分からなければ標高の高い順)。
-    var results: [Mountain] = []
+    /// 入力した文字を含む山。先頭が一致した山と途中に含む山に分け、それぞれ現在地から近い順(現在地が分からなければ標高の高い順)。
+    var results = MountainSearch.Results.empty
 }
 
 /// 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ
