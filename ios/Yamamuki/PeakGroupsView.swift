@@ -18,7 +18,7 @@ struct PeakGroupsView: View {
 }
 
 /// 山のグループのチェック欄と、すべてのチェックを外すボタン。チェックが無いときは、すべての山を表示する。
-/// ボタンは、グループが増えても下までスクロールせずに押せるよう、一覧の上に置く。
+/// 説明とボタンは、グループが増えても下までスクロールせずに見られるよう、一覧の上に置く。
 /// 方位盤からシートで開く入口を足すときも、この部品をそのまま使う。
 struct PeakGroupsList: View {
     let groups: [TagGroup]
@@ -29,6 +29,8 @@ struct PeakGroupsList: View {
         Section {
             Button(Strings.text("settings_peak_groups_clear")) { onChange([]) }
                 .disabled(selected.isEmpty)
+        } header: {
+            Text(Strings.text("settings_peak_groups_description")).textCase(nil)
         }
         Section {
             ForEach(groups, id: \.name) { group in
@@ -50,8 +52,6 @@ struct PeakGroupsList: View {
                 }
                 .accessibilityAddTraits(checked ? .isSelected : [])
             }
-        } footer: {
-            Text(Strings.text("settings_peak_groups_description"))
         }
     }
 }
