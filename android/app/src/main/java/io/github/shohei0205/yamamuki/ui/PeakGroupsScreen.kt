@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.TagGroup
 
-/** 山のグループを選ぶ画面。設定画面の「山のグループ」の行から開く。 */
+/** 山のグループを選ぶ画面。設定画面の「フィルター」の行から開く。 */
 @Composable
 fun PeakGroupsScreen(
     groups: List<TagGroup>,
@@ -91,7 +91,7 @@ fun PeakGroupsList(groups: List<TagGroup>, selected: Set<String>, onChange: (Set
     }
 }
 
-/** 設定画面の行に出す、今の絞り込み。「すべての山」「日本百名山」「九州百名山 ほか 1」。[groups] は名前順。 */
+/** 設定画面の行に出す、今の絞り込み。「なし」「日本百名山」「九州百名山 ほか 1」。[groups] は名前順。 */
 @Composable
 fun peakGroupsSummary(groups: List<String>): String = when (groups.size) {
     0 -> stringResource(R.string.settings_peak_groups_all)

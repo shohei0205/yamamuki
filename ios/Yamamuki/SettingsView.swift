@@ -17,7 +17,7 @@ struct SettingsView: View {
             Form {
                 Section(Strings.text("settings_section_peaks")) {
                     // 山データにタグが無くても(読み込み中も)、機能があることが分かるように行は出す。
-                    // そのときは押せなくして「すべての山」と出す。
+                    // そのときは押せなくして「なし」と出す。
                     let groups = model.peakGroups ?? []
                     NavigationLink {
                         PeakGroupsView(model: model)

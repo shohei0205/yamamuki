@@ -1603,7 +1603,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山のグループ"
+            "value": "フィルター"
           }
         }
       }
@@ -1614,7 +1614,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "すべての山"
+            "value": "なし"
           }
         }
       }

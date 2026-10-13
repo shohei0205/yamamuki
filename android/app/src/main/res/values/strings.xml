@@ -95,8 +95,8 @@
 
     <!-- 設定 -->
     <string name="settings_section_peaks">表示する山</string>
-    <string name="settings_peak_groups">山のグループ</string>
-    <string name="settings_peak_groups_all">すべての山</string>
+    <string name="settings_peak_groups">フィルター</string>
+    <string name="settings_peak_groups_all">なし</string>
     <string name="settings_peak_groups_more">%1$s ほか %2$d</string>
     <string name="settings_peak_groups_description">チェックしたグループのどれかに入る山だけを方位盤に表示します。チェックが無いときは、すべての山を表示します。</string>
     <string name="settings_peak_group_count">%1$d 山</string>

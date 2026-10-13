@@ -114,7 +114,7 @@ data class SearchUiState(
     val noData: Boolean = false,
     /** 入力した文字を含む山。先頭が一致した山と途中に含む山に分け、それぞれ現在地から近い順(現在地が分からなければ標高の高い順)。 */
     val results: MountainSearch.Results = MountainSearch.Results.EMPTY,
-    /** 設定の「山のグループ」で絞り込んでいるときの、探す対象のグループ(名前順)。空ならすべての山から探す。 */
+    /** 設定の「フィルター」で絞り込んでいるときの、探す対象のグループ(名前順)。空ならすべての山から探す。 */
     val groups: List<String> = emptyList(),
 )
 
@@ -335,7 +335,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(search = SearchUiState()) }
         searchJob = viewModelScope.launch {
             val all = app.mountainCache.allMountains()
-            // 方位盤と同じく、設定の「山のグループ」で選んだグループの山だけから探す。
+            // 方位盤と同じく、設定の「フィルター」で選んだグループの山だけから探す。
             val groups = TagGroups.effective(_state.value.settings.peakGroups, TagGroups.of(all.map { it.tags }))
             val targets = all.filter { it.inTagGroups(groups) }
             val index = withContext(Dispatchers.Default) { MountainSearch(targets) }

@@ -102,7 +102,7 @@ fun SettingsScreen(
             }
 
             SectionTitle(stringResource(R.string.settings_section_peaks))
-            // 山データにタグが無くても、機能があることが分かるように行は出す（押せなくして「すべての山」と出す）。
+            // 山データにタグが無くても、機能があることが分かるように行は出す（押せなくして「なし」と出す）。
             val hasPeakGroups = !peakGroups.isNullOrEmpty()
             NavigationRow(
                 title = stringResource(R.string.settings_peak_groups),

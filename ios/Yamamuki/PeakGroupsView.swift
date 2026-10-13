@@ -1,7 +1,7 @@
 import SwiftUI
 import YamamukiCore
 
-/// 山のグループを選ぶ画面。設定画面の「山のグループ」の行から開く。
+/// 山のグループを選ぶ画面。設定画面の「フィルター」の行から開く。
 struct PeakGroupsView: View {
     @ObservedObject var model: DialModel
 
@@ -60,7 +60,7 @@ struct PeakGroupsList: View {
     }
 }
 
-/// 設定画面の行に出す、今の絞り込み。「すべての山」「日本百名山」「九州百名山 ほか 1」。`groups` は名前順。
+/// 設定画面の行に出す、今の絞り込み。「なし」「日本百名山」「九州百名山 ほか 1」。`groups` は名前順。
 func peakGroupsSummary(_ groups: [String]) -> String {
     switch groups.count {
     case 0: return Strings.text("settings_peak_groups_all")
