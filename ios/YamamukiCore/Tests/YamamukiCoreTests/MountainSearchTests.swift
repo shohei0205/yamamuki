@@ -54,14 +54,16 @@ final class MountainSearchTests: XCTestCase {
     }
 
     /// 仮名か英数字 1 文字だけのときは、先頭が一致した山だけを返す(「や」で「〜山(やま)」を出さない)。
-    /// 漢字 1 文字なら途中に含む山も返す。
+    /// 漢字 1 文字なら途中に含む山も返す。先頭が一致した山が無ければ、仮名や英数字 1 文字でも途中に含む山を返す。
     func testOmitsPartialMatchesForOneKanaOrAlphanumeric() {
         let takayama = Mountain(osmId: 6, name: "高山", latitude: 35.5000, longitude: 138.7700, elevationM: 1000, nameReading: "たかやま")
         let peak1 = Mountain(osmId: 9, name: "大平山 第1ピーク (Ohirayama Peak 1)", latitude: 36.0, longitude: 138.0, elevationM: 500)
         let s = MountainSearch([takayama, yari, peak1])
-        XCTAssertEqual(s.search("1", latitude: nil, longitude: nil), .empty)
-        XCTAssertEqual(s.search("１", latitude: nil, longitude: nil), .empty)
-        XCTAssertEqual(s.search("P", latitude: nil, longitude: nil), .empty)
+        // 先頭一致が無いときは、1 文字でも部分一致を返す。
+        XCTAssertEqual(s.search("1", latitude: nil, longitude: nil), .init(prefix: [], partial: [peak1]))
+        XCTAssertEqual(s.search("１", latitude: nil, longitude: nil), .init(prefix: [], partial: [peak1]))
+        XCTAssertEqual(s.search("P", latitude: nil, longitude: nil), .init(prefix: [], partial: [peak1]))
+        XCTAssertEqual(s.search("か", latitude: nil, longitude: nil), .init(prefix: [], partial: [takayama]))
         XCTAssertEqual(s.search("pe", latitude: nil, longitude: nil), .init(prefix: [], partial: [peak1]))
         XCTAssertEqual(s.search("や", latitude: nil, longitude: nil), .init(prefix: [yari], partial: []))
         XCTAssertEqual(s.search("ﾔ", latitude: nil, longitude: nil), .init(prefix: [yari], partial: []))

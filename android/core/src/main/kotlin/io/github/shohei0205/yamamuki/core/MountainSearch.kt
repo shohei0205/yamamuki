@@ -34,6 +34,7 @@ class MountainSearch(mountains: List<Mountain>) {
      * それぞれの中は ([latitude], [longitude]) から近い順。地点が無ければ標高の高い順(標高不明は最後)。
      * 並びが同じなら osmId の順。入力が空白だけなら空。
      * 入力が仮名か英数字 1 文字だけのときは、途中に含む山が多すぎて探しにくいので返さない(漢字 1 文字なら返す)。
+     * ただし先頭が一致した山が 1 つも無いときは、何も出ないよりよいので返す。
      */
     fun search(query: String, latitude: Double?, longitude: Double?, limit: Int = MAX_RESULTS): Results {
         val key = normalize(query)
@@ -41,7 +42,7 @@ class MountainSearch(mountains: List<Mountain>) {
         val (prefix, partial) = entries.filter { e -> e.keys.any { it.contains(key) } }
             .partition { e -> e.keys.any { it.startsWith(key) } }
         val prefixSorted = sort(prefix.map { it.mountain }, latitude, longitude).take(limit)
-        if (key.length == 1 && isKanaOrAlphanumeric(key[0])) return Results(prefixSorted, emptyList())
+        if (prefixSorted.isNotEmpty() && key.length == 1 && isKanaOrAlphanumeric(key[0])) return Results(prefixSorted, emptyList())
         val partialSorted = sort(partial.map { it.mountain }, latitude, longitude).take(limit - prefixSorted.size)
         return Results(prefixSorted, partialSorted)
     }

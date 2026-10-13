@@ -43,13 +43,14 @@ public struct MountainSearch: Sendable {
     /// それぞれの中は (latitude, longitude) から近い順。地点が無ければ標高の高い順(標高不明は最後)。
     /// 並びが同じなら osmId の順。入力が空白だけなら空。
     /// 入力が仮名か英数字 1 文字だけのときは、途中に含む山が多すぎて探しにくいので返さない(漢字 1 文字なら返す)。
+    /// ただし先頭が一致した山が 1 つも無いときは、何も出ないよりよいので返す。
     public func search(_ query: String, latitude: Double?, longitude: Double?, limit: Int = MountainSearch.maxResults) -> Results {
         let key = MountainSearch.normalize(query)
         if key.isEmpty { return .empty }
         let hits = entries.filter { e in e.keys.contains { $0.contains(key) } }
         let isPrefix = { (e: Entry) in e.keys.contains { $0.hasPrefix(key) } }
         let prefix = Array(sort(hits.filter(isPrefix).map(\.mountain), latitude, longitude).prefix(limit))
-        if key.unicodeScalars.count == 1, let c = key.unicodeScalars.first, MountainSearch.isKanaOrAlphanumeric(c) {
+        if !prefix.isEmpty, key.unicodeScalars.count == 1, let c = key.unicodeScalars.first, MountainSearch.isKanaOrAlphanumeric(c) {
             return Results(prefix: prefix, partial: [])
         }
         let partial = Array(sort(hits.filter { !isPrefix($0) }.map(\.mountain), latitude, longitude).prefix(limit - prefix.count))
