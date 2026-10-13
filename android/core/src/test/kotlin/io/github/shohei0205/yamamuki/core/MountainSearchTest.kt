@@ -58,14 +58,15 @@ class MountainSearchTest {
         assertEquals(MountainSearch.Results(listOf(yamabushi, yamatai), listOf(takayama)), s.search("やま", lat, lon, limit = 3))
     }
 
-    /** 1 文字だけのときは、先頭が一致した山だけを返す(「や」で「〜山(やま)」を出さない)。 */
-    @Test fun omitsPartialMatchesForOneCharacter() {
+    /** 仮名 1 文字だけのときは、先頭が一致した山だけを返す(「や」で「〜山(やま)」を出さない)。漢字 1 文字なら途中に含む山も返す。 */
+    @Test fun omitsPartialMatchesForOneKana() {
         val takayama = Mountain(6, "高山", 35.5000, 138.7700, 1000.0, nameReading = "たかやま")
         val s = MountainSearch(listOf(takayama, yari))
         assertEquals(MountainSearch.Results(listOf(yari), emptyList()), s.search("や", null, null))
         assertEquals(MountainSearch.Results(listOf(yari), emptyList()), s.search("ﾔ", null, null))
         assertEquals(MountainSearch.Results(listOf(takayama), emptyList()), s.search("高", null, null))
-        assertEquals(MountainSearch.Results(emptyList(), emptyList()), s.search("山", null, null))
+        assertEquals(MountainSearch.Results(emptyList(), listOf(takayama)), s.search("山", null, null))
+        assertEquals(MountainSearch.Results(emptyList(), listOf(yari)), s.search("岳", null, null))
     }
 
     @Test fun matchesPrefixOfAliases() {

@@ -53,14 +53,15 @@ final class MountainSearchTests: XCTestCase {
         XCTAssertEqual(s.search("やま", latitude: 35.4986, longitude: 138.7690, limit: 3), .init(prefix: [yamabushi, yamatai], partial: [takayama]))
     }
 
-    /// 1 文字だけのときは、先頭が一致した山だけを返す(「や」で「〜山(やま)」を出さない)。
-    func testOmitsPartialMatchesForOneCharacter() {
+    /// 仮名 1 文字だけのときは、先頭が一致した山だけを返す(「や」で「〜山(やま)」を出さない)。漢字 1 文字なら途中に含む山も返す。
+    func testOmitsPartialMatchesForOneKana() {
         let takayama = Mountain(osmId: 6, name: "高山", latitude: 35.5000, longitude: 138.7700, elevationM: 1000, nameReading: "たかやま")
         let s = MountainSearch([takayama, yari])
         XCTAssertEqual(s.search("や", latitude: nil, longitude: nil), .init(prefix: [yari], partial: []))
         XCTAssertEqual(s.search("ﾔ", latitude: nil, longitude: nil), .init(prefix: [yari], partial: []))
         XCTAssertEqual(s.search("高", latitude: nil, longitude: nil), .init(prefix: [takayama], partial: []))
-        XCTAssertEqual(s.search("山", latitude: nil, longitude: nil), .empty)
+        XCTAssertEqual(s.search("山", latitude: nil, longitude: nil), .init(prefix: [], partial: [takayama]))
+        XCTAssertEqual(s.search("岳", latitude: nil, longitude: nil), .init(prefix: [], partial: [yari]))
     }
 
     func testMatchesPrefixOfAliases() {

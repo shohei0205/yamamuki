@@ -42,14 +42,16 @@ public struct MountainSearch: Sendable {
     /// query を含む山を、先頭が一致した山、途中に含む山の順に、合わせて最大 limit 件返す。
     /// それぞれの中は (latitude, longitude) から近い順。地点が無ければ標高の高い順(標高不明は最後)。
     /// 並びが同じなら osmId の順。入力が空白だけなら空。
-    /// 入力が 1 文字だけのときは、途中に含む山は多すぎて探しにくいので返さない。
+    /// 入力が仮名 1 文字だけのときは、途中に含む山が多すぎて探しにくいので返さない(漢字 1 文字なら返す)。
     public func search(_ query: String, latitude: Double?, longitude: Double?, limit: Int = MountainSearch.maxResults) -> Results {
         let key = MountainSearch.normalize(query)
         if key.isEmpty { return .empty }
         let hits = entries.filter { e in e.keys.contains { $0.contains(key) } }
         let isPrefix = { (e: Entry) in e.keys.contains { $0.hasPrefix(key) } }
         let prefix = Array(sort(hits.filter(isPrefix).map(\.mountain), latitude, longitude).prefix(limit))
-        if key.count <= 1 { return Results(prefix: prefix, partial: []) }
+        if key.unicodeScalars.count == 1, let c = key.unicodeScalars.first, MountainSearch.isKana(c) {
+            return Results(prefix: prefix, partial: [])
+        }
         let partial = Array(sort(hits.filter { !isPrefix($0) }.map(\.mountain), latitude, longitude).prefix(limit - prefix.count))
         return Results(prefix: prefix, partial: partial)
     }
@@ -82,6 +84,11 @@ public struct MountainSearch: Sendable {
             }
         }
         return String(out)
+    }
+
+    /// そろえたあとの文字がひらがな(カタカナもひらがなにそろえてある)か長音記号か。
+    private static func isKana(_ c: Unicode.Scalar) -> Bool {
+        (0x3041...0x309F).contains(c.value) || c.value == 0x30FC
     }
 
     /// 小さいひらがな(ぁぃぅぇぉっゃゅょゎ)は大きいひらがなにする。
