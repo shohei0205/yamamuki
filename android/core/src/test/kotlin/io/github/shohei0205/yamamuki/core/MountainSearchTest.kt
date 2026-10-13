@@ -79,6 +79,20 @@ class MountainSearchTest {
         assertEquals(MountainSearch.Results(emptyList(), listOf(yari)), s.search("岳", null, null))
     }
 
+    @Test fun omitsPartialMatchesForOneAlphanumericWithPrefixMatch() {
+        val peakX = Mountain(10, "Peak X", 35.0, 138.0, 1200.0)
+        val peak1 = Mountain(9, "大平山 第1ピーク (Ohirayama Peak 1)", 36.0, 138.0, 500.0)
+        val first = Mountain(11, "1峰", 35.0, 138.0, 900.0)
+        val s = MountainSearch(listOf(peakX, peak1, first))
+        // 先頭一致があれば、英数字 1 文字では部分一致を返さない。
+        assertEquals(MountainSearch.Results(listOf(peakX), emptyList()), s.search("p", null, null))
+        assertEquals(MountainSearch.Results(listOf(peakX), emptyList()), s.search("Ｐ", null, null))
+        assertEquals(MountainSearch.Results(listOf(first), emptyList()), s.search("1", null, null))
+        assertEquals(MountainSearch.Results(listOf(first), emptyList()), s.search("１", null, null))
+        // 2 文字なら部分一致も返す。
+        assertEquals(MountainSearch.Results(listOf(peakX), listOf(peak1)), s.search("pe", null, null))
+    }
+
     @Test fun matchesPrefixOfAliases() {
         val results = search.search("開運", null, null)
         assertEquals(listOf(mitsutoge), results.prefix)

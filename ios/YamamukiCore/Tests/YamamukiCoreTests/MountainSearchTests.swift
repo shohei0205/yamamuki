@@ -72,6 +72,20 @@ final class MountainSearchTests: XCTestCase {
         XCTAssertEqual(s.search("岳", latitude: nil, longitude: nil), .init(prefix: [], partial: [yari]))
     }
 
+    func testOmitsPartialMatchesForOneAlphanumericWithPrefixMatch() {
+        let peakX = Mountain(osmId: 10, name: "Peak X", latitude: 35.0, longitude: 138.0, elevationM: 1200)
+        let peak1 = Mountain(osmId: 9, name: "大平山 第1ピーク (Ohirayama Peak 1)", latitude: 36.0, longitude: 138.0, elevationM: 500)
+        let first = Mountain(osmId: 11, name: "1峰", latitude: 35.0, longitude: 138.0, elevationM: 900)
+        let s = MountainSearch([peakX, peak1, first])
+        // 先頭一致があれば、英数字 1 文字では部分一致を返さない。
+        XCTAssertEqual(s.search("p", latitude: nil, longitude: nil), .init(prefix: [peakX], partial: []))
+        XCTAssertEqual(s.search("Ｐ", latitude: nil, longitude: nil), .init(prefix: [peakX], partial: []))
+        XCTAssertEqual(s.search("1", latitude: nil, longitude: nil), .init(prefix: [first], partial: []))
+        XCTAssertEqual(s.search("１", latitude: nil, longitude: nil), .init(prefix: [first], partial: []))
+        // 2 文字なら部分一致も返す。
+        XCTAssertEqual(s.search("pe", latitude: nil, longitude: nil), .init(prefix: [peakX], partial: [peak1]))
+    }
+
     func testMatchesPrefixOfAliases() {
         let results = search.search("開運", latitude: nil, longitude: nil)
         XCTAssertEqual(results.prefix, [mitsutoge])
