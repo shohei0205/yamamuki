@@ -408,6 +408,17 @@
         }
       }
     },
+    "detail_distance_from_summit": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山頂からの距離"
+          }
+        }
+      }
+    },
     "detail_elevation": {
       "extractionState": "manual",
       "localizations": {
@@ -415,6 +426,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "標高"
+          }
+        }
+      }
+    },
+    "detail_go_to_summit": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山頂へ移動"
           }
         }
       }
@@ -859,6 +881,17 @@
         }
       }
     },
+    "elevation_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標高不明"
+          }
+        }
+      }
+    },
     "map_mode_heading_up": {
       "extractionState": "manual",
       "localizations": {
@@ -877,6 +910,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "手動位置モード"
+          }
+        }
+      }
+    },
+    "map_mode_search": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索位置モード"
           }
         }
       }
@@ -1120,6 +1164,105 @@
           "stringUnit": {
             "state": "translated",
             "value": "山データを更新しました"
+          }
+        }
+      }
+    },
+    "search_loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データを読み込んでいます"
+          }
+        }
+      }
+    },
+    "search_no_data": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データがありません。設定の「山データを更新」で取得すると検索できます。"
+          }
+        }
+      }
+    },
+    "search_no_results": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "見つかりませんでした"
+          }
+        }
+      }
+    },
+    "search_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山を検索"
+          }
+        }
+      }
+    },
+    "search_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山名・よみがな"
+          }
+        }
+      }
+    },
+    "search_result_direction": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "search_section_partial": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分一致"
+          }
+        }
+      }
+    },
+    "search_section_prefix": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先頭一致"
+          }
+        }
+      }
+    },
+    "search_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山の検索"
           }
         }
       }

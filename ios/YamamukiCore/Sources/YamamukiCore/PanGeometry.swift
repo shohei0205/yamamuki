@@ -25,6 +25,14 @@ public enum PanGeometry {
         return drag(observer, dx: initialOffset.x * remaining, dy: -initialOffset.y * remaining, scale: 1, heading: heading)
     }
 
+    /// 双眼鏡を画面の中央に置く表示範囲の原点。検索した山頂を中央に出すときに使う。高さはpt。
+    /// 画面の大きさが分からないときは observer をそのまま返す(双眼鏡は下端の原点に出る)。
+    public static func centeredViewport(_ observer: MapCenter, heading: Double, rangeKm: Double, canvasHeight: Double) -> MapCenter {
+        guard canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset, rangeKm.isFinite, rangeKm > 0 else { return observer }
+        let scale = (canvasHeight - DialGeometry.chartInset) / rangeKm
+        return drag(observer, dx: 0, dy: -(canvasHeight / 2 - DialGeometry.originBottom), scale: scale, heading: heading)
+    }
+
     /// 描画される双眼鏡の中心が画面内にあるか。寸法はpt。
     public static func isObserverVisible(_ observer: MapCenter, viewport: MapCenter, heading: Double,
         rangeKm: Double, canvasWidth: Double, canvasHeight: Double) -> Bool {

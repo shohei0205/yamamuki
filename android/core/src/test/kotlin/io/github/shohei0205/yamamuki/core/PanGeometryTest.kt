@@ -196,6 +196,22 @@ class PanGeometryTest {
         assertEquals(tokyo, PanGeometry.drag(tokyo, Double.NaN, 0.0, 10.0, 0.0))
     }
 
+    @Test fun centeredViewportPutsObserverAtScreenCenter() {
+        for (heading in listOf(0.0, 75.0, 200.0, 359.0)) {
+            val viewport = PanGeometry.centeredViewport(tokyo, heading, range800, 800.0)
+            val offset = PanGeometry.observerOffset(tokyo, viewport, heading)
+            // 1km = 10dp。双眼鏡は原点(下端から ORIGIN_BOTTOM_DP)から画面の中央(400dp)まで上がる。
+            assertEquals(0.0, offset.x * 10.0, 1e-6)
+            assertEquals(400.0 - DialGeometry.ORIGIN_BOTTOM_DP, offset.y * 10.0, 1e-6)
+            assertTrue(PanGeometry.isObserverVisible(tokyo, viewport, heading, range800, 400.0, 800.0))
+        }
+    }
+
+    @Test fun centeredViewportKeepsObserverWhenCanvasIsUnknown() {
+        assertEquals(tokyo, PanGeometry.centeredViewport(tokyo, 30.0, range800, 0.0))
+        assertEquals(tokyo, PanGeometry.centeredViewport(tokyo, 30.0, 0.0, 800.0))
+    }
+
     @Test fun wrapsLongitudeAcrossDateLine() {
         val p = PanGeometry.drag(MapCenter(0.0, 179.99), -100.0, 0.0, 10.0, 0.0)
         assertTrue(p.longitude < -179 && p.longitude >= -180)

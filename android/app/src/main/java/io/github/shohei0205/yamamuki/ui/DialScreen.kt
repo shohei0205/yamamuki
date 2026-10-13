@@ -13,6 +13,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.em
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +30,7 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,9 +39,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -58,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -91,6 +100,7 @@ import io.github.shohei0205.yamamuki.core.Heading
 import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
+import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.PeakManifest
 import io.github.shohei0205.yamamuki.core.byteSizeText
@@ -174,7 +184,8 @@ fun DialScreen(
     val headingAccuracyLow by remember(context) {
         headingAccuracyLowUpdates(context).distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
-    val location = state.gpsLocation
+    // 双眼鏡の位置。検索位置モードでは選んだ山頂。
+    val location = state.observer
     val declination = remember(location) {
         location?.let {
             GeomagneticField(
@@ -197,6 +208,7 @@ fun DialScreen(
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showDownload by rememberSaveable { mutableStateOf(false) }
+    val showSearch = state.search != null
     var showObserver by remember { mutableStateOf(false) }
     // 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
     var groupIds by remember { mutableStateOf<List<Long>?>(null) }
@@ -222,11 +234,13 @@ fun DialScreen(
             .drawBehind { drawRect(HeaderSkyTop, size = Size(size.width, safeDrawing.getTop(this).toFloat())) }
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .onSizeChanged {
+                // 検索画面でキーボードが出ている間は、方位盤の大きさを変えない(選んだ山頂を中央に置く計算がずれるため)。
+                if (showSearch) return@onSizeChanged
                 canvasHeight = it.height / density.density.toDouble()
                 canvasWidth = it.width / density.density.toDouble()
             }
-            .pointerInput(showSettings) {
-                if (showSettings) return@pointerInput
+            .pointerInput(showSettings, showSearch) {
+                if (showSettings || showSearch) return@pointerInput
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     var multiTouch = false
@@ -280,6 +294,7 @@ fun DialScreen(
             onGroupTap = { peaks -> groupIds = peaks.map { it.mountain.osmId } },
             onObserverTap = { showObserver = true },
             summit = state.summit,
+            summitLabel = state.viewpoint == null,
             altitudeM = location?.mslAltitudeM,
             maxPeaks = state.settings.maxPeaks,
             textScale = state.settings.textScale,
@@ -323,11 +338,17 @@ fun DialScreen(
             exit = slideOutHorizontally(tween(MODE_ANIMATION_MS)) { -it } + fadeOut(tween(MODE_ANIMATION_MS)),
             modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = DialGeometry.HEADER_HEIGHT_DP.dp + 8.dp),
         ) {
-            HeadingLabel(
-                headingDeg = compassHeading ?: heading,
-                altitudeM = location?.mslAltitudeM,
-                textScale = state.settings.textScale,
-            )
+            // 検索位置モードでは、手動位置モードと見分けられるよう、向きの代わりに選んだ山の札を出す。
+            val viewpoint = state.viewpoint
+            if (viewpoint != null) {
+                ViewpointLabel(mountain = viewpoint, headingDeg = compassHeading ?: heading, textScale = state.settings.textScale)
+            } else {
+                HeadingLabel(
+                    headingDeg = compassHeading ?: heading,
+                    altitudeM = location?.mslAltitudeM,
+                    textScale = state.settings.textScale,
+                )
+            }
         }
         AnimatedVisibility(
             visible = manualChrome,
@@ -348,15 +369,32 @@ fun DialScreen(
             )
         }
 
-        MapModeButton(
-            manual = state.exploring,
-            enabled = hasPermission && state.gpsLocation != null && canvasHeight > DialGeometry.CHART_INSET_DP,
-            onClick = {
-                if (state.exploring) viewModel.resetCenter { currentCompassHeading }
-                else viewModel.enterManual(heading ?: 0.0)
-            },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
-        )
+        // 右下: 山の検索と、モードの切り替え。検索はどちらのモードからでも使える。
+        Column(
+            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            RoundMapButton(
+                onClick = viewModel::openSearch,
+                enabled = canvasHeight > DialGeometry.CHART_INSET_DP,
+                iconColor = SEARCH_BUTTON_ICON_COLOR,
+            ) {
+                Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search_open), Modifier.size(28.dp))
+            }
+            MapModeButton(
+                manual = state.exploring,
+                searching = state.viewpoint != null,
+                // 検索位置モードからは、現在地が分からなくても抜けられるようにする。
+                enabled = state.viewpoint != null ||
+                    (hasPermission && state.gpsLocation != null && canvasHeight > DialGeometry.CHART_INSET_DP),
+                onClick = {
+                    // 検索位置モードは手動位置モードへ、手動位置モードはヘディングアップへ、ヘディングアップは手動位置モードへ。
+                    if (state.viewpoint != null) viewModel.leaveViewpoint { currentCompassHeading }
+                    else if (state.exploring) viewModel.resetCenter { currentCompassHeading }
+                    else viewModel.enterManual(heading ?: 0.0)
+                },
+            )
+        }
 
         // 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目・同じ高さにそろえる。
         Row(
@@ -408,6 +446,16 @@ fun DialScreen(
             )
         }
 
+        state.search?.let { search ->
+            MountainSearchScreen(
+                search = search,
+                from = state.gpsLocation,
+                onQueryChange = viewModel::onSearchQuery,
+                onSelect = { viewModel.showFromMountain(it, heading ?: 0.0, canvasHeight) },
+                onClose = viewModel::closeSearch,
+            )
+        }
+
         if (Features.AREA_DOWNLOAD && showDownload) {
             AreaDownloadScreen(
                 state = download,
@@ -446,9 +494,17 @@ fun DialScreen(
         )
     }
 
-    val overlay = showSettings || showDownload
+    val overlay = showSettings || showDownload || showSearch
     if (selected != null && !overlay) {
-        MountainDetailDialog(selected, onDismiss = { selectedId = null })
+        MountainDetailDialog(
+            selected,
+            viewpoint = state.viewpoint,
+            onGoToSummit = {
+                selectedId = null
+                viewModel.showFromMountain(selected.mountain, heading ?: 0.0, canvasHeight)
+            },
+            onDismiss = { selectedId = null },
+        )
     } else if (group != null && !overlay) {
         PeakGroupDialog(
             group,
@@ -512,9 +568,17 @@ private fun FetchErrorDialog(message: String, onRetry: () -> Unit, onDismiss: ()
     )
 }
 
-/** タップした山の詳細。 */
+/**
+ * タップした山の詳細。検索位置モード([viewpoint] が非 null)では、距離は選んだ山頂から測ったもの。
+ * 「山頂へ移動」で、その山頂を中心にした検索位置モードに移る([onGoToSummit])。
+ */
 @Composable
-private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) {
+private fun MountainDetailDialog(
+    nearby: NearbyMountain,
+    viewpoint: Mountain?,
+    onGoToSummit: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val m = nearby.mountain
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -524,7 +588,18 @@ private fun MountainDetailDialog(nearby: NearbyMountain, onDismiss: () -> Unit) 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DetailRow(stringResource(R.string.detail_elevation), elevationLabel(m.elevationM))
                 DetailRow(stringResource(R.string.detail_coordinate), coordinateLabel(m.latitude, m.longitude))
-                DetailRow(stringResource(R.string.detail_distance), distanceText(nearby.distanceKm))
+                when {
+                    viewpoint == null -> DetailRow(stringResource(R.string.detail_distance), distanceText(nearby.distanceKm))
+                    // 選んだ山頂そのものは、山頂からの距離が 0 なので出さない。
+                    viewpoint.osmId != m.osmId ->
+                        DetailRow(stringResource(R.string.detail_distance_from_summit), distanceText(nearby.distanceKm))
+                }
+                // 選んだ山頂にいるときは、移る先が今の場所と同じなので出さない。
+                if (viewpoint?.osmId != m.osmId) {
+                    TextButton(onClick = onGoToSummit, contentPadding = PaddingValues(0.dp)) {
+                        Text(stringResource(R.string.detail_go_to_summit))
+                    }
+                }
             }
         },
     )
@@ -550,7 +625,7 @@ private fun PeakGroupDialog(peaks: List<NearbyMountain>, onSelect: (NearbyMounta
                         Text(
                             stringResource(
                                 R.string.detail_group_item,
-                                elevationLabel(nearby.mountain.elevationM),
+                                elevationListLabel(nearby.mountain.elevationM),
                                 distanceText(nearby.distanceKm),
                             ),
                             style = MaterialTheme.typography.labelMedium,
@@ -580,8 +655,13 @@ private fun ObserverDetailDialog(location: GeoPoint, onDismiss: () -> Unit) {
 
 /** 詳細表示の標高。「1,212 m」、不明なら「不明」。山と現在地で共通に使う。 */
 @Composable
-private fun elevationLabel(elevationM: Double?): String =
+internal fun elevationLabel(elevationM: Double?): String =
     elevationText(elevationM) ?: stringResource(R.string.common_unknown)
+
+/** 一覧や札に出す標高。「1,212 m」、不明なら「標高不明」(見出しが無いので、何が不明かを書く)。 */
+@Composable
+internal fun elevationListLabel(elevationM: Double?): String =
+    elevationText(elevationM) ?: stringResource(R.string.elevation_unknown)
 
 /** 詳細表示の緯度経度。狭い画面で途中で折り返さないよう、緯度と経度を改行で分ける。山と現在地で共通に使う。 */
 @Composable
@@ -647,6 +727,110 @@ private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Flo
         )
     }
 }
+
+/**
+ * 検索位置モードの左上に出す、選んだ山の札。山頂の標識をまねた木の横板に、山名と標高、緯度経度を書き、
+ * 支柱の横の白い小札に端末の向きを出す。向きは手動位置モードの左上の表示と同じく、端末が向いている方位にする。
+ * そのまま画面を撮っても、どの山から見た方位盤かが分かるようにする。
+ */
+@Composable
+private fun ViewpointLabel(mountain: Mountain, headingDeg: Double?, textScale: Float) {
+    val texts = rememberDialTexts()
+    val lat = stringResource(
+        if (mountain.latitude >= 0) R.string.detail_latitude_north else R.string.detail_latitude_south,
+        degreeText(mountain.latitude),
+    )
+    val lon = stringResource(
+        if (mountain.longitude >= 0) R.string.detail_longitude_east else R.string.detail_longitude_west,
+        degreeText(mountain.longitude),
+    )
+    val heading = headingDeg?.let { stringResource(R.string.dial_heading, texts.readoutParts(it, null).first) }
+        ?: stringResource(R.string.dial_heading_loading)
+    val elevation = elevationListLabel(mountain.elevationM)
+    val boardShape = RoundedCornerShape(6.dp)
+    Column(Modifier.widthIn(max = 260.dp)) {
+        // 木の板。木目と、左右のビスを描く。
+        Column(
+            Modifier
+                .shadow(4.dp, boardShape)
+                .background(Brush.verticalGradient(listOf(WoodLight, WoodDark)), boardShape)
+                .drawBehind { drawWoodGrain() }
+                .border(2.dp, WoodEdge, boardShape)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Serif, fontWeight = FontWeight.Black, letterSpacing = 0.12.em)) {
+                        append(mountain.name)
+                    }
+                    withStyle(SpanStyle(fontSize = 12.5.sp * textScale, fontWeight = FontWeight.Bold)) { append("  $elevation") }
+                },
+                color = WoodInk,
+                fontSize = 21.sp * textScale,
+            )
+            Text("$lat  $lon", color = WoodInkSubtle, fontSize = 11.sp * textScale, fontWeight = FontWeight.Medium)
+        }
+        // 支柱と、その横の向きの小札。
+        Row(verticalAlignment = Alignment.Top) {
+            Box(
+                Modifier
+                    .padding(start = 24.dp)
+                    .size(width = 10.dp, height = 14.dp)
+                    .background(Brush.horizontalGradient(listOf(PostDark, PostLight)))
+                    .drawBehind {
+                        val w = 1.dp.toPx()
+                        drawRect(WoodEdge, size = Size(w, size.height))
+                        drawRect(WoodEdge, topLeft = Offset(size.width - w, 0f), size = Size(w, size.height))
+                    },
+            )
+            Text(
+                heading,
+                color = TapeInk,
+                fontSize = 12.sp * textScale,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(start = 10.dp, top = 3.dp)
+                    .shadow(2.dp, RoundedCornerShape(50))
+                    .background(Color.White, RoundedCornerShape(50))
+                    .padding(horizontal = 9.dp, vertical = 1.dp),
+            )
+        }
+    }
+}
+
+/** 札の板の木目(細い縦の筋)と、左右の端のビス。 */
+private fun DrawScope.drawWoodGrain() {
+    val step = 5.dp.toPx()
+    var x = step / 2
+    var i = 0
+    while (x < size.width) {
+        // 筋の濃さと間隔を少しずつ変えて、木目らしくする。文字が読みにくくならないよう、筋は薄くする。
+        val light = i % 3 == 0
+        drawRect(
+            if (light) Color.White.copy(alpha = 0.04f) else Color.Black.copy(alpha = 0.025f),
+            topLeft = Offset(x, 0f),
+            size = Size(if (light) 3.dp.toPx() else 2.dp.toPx(), size.height),
+        )
+        x += step + (i % 4) * 1.dp.toPx()
+        i++
+    }
+    val r = 2.5f.dp.toPx()
+    val inset = 6.5f.dp.toPx()
+    for (cx in listOf(inset, size.width - inset)) {
+        drawCircle(WoodScrew, radius = r, center = Offset(cx, size.height / 2))
+        drawCircle(Color.White.copy(alpha = 0.3f), radius = r / 2.5f, center = Offset(cx - r / 3, size.height / 2 - r / 3))
+    }
+}
+
+private val WoodLight = Color(0xFFE9CFA2)
+private val WoodDark = Color(0xFFDDBB86)
+private val WoodEdge = Color(0xFF7A5230)
+private val WoodScrew = Color(0xFF5B3A1E)
+private val WoodInk = Color(0xFF1E140A)
+private val WoodInkSubtle = Color(0xFF2B1D10)
+private val PostDark = Color(0xFF8A6036)
+private val PostLight = Color(0xFFA57646)
 
 @Composable
 private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled: Boolean = false) {

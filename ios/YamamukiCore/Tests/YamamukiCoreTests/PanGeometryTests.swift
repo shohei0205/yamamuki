@@ -200,6 +200,23 @@ final class PanGeometryTests: XCTestCase {
         XCTAssertEqual(offset.y, 0)
     }
 
+    func testCenteredViewportPutsObserverAtScreenCenter() {
+        for heading in [0.0, 75, 200, 359] {
+            let viewport = PanGeometry.centeredViewport(tokyo, heading: heading, rangeKm: range800, canvasHeight: 800)
+            let offset = PanGeometry.observerOffset(tokyo, viewport: viewport, heading: heading)
+            // 1km = 10pt。双眼鏡は原点(下端から originBottom)から画面の中央(400pt)まで上がる。
+            XCTAssertEqual(offset.x * 10, 0, accuracy: 1e-6)
+            XCTAssertEqual(offset.y * 10, 400 - DialGeometry.originBottom, accuracy: 1e-6)
+            XCTAssertTrue(PanGeometry.isObserverVisible(tokyo, viewport: viewport, heading: heading,
+                rangeKm: range800, canvasWidth: 400, canvasHeight: 800))
+        }
+    }
+
+    func testCenteredViewportKeepsObserverWhenCanvasIsUnknown() {
+        XCTAssertEqual(PanGeometry.centeredViewport(tokyo, heading: 30, rangeKm: range800, canvasHeight: 0), tokyo)
+        XCTAssertEqual(PanGeometry.centeredViewport(tokyo, heading: 30, rangeKm: 0, canvasHeight: 800), tokyo)
+    }
+
     func testInvalidInputAndDateLine() {
         XCTAssertEqual(PanGeometry.drag(tokyo, dx: 10, dy: 5, scale: 0, heading: 0), tokyo)
         XCTAssertEqual(PanGeometry.drag(tokyo, dx: .nan, dy: 0, scale: 10, heading: 0), tokyo)

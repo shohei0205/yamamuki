@@ -53,14 +53,28 @@ val SETTINGS_BUTTON_ICON_COLOR = Color(0xFF43A047)
 /** 事前ダウンロードのボタンのアイコンの色(橙)。 */
 val DOWNLOAD_BUTTON_ICON_COLOR = Color(0xFFFB8C00)
 
+/** 山の検索ボタンのアイコンの色(紫)。 */
+val SEARCH_BUTTON_ICON_COLOR = Color(0xFF8E24AA)
+
 /** モード切替ボタンのアイコンの色(青)。 */
 private val MODE_BUTTON_ICON_COLOR = Color(0xFF1A73E8)
 
-/** 現在地・方位への追従と手動操作を切り替える。 */
+/** 現在地・方位への追従と手動操作を切り替える。[searching] は検索位置モード(手動位置モードの一種で、押すと現在地のヘディングアップに戻る)。 */
 @Composable
-fun MapModeButton(manual: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val state = stringResource(if (manual) R.string.map_mode_manual else R.string.map_mode_heading_up)
-    val action = stringResource(if (manual) R.string.map_mode_to_heading_up else R.string.map_mode_to_manual)
+fun MapModeButton(manual: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, searching: Boolean = false) {
+    val state = stringResource(
+        when {
+            searching -> R.string.map_mode_search
+            manual -> R.string.map_mode_manual
+            else -> R.string.map_mode_heading_up
+        },
+    )
+    val action = stringResource(
+        when {
+            searching || manual -> R.string.map_mode_to_heading_up
+            else -> R.string.map_mode_to_manual
+        },
+    )
     RoundMapButton(
         onClick = onClick,
         enabled = enabled,

@@ -15,6 +15,7 @@ import io.github.shohei0205.yamamuki.core.MapCenter
 import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.Mountain
+import io.github.shohei0205.yamamuki.core.MountainSearch
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.PeakData
 import io.github.shohei0205.yamamuki.core.PeakDataException
@@ -28,6 +29,7 @@ import io.github.shohei0205.yamamuki.data.CacheInfo
 import io.github.shohei0205.yamamuki.sensor.connectivityUpdates
 import io.github.shohei0205.yamamuki.settings.Settings
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +37,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.UnknownHostException
@@ -53,6 +56,11 @@ data class DialUiState(
     val location: GeoPoint? = null,
     /** 現在地。双眼鏡の位置と、山までの距離の基準。手動位置モードでも GPS に付いていく。 */
     val gpsLocation: GeoPoint? = null,
+    /**
+     * 検索位置モードで選んだ山。null でなければ、現在地の代わりにこの山頂を距離と方位の基準にする([observer])。
+     * 検索位置モードの間は [exploring] も true にする。
+     */
+    val viewpoint: Mountain? = null,
     val exploring: Boolean = false,
     /** 右下のボタンで現在地へ戻っている途中。[exploring] は戻り終わるまで true のまま。 */
     val returning: Boolean = false,
@@ -85,6 +93,22 @@ data class DialUiState(
     val settings: Settings = Settings(),
     /** 設定画面に出すキャッシュの状況。読み込むまでは null。 */
     val cacheInfo: CacheInfo? = null,
+    /** 山の検索画面の状態。開いていなければ null。 */
+    val search: SearchUiState? = null,
+) {
+    /** 双眼鏡の位置で、山までの距離と方位の基準。検索位置モードでは選んだ山頂(高さは山頂の標高)、それ以外は現在地。 */
+    val observer: GeoPoint?
+        get() = viewpoint?.let { GeoPoint(it.latitude, it.longitude, it.elevationM ?: 0.0, it.elevationM) } ?: gpsLocation
+}
+
+/** 山の検索画面の状態。 */
+data class SearchUiState(
+    /** 端末に保存している山を読み込んでいる。 */
+    val loading: Boolean = true,
+    /** 端末に山データが 1 件も無い(まだ取得していない)。 */
+    val noData: Boolean = false,
+    /** 入力した文字を含む山。先頭が一致した山と途中に含む山に分け、それぞれ現在地から近い順(現在地が分からなければ標高の高い順)。 */
+    val results: MountainSearch.Results = MountainSearch.Results.EMPTY,
 )
 
 /**
@@ -119,6 +143,11 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     private var peakDataOffer: PeakDataOffer? = null
     /** ダウンロードすると答えたのに取り込めなかった版。「もう一度取得」では確認を飛ばして、この版を取り直す。 */
     private var failedOffer: PeakDataOffer? = null
+
+    /** 検索画面を開いている間だけ持つ、全件の山の検索の下ごしらえ。 */
+    private var searchIndex: MountainSearch? = null
+    private var searchQuery = ""
+    private var searchJob: Job? = null
 
     init {
         viewModelScope.launch { connectivityUpdates(application).collect(::onConnectivity) }
@@ -166,7 +195,9 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
         _state.update {
             // 手動位置モードでは表示範囲を動かさず、双眼鏡と山までの距離だけを現在地に合わせる。
-            it.copy(gpsLocation = point, location = if (it.exploring) it.location else point).withPeaksAt(point)
+            // 検索位置モードでは双眼鏡は山頂に置いたままなので、現在地を覚えるだけにする。
+            val next = it.copy(gpsLocation = point, location = if (it.exploring) it.location else point)
+            if (it.viewpoint != null) next else next.withPeaksAt(point)
         }
         if (_state.value.exploring) return
         val center = fetchedCenter
@@ -239,6 +270,87 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 検索で選んだ山を、検索位置モードで表示する。双眼鏡の代わりにその山頂を距離と方位の基準にし、画面の中央に置く。
+     * 向きは今の向きのまま止める(手動位置モードに入るときと同じ)。[canvasHeight] は dp。
+     */
+    fun showFromMountain(mountain: Mountain, headingDeg: Double, canvasHeight: Double) {
+        northUpJob?.cancel()
+        closeSearch()
+        val heading = state.value.lockedHeading ?: headingDeg
+        val viewport = PanGeometry.centeredViewport(
+            MapCenter(mountain.latitude, mountain.longitude), heading, state.value.rangeKm, canvasHeight,
+        )
+        // 読み込みが終わるまでは、前の場所の山を残さず、選んだ山頂だけを出す。
+        peaks = listOf(mountain)
+        fetchedCenter = null
+        _state.update {
+            it.copy(
+                viewpoint = mountain, location = GeoPoint(viewport.latitude, viewport.longitude),
+                exploring = true, returning = false, lockedHeading = heading,
+            ).withPeaksAt(GeoPoint(mountain.latitude, mountain.longitude))
+        }
+        fetch()
+    }
+
+    /**
+     * 検索位置モードをやめ、現在地のヘディングアップに戻す。
+     * 画面が急に切り替わらないよう、手動位置モードから戻るときと同じく、約0.5秒で地図を現在地へ滑らせて端末の向きに回す。
+     * 現在地がまだ分からないときは、動かす先が無いのでそのままヘディングアップにする。
+     */
+    fun leaveViewpoint(compassHeading: () -> Double) {
+        northUpJob?.cancel()
+        val gps = state.value.gpsLocation
+        if (gps == null) {
+            peaks = emptyList()
+            fetchedCenter = null
+            _state.update {
+                it.copy(viewpoint = null, location = null, exploring = false, returning = false,
+                    lockedHeading = null, mountains = emptyList(), summit = null)
+            }
+            return
+        }
+        // 双眼鏡を現在地に戻してから、手動位置モードと同じ動きで現在地へ戻す。山は戻り終えたときに読み直す。
+        _state.update { it.copy(viewpoint = null, exploring = true, returning = false).withPeaksAt(gps) }
+        resetCenter(compassHeading)
+    }
+
+    /** 山の検索画面を開き、端末に保存している山を読み込む。 */
+    fun openSearch() {
+        searchJob?.cancel()
+        searchQuery = ""
+        _state.update { it.copy(search = SearchUiState()) }
+        searchJob = viewModelScope.launch {
+            val all = app.mountainCache.allMountains()
+            val index = withContext(Dispatchers.Default) { MountainSearch(all) }
+            searchIndex = index
+            _state.update { s -> s.search?.let { s.copy(search = it.copy(loading = false, noData = all.isEmpty())) } ?: s }
+            runSearch()
+        }
+    }
+
+    /** 検索画面の入力が変わった。 */
+    fun onSearchQuery(query: String) {
+        searchQuery = query
+        runSearch()
+    }
+
+    /** 検索画面を閉じる。読み込んだ山は持ち続けない。 */
+    fun closeSearch() {
+        searchJob?.cancel()
+        searchIndex = null
+        searchQuery = ""
+        _state.update { it.copy(search = null) }
+    }
+
+    private fun runSearch() {
+        val index = searchIndex ?: return
+        // 並びは実際の現在地から近い順(検索位置モードでも山頂からではなく現在地から)。
+        val here = _state.value.gpsLocation
+        val results = index.search(searchQuery, here?.latitude, here?.longitude)
+        _state.update { s -> s.search?.let { s.copy(search = it.copy(results = results)) } ?: s }
+    }
+
     /** 双眼鏡が画面内なら双眼鏡、画面外なら画面中央を軸に、約0.5秒で北へ回す。 */
     fun faceNorth(headingDeg: Double, canvasWidth: Double, canvasHeight: Double) =
         turnMap(state.value.lockedHeading ?: headingDeg, { 0.0 }, canvasWidth, canvasHeight)
@@ -258,7 +370,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         northUpJob?.cancel()
         val initial = state.value
         val here = initial.location ?: return
-        val observer = initial.gpsLocation ?: here
+        val observer = initial.observer ?: here
         val aroundCenter = !PanGeometry.isObserverVisible(
             MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
             startHeading, initial.rangeKm, canvasWidth, canvasHeight,
@@ -292,7 +404,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val current = state.value
         val heading = current.lockedHeading
         if (!current.exploring || heading == null) { onZoom(zoom); return }
-        val observer = current.gpsLocation ?: return
+        val observer = current.observer ?: return
         val viewport = current.location ?: return
         if (!rotationDeg.isFinite() || chartHeightPx <= 0) return
         val range = DialGeometry.zoomedRange(current.rangeKm, zoom)
@@ -333,7 +445,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(settings = after) }
 
         if (after.minElevationM != before.minElevationM) {
-            _state.value.gpsLocation?.let { here -> _state.update { it.withPeaksAt(here) } }
+            _state.value.observer?.let { here -> _state.update { it.withPeaksAt(here) } }
         }
         // 起動時の範囲を変えたら、試しやすいよう今の表示にもすぐ反映する。
         if (after.initialRangeKm != before.initialRangeKm) {
@@ -381,7 +493,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                 ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
             )
             peaks = result.mountains.map { it.mountain }
-            _state.update { it.withPeaksAt(it.gpsLocation ?: here).copy(incomplete = result.incomplete) }
+            _state.update { it.withPeaksAt(it.observer ?: here).copy(incomplete = result.incomplete) }
         }
     }
 
@@ -404,7 +516,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                 ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
             )
             peaks = result.mountains.map { it.mountain }
-            _state.update { it.withPeaksAt(it.gpsLocation ?: here).copy(loading = false, incomplete = result.incomplete) }
+            _state.update { it.withPeaksAt(it.observer ?: here).copy(loading = false, incomplete = result.incomplete) }
         }
     }
 

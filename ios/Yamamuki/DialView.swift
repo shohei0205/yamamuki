@@ -15,6 +15,9 @@ struct DialView: View {
     @State private var showObserver = false
     /// 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
     @State private var groupIds: [Int64]?
+    /// 検索ボタンや山を押したときの方位盤の高さ。検索や山の詳細から山頂へ移るときに、山頂を中央に置くのに使う
+    /// (検索画面のキーボードやシートの影響を受けないよう、開く前に覚える)。
+    @State private var viewpointCanvasHeight = 0.0
 
     var body: some View {
         GeometryReader { geometry in
@@ -32,10 +35,13 @@ struct DialView: View {
                     mountains: model.mountains,
                     rangeKm: model.rangeKm,
                     summit: model.summit,
-                    altitudeM: model.gpsLocation?.mslAltitudeM,
+                    // 検索位置モードでは、山名は左上の札に出すので、山頂アイコンの横には出さない。
+                    summitLabel: model.viewpoint == nil,
+                    altitudeM: model.observer?.mslAltitudeM,
                     maxPeaks: model.settings.maxPeaks,
                     textScale: model.settings.textScale,
-                    observerLocation: model.gpsLocation,
+                    // 双眼鏡の位置。検索位置モードでは選んだ山頂。
+                    observerLocation: model.observer,
                     viewportLocation: model.location,
                     compassHeading: model.heading ?? model.displayHeading,
                     headingUp: !model.exploring,
@@ -45,8 +51,14 @@ struct DialView: View {
                     bottomBleed: geometry.safeAreaInsets.bottom,
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
-                    onMountainTap: { selectedId = $0.mountain.osmId },
-                    onGroupTap: { groupIds = $0.map(\.mountain.osmId) },
+                    onMountainTap: {
+                        viewpointCanvasHeight = Double(geometry.size.height)
+                        selectedId = $0.mountain.osmId
+                    },
+                    onGroupTap: {
+                        viewpointCanvasHeight = Double(geometry.size.height)
+                        groupIds = $0.map(\.mountain.osmId)
+                    },
                     // 現在地を取れる前は出す値がないので開かない。
                     onObserverTap: { if model.gpsLocation != nil { showObserver = true } }
                 )
@@ -80,10 +92,17 @@ struct DialView: View {
 
                 // 手動位置モードでは、方位目盛りの代わりに左上の向きの表示と右上のコンパスを左右から出す。どちらもヘッダーの下に置く。
                 VStack {
-                    HStack {
+                    HStack(alignment: .top) {
                         if manualChrome {
-                            headingLabel
-                                .transition(.move(edge: .leading).combined(with: .opacity))
+                            // 検索位置モードでは、手動位置モードと見分けられるよう、向きの代わりに選んだ山の札を出す。
+                            Group {
+                                if let viewpoint = model.viewpoint {
+                                    ViewpointLabel(mountain: viewpoint, headingDeg: model.heading, textScale: model.settings.textScale)
+                                } else {
+                                    headingLabel
+                                }
+                            }
+                            .transition(.move(edge: .leading).combined(with: .opacity))
                         }
                         Spacer()
                         if manualChrome {
@@ -123,8 +142,21 @@ struct DialView: View {
                         .padding(.leading, 8)
                         Spacer()
                         VStack(alignment: .trailing, spacing: 12) {
+                            // 山の検索。どちらのモードからでも使える。
+                            RoundButton(label: Strings.text("search_open"), iconColor: searchButtonIconColor) {
+                                Image(systemName: "magnifyingglass")
+                            } action: {
+                                viewpointCanvasHeight = Double(geometry.size.height)
+                                model.openSearch()
+                            }
+                            .disabled(Double(geometry.size.height) <= DialGeometry.chartInset)
+                            .padding(.trailing, 8)
+
                             Button {
-                                if model.exploring {
+                                // 検索位置モードは手動位置モードへ、手動位置モードはヘディングアップへ、ヘディングアップは手動位置モードへ。
+                                if model.viewpoint != nil {
+                                    model.leaveViewpoint()
+                                } else if model.exploring {
                                     model.resetCenter()
                                 } else {
                                     model.enterManual()
@@ -132,15 +164,16 @@ struct DialView: View {
                             } label: {
                                 Image(systemName: model.exploring ? "scope" : "location.north.fill")
                                     .font(.system(size: 26, weight: .medium))
-                                    .foregroundStyle(model.gpsLocation == nil ? Color.gray.opacity(0.4) : modeButtonIconColor)
+                                    .foregroundStyle(modeButtonEnabled(geometry) ? modeButtonIconColor : Color.gray.opacity(0.4))
                                     .frame(width: 56, height: 56)
                                     .background(Circle().fill(Color.white))
                                     .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
                             }
                             .buttonStyle(.plain)
-                            .disabled(!model.hasLocationPermission || model.gpsLocation == nil || Double(geometry.size.height) <= DialGeometry.chartInset)
+                            .disabled(!modeButtonEnabled(geometry))
                             .accessibilityLabel(Strings.text(model.exploring ? "map_mode_to_heading_up" : "map_mode_to_manual"))
-                            .accessibilityValue(Strings.text(model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
+                            .accessibilityValue(Strings.text(model.viewpoint != nil ? "map_mode_search"
+                                : model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
                             .padding(.trailing, 8)
 
                             Text(Strings.text("osm_attribution"))
@@ -178,20 +211,52 @@ struct DialView: View {
             AreaDownloadView(model: model, download: model.areaDownload).peakDataAlerts(model)
         }
         .sheet(item: selectedMountain) { nearby in
-            MountainDetailView(nearby: nearby).peakDataAlerts(model)
+            MountainDetailView(nearby: nearby, viewpoint: model.viewpoint) {
+                selectedId = nil
+                goToSummit(nearby.mountain)
+            }
+            .peakDataAlerts(model)
         }
         .sheet(isPresented: showGroup) {
-            PeakGroupView(peaks: group).peakDataAlerts(model)
+            PeakGroupView(peaks: group, viewpoint: model.viewpoint) {
+                groupIds = nil
+                goToSummit($0)
+            }
+            .peakDataAlerts(model)
         }
         // 開いている間も歩けば値が更新される。
         .sheet(isPresented: $showObserver) {
             ObserverDetailView(model: model).peakDataAlerts(model)
         }
+        .sheet(isPresented: showSearch) {
+            MountainSearchView(model: model) { goToSummit($0) }
+                .peakDataAlerts(model)
+        }
+    }
+
+    /// 選んだ山頂を中心にした検索位置モードに移る。
+    private func goToSummit(_ mountain: Mountain) {
+        model.showFromMountain(mountain, canvasHeight: viewpointCanvasHeight)
+    }
+
+    /// 右下のモード切替ボタンを押せるか。検索位置モードからは、現在地が分からなくても抜けられるようにする。
+    private func modeButtonEnabled(_ geometry: GeometryProxy) -> Bool {
+        model.viewpoint != nil
+            || (model.hasLocationPermission && model.gpsLocation != nil && Double(geometry.size.height) > DialGeometry.chartInset)
+    }
+
+    /// 検索画面のシート。下に引いて閉じたときも、読み込んだ山を手放す。
+    private var showSearch: Binding<Bool> {
+        Binding(
+            get: { model.search != nil },
+            set: { if !$0 { model.closeSearch() } }
+        )
     }
 
     /// いずれかのシートを開いている。
     private var sheetShown: Bool {
         showSettings || showDownload || selectedMountain.wrappedValue != nil || showGroup.wrappedValue || showObserver
+            || showSearch.wrappedValue
     }
 
     /// 手動位置モードの表示(上部の目盛りを隠し、向きの表示とコンパスを出す)。現在地へ戻り始めたらすぐ戻す。
@@ -203,7 +268,7 @@ struct DialView: View {
     /// 手動位置モードの左上に出す、端末の向きと現在地の標高。
     /// ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
     private var headingLabel: some View {
-        let parts = model.heading.map { readoutParts(headingDeg: $0, altitudeM: model.gpsLocation?.mslAltitudeM) }
+        let parts = model.heading.map { readoutParts(headingDeg: $0, altitudeM: model.observer?.mslAltitudeM) }
         let text = parts.map {
             Text(Strings.format("dial_heading", $0.direction)).foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle)
         } ?? Text(Strings.text("dial_heading_loading")).foregroundColor(tapeInk)
@@ -333,6 +398,8 @@ private let settingsButtonIconColor = Color(hex: 0x43A047)
 private let downloadButtonIconColor = Color(hex: 0xFB8C00)
 /// モード切替ボタンのアイコンの色(青)。
 private let modeButtonIconColor = Color(hex: 0x1A73E8)
+/// 山の検索ボタンのアイコンの色(紫)。
+private let searchButtonIconColor = Color(hex: 0x8E24AA)
 
 /// 方位盤の下の角に置く丸いボタン。右下のモード切替ボタンと同じく、白地に影を付けて地図の上でも見分けやすくする。
 /// アイコンはボタンごとに色を変える([iconColor])。
@@ -446,9 +513,12 @@ private struct PermissionRequest: View {
     }
 }
 
-/// タップした山の詳細。
+/// タップした山の詳細。検索位置モード(viewpoint が非 nil)では、距離は選んだ山頂から測ったもの。
+/// 「山頂へ移動」で、その山頂を中心にした検索位置モードに移る(onGoToSummit)。
 private struct MountainDetailView: View {
     let nearby: NearbyMountain
+    let viewpoint: Mountain?
+    let onGoToSummit: () -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -461,7 +531,18 @@ private struct MountainDetailView: View {
             }
             DetailRow(label: Strings.text("detail_elevation"), value: elevationLabel(m.elevationM))
             DetailRow(label: Strings.text("detail_coordinate"), value: coordinateLabel(latitude: m.latitude, longitude: m.longitude))
-            DetailRow(label: Strings.text("detail_distance"), value: distanceText(nearby.distanceKm))
+            if let viewpoint {
+                // 選んだ山頂そのものは、山頂からの距離が 0 なので出さない。
+                if viewpoint.osmId != m.osmId {
+                    DetailRow(label: Strings.text("detail_distance_from_summit"), value: distanceText(nearby.distanceKm))
+                }
+            } else {
+                DetailRow(label: Strings.text("detail_distance"), value: distanceText(nearby.distanceKm))
+            }
+            // 選んだ山頂にいるときは、移る先が今の場所と同じなので出さない。
+            if viewpoint?.osmId != m.osmId {
+                Button(Strings.text("detail_go_to_summit"), action: onGoToSummit)
+            }
             Spacer()
         }
         .padding(24)
@@ -469,9 +550,95 @@ private struct MountainDetailView: View {
     }
 }
 
+/// 検索位置モードの左上に出す、選んだ山の札。山頂の標識をまねた木の横板に、山名と標高、緯度経度を書き、
+/// 支柱の横の白い小札に端末の向きを出す。向きは手動位置モードの左上の表示と同じく、端末が向いている方位にする。
+/// そのまま画面を撮っても、どの山から見た方位盤かが分かるようにする。
+private struct ViewpointLabel: View {
+    let mountain: Mountain
+    let headingDeg: Double?
+    let textScale: Double
+
+    var body: some View {
+        let lat = Strings.format(mountain.latitude >= 0 ? "detail_latitude_north" : "detail_latitude_south", degreeText(mountain.latitude))
+        let lon = Strings.format(mountain.longitude >= 0 ? "detail_longitude_east" : "detail_longitude_west", degreeText(mountain.longitude))
+        let heading = headingDeg.map { Strings.format("dial_heading", readoutParts(headingDeg: $0, altitudeM: nil).direction) }
+            ?? Strings.text("dial_heading_loading")
+        let board = RoundedRectangle(cornerRadius: 6)
+        VStack(alignment: .leading, spacing: 0) {
+            // 木の板。木目と、左右のビスを描く。
+            VStack(alignment: .leading, spacing: 1) {
+                (Text(mountain.name).font(.system(size: 21 * textScale, weight: .black, design: .serif)).kerning(21 * textScale * 0.12)
+                    + Text("  " + elevationListLabel(mountain.elevationM)).font(.system(size: 12.5 * textScale, weight: .bold)))
+                    .foregroundColor(woodInk)
+                Text(verbatim: "\(lat)  \(lon)").font(.system(size: 11 * textScale, weight: .medium)).foregroundColor(woodInkSubtle)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+                board.fill(LinearGradient(colors: [woodLight, woodDark], startPoint: .top, endPoint: .bottom))
+                    .overlay(WoodGrain().clipShape(board))
+                    .overlay(board.strokeBorder(woodEdge, lineWidth: 2))
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 2)
+            )
+            // 支柱と、その横の向きの小札。
+            HStack(alignment: .top, spacing: 10) {
+                LinearGradient(colors: [postDark, postLight], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: 10, height: 14)
+                    .overlay(HStack(spacing: 0) { woodEdge.frame(width: 1); Spacer(minLength: 0); woodEdge.frame(width: 1) })
+                    .padding(.leading, 24)
+                Text(heading)
+                    .font(.system(size: 12 * textScale, weight: .bold))
+                    .foregroundColor(tapeInk)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Color.white).shadow(color: .black.opacity(0.25), radius: 1.5, y: 1))
+                    .padding(.top, 3)
+            }
+        }
+        .frame(maxWidth: 260, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// 札の板の木目(細い縦の筋)と、左右の端のビス。
+private struct WoodGrain: View {
+    var body: some View {
+        Canvas { ctx, size in
+            var x: CGFloat = 2.5
+            var i = 0
+            while x < size.width {
+                // 筋の濃さと間隔を少しずつ変えて、木目らしくする。文字が読みにくくならないよう、筋は薄くする。
+                let light = i % 3 == 0
+                ctx.fill(Path(CGRect(x: x, y: 0, width: light ? 3 : 2, height: size.height)),
+                         with: .color(light ? .white.opacity(0.04) : .black.opacity(0.025)))
+                x += 5 + CGFloat(i % 4)
+                i += 1
+            }
+            let r: CGFloat = 2.5
+            for cx in [6.5, size.width - 6.5] {
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - r, y: size.height / 2 - r, width: r * 2, height: r * 2)), with: .color(woodScrew))
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - r / 3 - 1, y: size.height / 2 - r / 3 - 1, width: 2, height: 2)), with: .color(.white.opacity(0.3)))
+            }
+        }
+    }
+}
+
+private let woodLight = Color(hex: 0xE9CFA2)
+private let woodDark = Color(hex: 0xDDBB86)
+private let woodEdge = Color(hex: 0x7A5230)
+private let woodScrew = Color(hex: 0x5B3A1E)
+private let woodInk = Color(hex: 0x1E140A)
+private let woodInkSubtle = Color(hex: 0x2B1D10)
+private let postDark = Color(hex: 0x8A6036)
+private let postLight = Color(hex: 0xA57646)
+
 /// 重なる山をまとめた代表の山をタップしたときの一覧。山を選ぶと、その山の詳細を開く。
 private struct PeakGroupView: View {
     let peaks: [NearbyMountain]
+    /// 検索位置モードで選んだ山。詳細の距離の見出しを変えるのに使う。
+    let viewpoint: Mountain?
+    /// 一覧から開いた詳細で「山頂へ移動」を押したとき。
+    let onGoToSummit: (Mountain) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -479,11 +646,11 @@ private struct PeakGroupView: View {
         NavigationView {
             List(peaks) { nearby in
                 NavigationLink {
-                    MountainDetailView(nearby: nearby)
+                    MountainDetailView(nearby: nearby, viewpoint: viewpoint) { onGoToSummit(nearby.mountain) }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(nearby.mountain.name).font(.body)
-                        Text(Strings.format("detail_group_item", elevationLabel(nearby.mountain.elevationM), distanceText(nearby.distanceKm)))
+                        Text(Strings.format("detail_group_item", elevationListLabel(nearby.mountain.elevationM), distanceText(nearby.distanceKm)))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }

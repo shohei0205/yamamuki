@@ -9,6 +9,7 @@
     <string name="common_delete">削除</string>
     <string name="common_loading">読み込み中…</string>
     <string name="common_unknown">不明</string>
+    <string name="elevation_unknown">標高不明</string>
     <string name="settings_title">設定</string>
     <string name="osm_attribution" translatable="false">© OpenStreetMap contributors</string>
 
@@ -32,6 +33,7 @@
     <string name="map_mode_heading_up">ヘディングアップモード</string>
     <string name="map_mode_to_heading_up">現在地に戻る（進行方向が上）</string>
     <string name="map_mode_to_manual">現在の向きのまま操作する</string>
+    <string name="map_mode_search">検索位置モード</string>
     <string name="compass_face_device">端末の向きに合わせる</string>
     <string name="compass_face_north">北を上にする</string>
     <string name="compass_loading">コンパス：方位を確認中</string>
@@ -59,6 +61,8 @@
     <string name="detail_elevation">標高</string>
     <string name="detail_coordinate">緯度経度</string>
     <string name="detail_distance">現在地からの距離</string>
+    <string name="detail_distance_from_summit">山頂からの距離</string>
+    <string name="detail_go_to_summit">山頂へ移動</string>
     <string name="detail_latitude_north">北緯 %1$s</string>
     <string name="detail_latitude_south">南緯 %1$s</string>
     <string name="detail_longitude_east">東経 %1$s</string>
@@ -160,4 +164,15 @@
     <string name="area_notice_failed">%1$sの取得に失敗しました。サーバーの混雑または通信状況が原因の可能性があります。</string>
     <string name="area_notice_failed_progress">%1$sの取得に失敗しました（%2$d / %3$d 区画保存済み）。サーバーの混雑または通信状況が原因の可能性があります。</string>
     <string name="area_notice_canceled">%1$sのダウンロードを中断しました（%2$d / %3$d 区画保存済み）。</string>
+
+    <!-- 山の検索 -->
+    <string name="search_open">山を検索</string>
+    <string name="search_title">山の検索</string>
+    <string name="search_placeholder">山名・よみがな</string>
+    <string name="search_loading">山データを読み込んでいます</string>
+    <string name="search_no_data">山データがありません。設定の「山データを更新」で取得すると検索できます。</string>
+    <string name="search_section_prefix">先頭一致</string>
+    <string name="search_section_partial">部分一致</string>
+    <string name="search_no_results">見つかりませんでした</string>
+    <string name="search_result_direction">%1$s %2$s</string>
 </resources>

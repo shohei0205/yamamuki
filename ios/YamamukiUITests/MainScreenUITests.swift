@@ -22,6 +22,11 @@ final class MainScreenUITests: XCTestCase {
         openSheet(button: "設定", title: "設定")
     }
 
+    /// 右下の検索ボタンで山の検索画面を開いて閉じる。
+    func testSearchOpensAndCloses() {
+        openSheet(button: "山を検索", title: "山の検索")
+    }
+
     /// 山データは設定画面から取得する(事前ダウンロードのボタンは Features.areaDownload で隠している)。
     func testSettingsShowsPeakDataButton() {
         let opener = app.buttons["設定"]
@@ -39,7 +44,7 @@ final class MainScreenUITests: XCTestCase {
         app.navigationBars["設定"].buttons["閉じる"].tap()
     }
 
-    /// 左下のボタンでシートを開き、画面を撮ってから「閉じる」で閉じる。
+    /// 下のボタンでシートを開き、画面を撮ってから「閉じる」で閉じる。
     private func openSheet(button: String, title: String) {
         let opener = app.buttons[button]
         XCTAssertTrue(opener.waitForExistence(timeout: 10))

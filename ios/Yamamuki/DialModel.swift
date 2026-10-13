@@ -11,6 +11,16 @@ struct GeoPoint: Equatable {
     let mslAltitudeM: Double?
 }
 
+/// 山の検索画面の状態。
+struct SearchState {
+    /// 端末に保存している山を読み込んでいる。
+    var loading = true
+    /// 端末に山データが 1 件も無い(まだ取得していない)。
+    var noData = false
+    /// 入力した文字を含む山。先頭が一致した山と途中に含む山に分け、それぞれ現在地から近い順(現在地が分からなければ標高の高い順)。
+    var results = MountainSearch.Results.empty
+}
+
 /// 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ
 /// (Android 版の DialViewModel に相当)。
 final class DialModel: ObservableObject {
@@ -18,6 +28,13 @@ final class DialModel: ObservableObject {
     @Published private(set) var location: GeoPoint?
     /// 現在地。双眼鏡の位置と、山までの距離の基準。手動位置モードでも GPS に付いていく。
     @Published private(set) var gpsLocation: GeoPoint?
+    /// 検索位置モードで選んだ山。nil でなければ、現在地の代わりにこの山頂を距離と方位の基準にする([observer])。
+    /// 検索位置モードの間は [exploring] も true にする。
+    @Published private(set) var viewpoint: Mountain?
+    /// 双眼鏡の位置で、山までの距離と方位の基準。検索位置モードでは選んだ山頂(高さは山頂の標高)、それ以外は現在地。
+    var observer: GeoPoint? {
+        viewpoint.map { GeoPoint(latitude: $0.latitude, longitude: $0.longitude, mslAltitudeM: $0.elevationM) } ?? gpsLocation
+    }
     @Published private(set) var exploring = false
     /// 右下のボタンで現在地へ戻っている途中。[exploring] は戻り終わるまで true のまま。
     @Published private(set) var returning = false
@@ -57,6 +74,8 @@ final class DialModel: ObservableObject {
     /// 設定画面に出すキャッシュの状況。読み込むまでは nil。
     @Published private(set) var cacheInfo: CacheInfo?
     @Published private(set) var authorization: CLAuthorizationStatus = .notDetermined
+    /// 山の検索画面の状態。開いていなければ nil。
+    @Published private(set) var search: SearchState?
 
     var hasLocationPermission: Bool {
         authorization == .authorizedWhenInUse || authorization == .authorizedAlways
@@ -86,6 +105,10 @@ final class DialModel: ObservableObject {
     private var fetchedRadiusKm = 0.0
     private var fetchTask: Task<Void, Never>?
     private var northUpTask: Task<Void, Never>?
+    /// 検索画面を開いている間だけ持つ、全件の山の検索の下ごしらえ。
+    private var searchIndex: MountainSearch?
+    private var searchQuery = ""
+    private var searchTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "DialModel")
 
     /// これ以上移動したら、保存済みのデータを読み直す。
@@ -158,7 +181,8 @@ final class DialModel: ObservableObject {
         let point = GeoPoint(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, mslAltitudeM: msl)
         gpsLocation = point
         // 手動位置モードでは表示範囲を動かさず、双眼鏡と山までの距離だけを現在地に合わせる。
-        updatePeaks(at: point)
+        // 検索位置モードでは双眼鏡は山頂に置いたままなので、現在地を覚えるだけにする。
+        if viewpoint == nil { updatePeaks(at: point) }
         guard !exploring else { return }
         location = point
         if let center = fetchedCenter,
@@ -221,7 +245,7 @@ final class DialModel: ObservableObject {
     private func turnMap(from startHeading: Double, facingDevice: Bool, canvasWidth: Double, canvasHeight: Double) {
         guard let viewport = location, canvasHeight.isFinite, canvasHeight > DialGeometry.chartInset else { return }
         northUpTask?.cancel()
-        let observer = gpsLocation ?? viewport
+        let observer = self.observer ?? viewport
         let aroundCenter = !PanGeometry.isObserverVisible(MapCenter(observer.latitude, observer.longitude),
             viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
             rangeKm: rangeKm, canvasWidth: canvasWidth, canvasHeight: canvasHeight)
@@ -250,7 +274,7 @@ final class DialModel: ObservableObject {
     func onTransform(zoom: Double, rotation: Double, previous: PlanOffset, midpoint: PlanOffset, chartHeight: Double) {
         northUpTask?.cancel()
         guard exploring, let oldHeading = lockedHeading else { onZoom(zoom); return }
-        guard let observer = gpsLocation, let viewport = location,
+        guard let observer, let viewport = location,
               rotation.isFinite, chartHeight.isFinite, chartHeight > 0 else { return }
         let range = DialGeometry.zoomedRange(rangeKm, zoom: zoom)
         let nextHeading = Heading.normalize(oldHeading - rotation)
@@ -296,6 +320,86 @@ final class DialModel: ObservableObject {
         }
     }
 
+    /// 検索で選んだ山を、検索位置モードで表示する。双眼鏡の代わりにその山頂を距離と方位の基準にし、画面の中央に置く。
+    /// 向きは今の向きのまま止める(手動位置モードに入るときと同じ)。canvasHeight は pt。
+    func showFromMountain(_ mountain: Mountain, canvasHeight: Double) {
+        northUpTask?.cancel()
+        closeSearch()
+        let heading = displayHeading
+        let viewport = PanGeometry.centeredViewport(MapCenter(mountain.latitude, mountain.longitude),
+            heading: heading, rangeKm: rangeKm, canvasHeight: canvasHeight)
+        viewpoint = mountain
+        location = GeoPoint(latitude: viewport.latitude, longitude: viewport.longitude, mslAltitudeM: nil)
+        lockedHeading = heading
+        exploring = true
+        returning = false
+        // 読み込みが終わるまでは、前の場所の山を残さず、選んだ山頂だけを出す。
+        peaks = [mountain]
+        updatePeaks(at: GeoPoint(latitude: mountain.latitude, longitude: mountain.longitude, mslAltitudeM: mountain.elevationM))
+        fetchedCenter = nil
+        fetch()
+    }
+
+    /// 検索位置モードをやめ、現在地のヘディングアップに戻す。
+    /// 画面が急に切り替わらないよう、手動位置モードから戻るときと同じく、約0.5秒で地図を現在地へ滑らせて端末の向きに回す。
+    /// 現在地がまだ分からないときは、動かす先が無いのでそのままヘディングアップにする。
+    func leaveViewpoint() {
+        northUpTask?.cancel()
+        viewpoint = nil
+        returning = false
+        guard let gps = gpsLocation else {
+            location = nil
+            lockedHeading = nil
+            exploring = false
+            peaks = []
+            mountains = []
+            summit = nil
+            fetchedCenter = nil
+            return
+        }
+        // 双眼鏡を現在地に戻してから、手動位置モードと同じ動きで現在地へ戻す。山は戻り終えたときに読み直す。
+        exploring = true
+        updatePeaks(at: gps)
+        resetCenter()
+    }
+
+    /// 山の検索画面を開き、端末に保存している山を読み込む。
+    func openSearch() {
+        searchTask?.cancel()
+        searchQuery = ""
+        search = SearchState()
+        searchTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let all = await cache.allMountains()
+            let index = await Task.detached { MountainSearch(all) }.value
+            guard !Task.isCancelled, search != nil else { return }
+            searchIndex = index
+            search?.loading = false
+            search?.noData = all.isEmpty
+            runSearch()
+        }
+    }
+
+    /// 検索画面の入力が変わった。
+    func onSearchQuery(_ query: String) {
+        searchQuery = query
+        runSearch()
+    }
+
+    /// 検索画面を閉じる。読み込んだ山は持ち続けない。
+    func closeSearch() {
+        searchTask?.cancel()
+        searchIndex = nil
+        searchQuery = ""
+        search = nil
+    }
+
+    private func runSearch() {
+        guard let searchIndex, search != nil else { return }
+        // 並びは実際の現在地から近い順(検索位置モードでも山頂からではなく現在地から)。
+        search?.results = searchIndex.search(searchQuery, latitude: gpsLocation?.latitude, longitude: gpsLocation?.longitude)
+    }
+
     private func fetchForViewport() {
         guard let here = location else { return }
         if let center = fetchedCenter,
@@ -328,7 +432,7 @@ final class DialModel: ObservableObject {
         if after.sensorPrecision != before.sensorPrecision {
             locationService.apply(after.sensorPrecision)
         }
-        if after.minElevationM != before.minElevationM, let here = gpsLocation {
+        if after.minElevationM != before.minElevationM, let here = observer {
             updatePeaks(at: here)
         }
         // 起動時の範囲を変えたら、試しやすいよう今の表示にもすぐ反映する。
@@ -377,7 +481,7 @@ final class DialModel: ObservableObject {
                     ignoreMissing: PeakData.ignoresMissing(latitude: here.latitude, longitude: here.longitude)
                 )
                 peaks = result.mountains.map(\.mountain)
-                updatePeaks(at: gpsLocation ?? here)
+                updatePeaks(at: observer ?? here)
                 incomplete = result.incomplete
             } catch {
                 logger.error("山データの読み直しに失敗: \(String(describing: error), privacy: .public)")
@@ -406,7 +510,7 @@ final class DialModel: ObservableObject {
                 // 新しい読み込みに置き換わっていたら、古い結果で上書きしない。
                 guard !Task.isCancelled else { return }
                 peaks = result.mountains.map(\.mountain)
-                updatePeaks(at: gpsLocation ?? here)
+                updatePeaks(at: observer ?? here)
                 incomplete = result.incomplete
                 loading = false
             } catch {
