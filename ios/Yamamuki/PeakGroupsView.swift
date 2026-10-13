@@ -18,6 +18,7 @@ struct PeakGroupsView: View {
 }
 
 /// 山のグループのチェック欄と、すべてのチェックを外すボタン。チェックが無いときは、すべての山を表示する。
+/// ボタンは、グループが増えても下までスクロールせずに押せるよう、一覧の上に置く。
 /// 方位盤からシートで開く入口を足すときも、この部品をそのまま使う。
 struct PeakGroupsList: View {
     let groups: [TagGroup]
@@ -25,6 +26,10 @@ struct PeakGroupsList: View {
     let onChange: (Set<String>) -> Void
 
     var body: some View {
+        Section {
+            Button(Strings.text("settings_peak_groups_clear")) { onChange([]) }
+                .disabled(selected.isEmpty)
+        }
         Section {
             ForEach(groups, id: \.name) { group in
                 let checked = selected.contains(group.name)
@@ -37,19 +42,16 @@ struct PeakGroupsList: View {
                         Image(systemName: checked ? "checkmark.square.fill" : "square")
                             .foregroundStyle(checked ? Color.accentColor : Color.secondary)
                             .font(.title3)
-                        Text(group.name).foregroundStyle(.primary)
+                        // ボタンの中は文字が強調色になるので、黒とグレーを指定する。
+                        Text(group.name).foregroundStyle(Color.primary)
                         Spacer()
-                        Text(Strings.format("settings_peak_group_count", group.count)).foregroundStyle(.secondary)
+                        Text(Strings.format("settings_peak_group_count", group.count)).foregroundStyle(Color.secondary)
                     }
                 }
                 .accessibilityAddTraits(checked ? .isSelected : [])
             }
         } footer: {
             Text(Strings.text("settings_peak_groups_description"))
-        }
-        Section {
-            Button(Strings.text("settings_peak_groups_clear")) { onChange([]) }
-                .disabled(selected.isEmpty)
         }
     }
 }

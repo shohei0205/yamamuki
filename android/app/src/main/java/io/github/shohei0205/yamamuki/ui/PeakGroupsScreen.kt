@@ -58,12 +58,18 @@ fun PeakGroupsScreen(
 
 /**
  * 山のグループのチェック欄と、すべてのチェックを外すボタン。チェックが無いときは、すべての山を表示する。
+ * ボタンは、グループが増えても下までスクロールせずに押せるよう、一覧の上に置く。
  * 方位盤からシートで開く入口を足すときも、この部品をそのまま使う。
  */
 @Composable
 fun PeakGroupsList(groups: List<TagGroup>, selected: Set<String>, onChange: (Set<String>) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.settings_peak_groups_description), style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(
+            onClick = { onChange(emptySet()) },
+            enabled = selected.isNotEmpty(),
+            modifier = Modifier.padding(vertical = 4.dp),
+        ) { Text(stringResource(R.string.settings_peak_groups_clear)) }
         groups.forEach { group ->
             val checked = group.name in selected
             Row(
@@ -82,11 +88,6 @@ fun PeakGroupsList(groups: List<TagGroup>, selected: Set<String>, onChange: (Set
                 Text(stringResource(R.string.settings_peak_group_count, group.count), style = MaterialTheme.typography.bodyMedium)
             }
         }
-        OutlinedButton(
-            onClick = { onChange(emptySet()) },
-            enabled = selected.isNotEmpty(),
-            modifier = Modifier.padding(top = 8.dp),
-        ) { Text(stringResource(R.string.settings_peak_groups_clear)) }
     }
 }
 

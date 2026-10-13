@@ -83,12 +83,13 @@ fun MountainSearchScreen(
                 keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
             )
-            if (search.groups.isNotEmpty()) {
+            if (!search.loading && !search.noData) {
                 Text(
-                    stringResource(
-                        R.string.search_groups,
-                        search.groups.joinToString(stringResource(R.string.common_list_separator)),
-                    ),
+                    if (search.groups.isEmpty()) {
+                        stringResource(R.string.search_scope_all)
+                    } else {
+                        stringResource(R.string.search_scope, search.groups.joinToString(", "))
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )

@@ -26,8 +26,10 @@ struct MountainSearchView: View {
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                if let groups = model.search?.groups, !groups.isEmpty {
-                    Text(Strings.format("search_groups", groups.joined(separator: Strings.text("common_list_separator"))))
+                if let search = model.search, !search.loading, !search.noData {
+                    Text(search.groups.isEmpty
+                        ? Strings.text("search_scope_all")
+                        : Strings.format("search_scope", search.groups.joined(separator: ", ")))
                         .font(.footnote)
                         .foregroundStyle(Color.accentColor)
                         .frame(maxWidth: .infinity, alignment: .leading)

@@ -320,17 +320,6 @@
         }
       }
     },
-    "common_list_separator": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "、"
-          }
-        }
-      }
-    },
     "common_loading": {
       "extractionState": "manual",
       "localizations": {
@@ -1179,17 +1168,6 @@
         }
       }
     },
-    "search_groups": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ の山から探します"
-          }
-        }
-      }
-    },
     "search_loading": {
       "extractionState": "manual",
       "localizations": {
@@ -1252,6 +1230,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "search_scope": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索範囲：%1$@"
+          }
+        }
+      }
+    },
+    "search_scope_all": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索範囲：すべて"
           }
         }
       }
