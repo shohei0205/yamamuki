@@ -16,6 +16,22 @@ struct SettingsView: View {
         NavigationView {
             Form {
                 Section(Strings.text("settings_section_peaks")) {
+                    // 山データにタグが無くても(読み込み中も)、機能があることが分かるように行は出す。
+                    // そのときは押せなくして「なし」と出す。
+                    let groups = model.peakGroups ?? []
+                    NavigationLink {
+                        PeakGroupsView(model: model)
+                    } label: {
+                        // LabeledContent は iOS 16 からなので、同じ並びを HStack で作る。
+                        HStack {
+                            Text(Strings.text("settings_peak_groups"))
+                            Spacer()
+                            Text(peakGroupsSummary(groups.isEmpty ? [] : TagGroups.effective(selected: settings.peakGroups, groups: groups)))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .disabled(groups.isEmpty)
                     StepSlider(
                         value: settings.minElevationM,
                         range: 0...maxMinElevationM,

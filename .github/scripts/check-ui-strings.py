@@ -38,6 +38,8 @@ PLATFORM_ONLY = {
     # iOS は一度断られるとアプリから許可の画面を出せないので、設定アプリへ案内する。
     "dial_permission_denied_message": "ios",
     "dial_permission_open_settings": "ios",
+    # 設定画面から進んだ画面の戻るボタンの読み上げ。iOS はナビゲーションの標準の戻るボタンを使う。
+    "common_back": "android",
 }
 
 JAPANESE = re.compile(r"[぀-ヿ㐀-鿿＀-￯]")

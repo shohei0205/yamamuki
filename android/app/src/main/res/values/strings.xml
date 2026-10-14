@@ -9,6 +9,7 @@
     <string name="common_delete">削除</string>
     <string name="common_loading">読み込み中…</string>
     <string name="common_unknown">不明</string>
+    <string name="common_back">戻る</string>
     <string name="elevation_unknown">標高不明</string>
     <string name="settings_title">設定</string>
     <string name="osm_attribution" translatable="false">© OpenStreetMap contributors</string>
@@ -94,6 +95,12 @@
 
     <!-- 設定 -->
     <string name="settings_section_peaks">表示する山</string>
+    <string name="settings_peak_groups">フィルター</string>
+    <string name="settings_peak_groups_none">なし</string>
+    <string name="settings_peak_groups_more">%1$s ほか %2$d</string>
+    <string name="settings_peak_groups_description">チェックしたグループのどれかに入る山だけを方位盤に表示します。チェックが無いときは、すべての山を表示します。</string>
+    <string name="settings_peak_group_count">%1$d 山</string>
+    <string name="settings_peak_groups_clear">すべてのチェックを外す</string>
     <string name="settings_min_elevation_all">すべて表示</string>
     <string name="settings_min_elevation_value">標高 %1$,d m 以上を表示</string>
     <string name="settings_min_elevation_description">0 m で全て表示します。絞り込み時は標高不明の山を除外します。</string>
@@ -174,5 +181,8 @@
     <string name="search_section_prefix">先頭一致</string>
     <string name="search_section_partial">部分一致</string>
     <string name="search_no_results">見つかりませんでした</string>
+    <string name="search_scope_all">検索範囲：すべて</string>
+    <string name="search_scope">検索範囲：%1$s</string>
+    <string name="search_scope_separator">、</string>
     <string name="search_result_direction">%1$s %2$s</string>
 </resources>

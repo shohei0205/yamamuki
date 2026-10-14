@@ -17,6 +17,8 @@ struct Settings: Codable, Equatable {
     var sensorPrecision = SensorPrecision.standard
     /// 初回起動時の「山データを取得しますか」に答えた。答えるまでは位置情報の許可を求めない(ダイアログを重ねない)。
     var peakDataAsked = false
+    /// 方位盤に出す山のグループ(地点のタグ)。どれかを持つ山だけを出す。空なら絞り込まない。
+    var peakGroups: Set<String> = []
 
     static let textScales = [0.85, 1.0, 1.2, 1.4]
     static let initialRangesKm = [5, 10, 15, 20, 30, 50]
@@ -37,6 +39,7 @@ struct Settings: Codable, Equatable {
         initialRangeKm = try c.decodeIfPresent(Int.self, forKey: .initialRangeKm) ?? d.initialRangeKm
         sensorPrecision = (try? c.decodeIfPresent(SensorPrecision.self, forKey: .sensorPrecision)) ?? d.sensorPrecision
         peakDataAsked = try c.decodeIfPresent(Bool.self, forKey: .peakDataAsked) ?? d.peakDataAsked
+        peakGroups = try c.decodeIfPresent(Set<String>.self, forKey: .peakGroups) ?? d.peakGroups
     }
 }
 

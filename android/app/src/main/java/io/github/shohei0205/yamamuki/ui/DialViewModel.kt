@@ -16,6 +16,9 @@ import io.github.shohei0205.yamamuki.core.PanGeometry
 import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.MountainSearch
+import io.github.shohei0205.yamamuki.core.TagGroup
+import io.github.shohei0205.yamamuki.core.TagGroups
+import io.github.shohei0205.yamamuki.core.inTagGroups
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.PeakData
 import io.github.shohei0205.yamamuki.core.PeakDataException
@@ -95,6 +98,8 @@ data class DialUiState(
     val cacheInfo: CacheInfo? = null,
     /** 山の検索画面の状態。開いていなければ null。 */
     val search: SearchUiState? = null,
+    /** 保存している山データにある山のグループ(名前順)。読み込むまでは null。 */
+    val peakGroups: List<TagGroup>? = null,
 ) {
     /** 双眼鏡の位置で、山までの距離と方位の基準。検索位置モードでは選んだ山頂(高さは山頂の標高)、それ以外は現在地。 */
     val observer: GeoPoint?
@@ -109,6 +114,8 @@ data class SearchUiState(
     val noData: Boolean = false,
     /** 入力した文字を含む山。先頭が一致した山と途中に含む山に分け、それぞれ現在地から近い順(現在地が分からなければ標高の高い順)。 */
     val results: MountainSearch.Results = MountainSearch.Results.EMPTY,
+    /** 設定の「フィルター」で絞り込んでいるときの、探す対象のグループ(名前順)。空ならすべての山から探す。 */
+    val groups: List<String> = emptyList(),
 )
 
 /**
@@ -152,7 +159,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch { connectivityUpdates(application).collect(::onConnectivity) }
         // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
-        viewModelScope.launch { app.cacheChanges.collect { reloadFromCache() } }
+        viewModelScope.launch {
+            app.cacheChanges.collect {
+                reloadFromCache()
+                refreshPeakGroups()
+            }
+        }
+        refreshPeakGroups()
         rebuildPeakData()
     }
 
@@ -322,9 +335,14 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(search = SearchUiState()) }
         searchJob = viewModelScope.launch {
             val all = app.mountainCache.allMountains()
-            val index = withContext(Dispatchers.Default) { MountainSearch(all) }
+            // 方位盤と同じく、設定の「フィルター」で選んだグループの山だけから探す。
+            val groups = TagGroups.effective(_state.value.settings.peakGroups, TagGroups.of(all.map { it.tags }))
+            val targets = all.filter { it.inTagGroups(groups) }
+            val index = withContext(Dispatchers.Default) { MountainSearch(targets) }
             searchIndex = index
-            _state.update { s -> s.search?.let { s.copy(search = it.copy(loading = false, noData = all.isEmpty())) } ?: s }
+            _state.update { s ->
+                s.search?.let { s.copy(search = it.copy(loading = false, noData = all.isEmpty(), groups = groups)) } ?: s
+            }
             runSearch()
         }
     }
@@ -444,7 +462,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val after = appSettings.settings.value
         _state.update { it.copy(settings = after) }
 
-        if (after.minElevationM != before.minElevationM) {
+        if (after.minElevationM != before.minElevationM || after.peakGroups != before.peakGroups) {
             _state.value.observer?.let { here -> _state.update { it.withPeaksAt(here) } }
         }
         // 起動時の範囲を変えたら、試しやすいよう今の表示にもすぐ反映する。
@@ -459,6 +477,15 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             val info = cacheManager.info()
             // DB を開いたときにキャッシュが作り直されていたら、取り込み済みの記録も消えているので読み直す。
             _state.update { it.copy(cacheInfo = info, peakData = app.peakDataStore.load()) }
+        }
+        refreshPeakGroups()
+    }
+
+    /** 保存している山データから山のグループの一覧を作り直し、方位盤の絞り込みにも反映する。 */
+    private fun refreshPeakGroups() {
+        viewModelScope.launch {
+            val groups = app.mountainCache.peakGroups()
+            _state.update { s -> s.copy(peakGroups = groups).let { n -> n.observer?.let { n.withPeaksAt(it) } ?: n } }
         }
     }
 
@@ -477,6 +504,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             _state.update {
                 it.copy(mountains = emptyList(), summit = null, cacheInfo = cacheManager.info(), peakData = null, peakDataNotice = null)
             }
+            refreshPeakGroups()
             fetch()
         }
     }
@@ -599,9 +627,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val all = peaks.map { it.seenFrom(p.latitude, p.longitude) }
         val summit = summitAt(all)
         val minElevation = settings.minElevationM
+        val groups = TagGroups.effective(settings.peakGroups, peakGroups)
         return copy(
-            mountains = all
-                .filter { it.mountain.osmId != summit?.mountain?.osmId && it.mountain.meetsMinElevation(minElevation) },
+            mountains = all.filter {
+                it.mountain.osmId != summit?.mountain?.osmId &&
+                    it.mountain.meetsMinElevation(minElevation) &&
+                    it.mountain.inTagGroups(groups)
+            },
             summit = summit,
         )
     }

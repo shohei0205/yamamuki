@@ -3,6 +3,8 @@ package io.github.shohei0205.yamamuki.data
 import io.github.shohei0205.yamamuki.core.BoundingBox
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.MountainCache
+import io.github.shohei0205.yamamuki.core.TagGroup
+import io.github.shohei0205.yamamuki.core.TagGroups
 import io.github.shohei0205.yamamuki.core.PointGraphic
 import io.github.shohei0205.yamamuki.core.Tile
 
@@ -27,6 +29,12 @@ class RoomMountainCache(private val dao: MountainDao) : MountainCache {
 
     /** 保存しているすべての山。山の検索で使う。 */
     suspend fun allMountains(): List<Mountain> = dao.allMountains().map { it.toMountain() }
+
+    /** 保存しているすべての山のタグから作った、山のグループの一覧(名前順)。 */
+    suspend fun peakGroups(): List<TagGroup> {
+        val converter = StringListConverter()
+        return TagGroups.of(dao.tagColumns().map(converter::toList))
+    }
 
     override suspend fun replaceTiles(tiles: Collection<Tile>, mountains: List<Mountain>, fetchedAtMillis: Long) {
         dao.replaceTiles(
