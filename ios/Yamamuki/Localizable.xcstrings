@@ -386,6 +386,138 @@
         }
       }
     },
+    "credits_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "著作者"
+          }
+        }
+      }
+    },
+    "credits_changes": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加工"
+          }
+        }
+      }
+    },
+    "credits_license": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライセンス"
+          }
+        }
+      }
+    },
+    "credits_missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出典情報の取得に失敗"
+          }
+        }
+      }
+    },
+    "credits_no_supplements": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "補足資料なし"
+          }
+        }
+      }
+    },
+    "credits_not_installed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データ未取得"
+          }
+        }
+      }
+    },
+    "credits_osm_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データ © OpenStreetMap contributors (ODbL)"
+          }
+        }
+      }
+    },
+    "credits_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リリース"
+          }
+        }
+      }
+    },
+    "credits_section_data": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データ"
+          }
+        }
+      }
+    },
+    "credits_section_supplements": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "補足に使った資料"
+          }
+        }
+      }
+    },
+    "credits_source": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "資料"
+          }
+        }
+      }
+    },
+    "credits_source_url": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "元データ"
+          }
+        }
+      }
+    },
     "detail_coordinate": {
       "extractionState": "manual",
       "localizations": {
@@ -1388,13 +1520,13 @@
         }
       }
     },
-    "settings_data_license": {
+    "settings_credits": {
       "extractionState": "manual",
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データ © OpenStreetMap contributors (ODbL)"
+            "value": "データの出典とライセンス"
           }
         }
       }

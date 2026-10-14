@@ -444,6 +444,7 @@ fun DialScreen(
                 onClearCache = viewModel::clearCache,
                 onClose = { showSettings = false },
                 peakGroups = state.peakGroups,
+                loadCredits = viewModel::peakDataCredits,
             )
         }
 

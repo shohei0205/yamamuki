@@ -399,7 +399,14 @@ class PeakDataTest {
             val read = archive.read()!!
             assertTrue(read.manifest.contentEquals(manifestBytes) && read.data.contentEquals(gzip), "前の組は置き換える")
             assertEquals(setOf("manifest.json", "osm-peaks.json.gz"), File(dir, "data").list()!!.toSet(), "一時ファイルを残さない")
-            // 片方だけでは読まない。
+            // manifest だけなら gz が無くても読める。
+            File(dir, "data/osm-peaks.json.gz").delete()
+            assertTrue(archive.readManifest()!!.contentEquals(manifestBytes))
+            // 組は片方だけでは読まない。
+            assertNull(archive.read())
+            File(dir, "data/manifest.json").delete()
+            assertNull(archive.readManifest())
+            archive.write(manifestBytes, gzip)
             File(dir, "data/manifest.json").delete()
             assertNull(archive.read())
             archive.delete()

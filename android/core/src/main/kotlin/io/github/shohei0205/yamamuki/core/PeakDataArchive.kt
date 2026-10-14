@@ -17,6 +17,9 @@ interface PeakDataArchive {
     /** 残した manifest と gz。どちらかが無いか読めなければ null。 */
     suspend fun read(): ArchivedPeakData?
 
+    /** 残した manifest だけ。gz は読まない(出典の画面のように manifest だけが要るとき用)。無いか読めなければ null。 */
+    suspend fun readManifest(): ByteArray? = read()?.manifest
+
     /**
      * 前の組を [manifest] と [data] で置き換える。失敗しても例外は投げない
      * (次の作り直しで SHA-256 が合わず、取り直すだけ)。
@@ -39,6 +42,14 @@ class FilePeakDataArchive(private val directory: File) : PeakDataArchive {
     override suspend fun read(): ArchivedPeakData? = withContext(Dispatchers.IO) {
         try {
             if (manifestFile.isFile && dataFile.isFile) ArchivedPeakData(manifestFile.readBytes(), dataFile.readBytes()) else null
+        } catch (e: IOException) {
+            null
+        }
+    }
+
+    override suspend fun readManifest(): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            if (manifestFile.isFile) manifestFile.readBytes() else null
         } catch (e: IOException) {
             null
         }

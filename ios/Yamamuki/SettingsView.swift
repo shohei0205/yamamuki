@@ -91,9 +91,13 @@ struct SettingsView: View {
                 }
 
                 Section(Strings.text("settings_section_about")) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(Strings.format("settings_version", appVersion))
-                        Text(Strings.text("settings_data_license")).font(.footnote).foregroundStyle(.secondary)
+                    // 山データの著作者表示は方位盤と「データの出典とライセンス」の画面に出すので、ここには出さない。
+                    Text(Strings.format("settings_version", appVersion))
+                    // 山データが無くても OSM の表示は見られるよう、いつでも押せる。
+                    NavigationLink {
+                        CreditsView(model: model)
+                    } label: {
+                        Text(Strings.text("settings_credits"))
                     }
                 }
             }

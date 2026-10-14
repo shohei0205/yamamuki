@@ -21,6 +21,8 @@ import io.github.shohei0205.yamamuki.core.TagGroups
 import io.github.shohei0205.yamamuki.core.inTagGroups
 import io.github.shohei0205.yamamuki.core.NearbyMountain
 import io.github.shohei0205.yamamuki.core.PeakData
+import io.github.shohei0205.yamamuki.core.PeakDataCredits
+import io.github.shohei0205.yamamuki.core.PeakDataCreditsReader
 import io.github.shohei0205.yamamuki.core.PeakDataException
 import io.github.shohei0205.yamamuki.core.PeakDataOffer
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
@@ -480,6 +482,10 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
         refreshPeakGroups()
     }
+
+    /** 取り込み済みの山データの出典を、端末に残した manifest から読む(通信はしない)。 */
+    suspend fun peakDataCredits(): PeakDataCredits? =
+        PeakDataCreditsReader.read(app.peakDataStore.load(), app.peakDataStore.archive.readManifest())
 
     /** 保存している山データから山のグループの一覧を作り直し、方位盤の絞り込みにも反映する。 */
     private fun refreshPeakGroups() {

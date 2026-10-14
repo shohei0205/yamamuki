@@ -141,7 +141,19 @@
     <string name="settings_cache_clear_confirm">消去</string>
     <string name="settings_section_about">このアプリについて</string>
     <string name="settings_version">バージョン %1$s</string>
-    <string name="settings_data_license">山データ © OpenStreetMap contributors (ODbL)</string>
+    <string name="settings_credits">データの出典とライセンス</string>
+    <string name="credits_section_data">山データ</string>
+    <string name="credits_section_supplements">補足に使った資料</string>
+    <string name="credits_release">リリース</string>
+    <string name="credits_license">ライセンス</string>
+    <string name="credits_attribution">著作者</string>
+    <string name="credits_source_url">元データ</string>
+    <string name="credits_source">資料</string>
+    <string name="credits_changes">加工</string>
+    <string name="credits_not_installed">山データ未取得</string>
+    <string name="credits_missing">出典情報の取得に失敗</string>
+    <string name="credits_no_supplements">補足資料なし</string>
+    <string name="credits_osm_attribution">山データ © OpenStreetMap contributors (ODbL)</string>
 
     <!-- 事前ダウンロード -->
     <string name="area_title">事前ダウンロード</string>
