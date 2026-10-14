@@ -436,7 +436,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このデータには、補足に使った資料はありません。"
+            "value": "補足資料なし"
           }
         }
       }
@@ -447,7 +447,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "まだ山データを取得していません。取得すると、データの版と補足に使った資料も表示します。"
+            "value": "山データ未取得"
           }
         }
       }
