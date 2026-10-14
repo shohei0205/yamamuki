@@ -70,13 +70,12 @@ class PeakDataCreditsTest {
     fun readsOnlyTheManifestOfTheInstalledData() {
         val bytes = manifest.toByteArray(Charsets.UTF_8)
         val installed = InstalledPeakData("v", "", 1, null, 0, manifestSha256 = PeakData.sha256Hex(bytes))
-        val archived = ArchivedPeakData(bytes, ByteArray(0))
-        assertEquals("ODbL-1.0", PeakDataCreditsReader.read(installed, archived)?.license)
+        assertEquals("ODbL-1.0", PeakDataCreditsReader.read(installed, bytes)?.license)
         // 取り込み済みの記録が無い・manifest が残っていない・別の版の manifest のときは読まない。
-        assertNull(PeakDataCreditsReader.read(null, archived))
-        assertNull(PeakDataCreditsReader.read(installed.copy(manifestSha256 = null), archived))
+        assertNull(PeakDataCreditsReader.read(null, bytes))
+        assertNull(PeakDataCreditsReader.read(installed.copy(manifestSha256 = null), bytes))
         assertNull(PeakDataCreditsReader.read(installed, null))
-        assertNull(PeakDataCreditsReader.read(installed.copy(manifestSha256 = "0".repeat(64)), archived))
+        assertNull(PeakDataCreditsReader.read(installed.copy(manifestSha256 = "0".repeat(64)), bytes))
     }
 
     @Test

@@ -49,8 +49,8 @@ public enum PeakDataCreditsReader {
     /// 端末に残した manifest から、取り込み済みの山データの出典を読む。
     /// 取り込み済みの記録が無い、manifest が残っていない(出典を残す前の版のアプリで取り込んだ)、
     /// 記録の SHA-256 と合わない、読めないときは nil。
-    public static func read(installed: InstalledPeakData?, archived: ArchivedPeakData?) -> PeakDataCredits? {
-        guard let sha256 = installed?.manifestSha256, let manifest = archived?.manifest,
+    public static func read(installed: InstalledPeakData?, manifest: Data?) -> PeakDataCredits? {
+        guard let sha256 = installed?.manifestSha256, let manifest,
               PeakData.sha256Hex(manifest) == sha256 else { return nil }
         return parse(manifest)
     }

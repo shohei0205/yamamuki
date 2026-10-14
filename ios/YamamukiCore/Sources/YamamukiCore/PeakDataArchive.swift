@@ -17,10 +17,18 @@ public struct ArchivedPeakData: Equatable, Sendable {
 public protocol PeakDataArchive: Sendable {
     /// 残した manifest と gz。どちらかが無いか読めなければ nil。
     func read() async -> ArchivedPeakData?
+    /// 残した manifest だけ。gz は読まない(出典の画面のように manifest だけが要るとき用)。無いか読めなければ nil。
+    func readManifest() async -> Data?
     /// 前の組を `manifest` と `data` で置き換える。失敗しても投げない(次の作り直しで SHA-256 が合わず、取り直すだけ)。
     func write(manifest: Data, data: Data) async
     /// 残した組を消す。
     func delete() async
+}
+
+extension PeakDataArchive {
+    public func readManifest() async -> Data? {
+        await read()?.manifest
+    }
 }
 
 /// `directory` に manifest.json と osm-peaks.json.gz を残す。書くときは一時ファイルに書いてから置き換え(`.atomic`)、
@@ -42,6 +50,10 @@ public struct FilePeakDataArchive: PeakDataArchive {
     public func read() async -> ArchivedPeakData? {
         guard let manifest = try? Data(contentsOf: manifestUrl), let data = try? Data(contentsOf: dataUrl) else { return nil }
         return ArchivedPeakData(manifest: manifest, data: data)
+    }
+
+    public func readManifest() async -> Data? {
+        try? Data(contentsOf: manifestUrl)
     }
 
     public func write(manifest: Data, data: Data) async {

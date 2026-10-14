@@ -37,9 +37,9 @@ object PeakDataCreditsReader {
      * 取り込み済みの記録が無い、manifest が残っていない(出典を残す前の版のアプリで取り込んだ)、
      * 記録の SHA-256 と合わない、読めないときは null。
      */
-    fun read(installed: InstalledPeakData?, archived: ArchivedPeakData?): PeakDataCredits? {
+    fun read(installed: InstalledPeakData?, manifest: ByteArray?): PeakDataCredits? {
         val sha256 = installed?.manifestSha256 ?: return null
-        val manifest = archived?.manifest ?: return null
+        if (manifest == null) return null
         if (PeakData.sha256Hex(manifest) != sha256) return null
         return parse(manifest.toString(Charsets.UTF_8))
     }

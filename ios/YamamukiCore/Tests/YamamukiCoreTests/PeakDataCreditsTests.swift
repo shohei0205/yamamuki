@@ -61,17 +61,16 @@ final class PeakDataCreditsTests: XCTestCase {
         let bytes = Data(manifest.utf8)
         let installed = InstalledPeakData(version: "v", sourceTimestamp: "", mountainCount: 1, manifestEtag: nil,
                                           installedAt: Date(), manifestSha256: PeakData.sha256Hex(bytes))
-        let archived = ArchivedPeakData(manifest: bytes, data: Data())
-        XCTAssertEqual(PeakDataCreditsReader.read(installed: installed, archived: archived)?.license, "ODbL-1.0")
+        XCTAssertEqual(PeakDataCreditsReader.read(installed: installed, manifest: bytes)?.license, "ODbL-1.0")
         // 取り込み済みの記録が無い・manifest が残っていない・別の版の manifest のときは読まない。
         var noSha = installed
         noSha.manifestSha256 = nil
         var otherSha = installed
         otherSha.manifestSha256 = String(repeating: "0", count: 64)
-        XCTAssertNil(PeakDataCreditsReader.read(installed: nil, archived: archived))
-        XCTAssertNil(PeakDataCreditsReader.read(installed: noSha, archived: archived))
-        XCTAssertNil(PeakDataCreditsReader.read(installed: installed, archived: nil))
-        XCTAssertNil(PeakDataCreditsReader.read(installed: otherSha, archived: archived))
+        XCTAssertNil(PeakDataCreditsReader.read(installed: nil, manifest: bytes))
+        XCTAssertNil(PeakDataCreditsReader.read(installed: noSha, manifest: bytes))
+        XCTAssertNil(PeakDataCreditsReader.read(installed: installed, manifest: nil))
+        XCTAssertNil(PeakDataCreditsReader.read(installed: otherSha, manifest: bytes))
     }
 
     func testSplitsUrlsOutOfText() {

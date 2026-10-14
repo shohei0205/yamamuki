@@ -390,7 +390,17 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(kept, ArchivedPeakData(manifest: manifest(), data: gzip), "前の組は置き換える")
         let files = try FileManager.default.contentsOfDirectory(atPath: folder.path)
         XCTAssertEqual(Set(files), [FilePeakDataArchive.manifestName, FilePeakDataArchive.dataName], "一時ファイルを残さない")
-        // 片方だけでは読まない。
+        // manifest だけなら gz が無くても読める。
+        try FileManager.default.removeItem(at: folder.appendingPathComponent(FilePeakDataArchive.dataName))
+        let manifestOnly = await archive.readManifest()
+        XCTAssertEqual(manifestOnly, manifest())
+        // 組は片方だけでは読まない。
+        let noGz = await archive.read()
+        XCTAssertNil(noGz)
+        try FileManager.default.removeItem(at: folder.appendingPathComponent(FilePeakDataArchive.manifestName))
+        let noManifest = await archive.readManifest()
+        XCTAssertNil(noManifest)
+        await archive.write(manifest: manifest(), data: gzip)
         try FileManager.default.removeItem(at: folder.appendingPathComponent(FilePeakDataArchive.manifestName))
         let half = await archive.read()
         XCTAssertNil(half)
