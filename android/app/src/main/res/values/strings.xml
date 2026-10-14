@@ -152,7 +152,7 @@
     <string name="credits_source">資料</string>
     <string name="credits_changes">加工</string>
     <string name="credits_not_installed">まだ山データを取得していません。取得すると、データの版と補足に使った資料も表示します。</string>
-    <string name="credits_missing">この山データには出典の情報が残っていません。次に新しい山データを取り込むと表示します。</string>
+    <string name="credits_missing">出典情報の取得に失敗</string>
     <string name="credits_no_supplements">このデータには、補足に使った資料はありません。</string>
 
     <!-- 事前ダウンロード -->

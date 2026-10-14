@@ -249,7 +249,7 @@ Android 版では、山データのキャッシュと、事前ダウンロード
 - 「山データ」には、manifest のトップレベルの `license`・`attribution`・`sourceUrl` と、リリース日（データを作った日）を出す。
 - 「補足に使った資料」には、manifest の `supplementSources`（タグ・よみがななどの補足に使った Wikipedia などの資料）を、出典 ID の名前順（文字コード順）に 1 件ずつ出す。項目は資料（`source`）・ライセンス（`license`）・著作者（`attribution`）・加工（`changes`）で、空の項目は出さない。値は省略せずに出し、文中の http(s) の URL はタップでブラウザに開けるリンクにする。
 - `supplementSources` の無いデータでは「補足に使った資料はありません」と出す。
-- 山データをまだ取得していないとき、出典を残す前の版のアプリで取り込んだときは、アプリが持つ「山データ © OpenStreetMap contributors (ODbL)」と OpenStreetMap の著作権のページを出す。行は山データが無くてもいつでも押せる。
+- 山データをまだ取得していないとき、端末に残した manifest が無いか読めないとき（出典を残す前の版のアプリで取り込んだときなど）は、アプリが持つ「山データ © OpenStreetMap contributors (ODbL)」と OpenStreetMap の著作権のページを出す。未取得なら取得を促す一文を、manifest が読めなければ「出典情報の取得に失敗」と添える。行は山データが無くてもいつでも押せる。
 - 読み込みは `android/core/.../PeakDataCredits.kt` と `ios/YamamukiCore/.../PeakDataCredits.swift`、画面は `CreditsScreen.kt` / `CreditsView.swift` にある。
 
 ## 方位盤のモードと手動操作（Android・iOS）
