@@ -461,6 +461,13 @@ final class DialModel: ObservableObject {
         refreshPeakGroups()
     }
 
+    /// 取り込み済みの山データの出典を、端末に残した manifest から読む(通信はしない)。
+    func peakDataCredits() async -> PeakDataCredits? {
+        let installed = peakDataStore.load()
+        let archived = await peakDataStore.archive.read()
+        return PeakDataCreditsReader.read(installed: installed, archived: archived)
+    }
+
     /// 保存している山データから山のグループの一覧を作り直し、方位盤の絞り込みにも反映する。
     private func refreshPeakGroups() {
         Task { @MainActor [weak self] in

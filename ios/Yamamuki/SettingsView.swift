@@ -95,6 +95,12 @@ struct SettingsView: View {
                         Text(Strings.format("settings_version", appVersion))
                         Text(Strings.text("settings_data_license")).font(.footnote).foregroundStyle(.secondary)
                     }
+                    // 山データが無くても OSM の表示は見られるよう、いつでも押せる。
+                    NavigationLink {
+                        CreditsView(model: model)
+                    } label: {
+                        Text(Strings.text("settings_credits"))
+                    }
                 }
             }
             .navigationTitle(Strings.text("settings_title"))

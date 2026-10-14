@@ -386,6 +386,127 @@
         }
       }
     },
+    "credits_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "著作者"
+          }
+        }
+      }
+    },
+    "credits_changes": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加工"
+          }
+        }
+      }
+    },
+    "credits_license": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライセンス"
+          }
+        }
+      }
+    },
+    "credits_missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この山データには出典の情報が残っていません。次に新しい山データを取り込むと表示します。"
+          }
+        }
+      }
+    },
+    "credits_no_supplements": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデータには、補足に使った資料はありません。"
+          }
+        }
+      }
+    },
+    "credits_not_installed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まだ山データを取得していません。取得すると、データの版と補足に使った資料も表示します。"
+          }
+        }
+      }
+    },
+    "credits_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リリース"
+          }
+        }
+      }
+    },
+    "credits_section_data": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データ"
+          }
+        }
+      }
+    },
+    "credits_section_supplements": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "補足に使った資料"
+          }
+        }
+      }
+    },
+    "credits_source": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "資料"
+          }
+        }
+      }
+    },
+    "credits_source_url": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "元データ"
+          }
+        }
+      }
+    },
     "detail_coordinate": {
       "extractionState": "manual",
       "localizations": {
@@ -1384,6 +1505,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存データ"
+          }
+        }
+      }
+    },
+    "settings_credits": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "データの出典とライセンス"
           }
         }
       }

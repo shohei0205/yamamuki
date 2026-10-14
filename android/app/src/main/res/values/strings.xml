@@ -142,6 +142,18 @@
     <string name="settings_section_about">このアプリについて</string>
     <string name="settings_version">バージョン %1$s</string>
     <string name="settings_data_license">山データ © OpenStreetMap contributors (ODbL)</string>
+    <string name="settings_credits">データの出典とライセンス</string>
+    <string name="credits_section_data">山データ</string>
+    <string name="credits_section_supplements">補足に使った資料</string>
+    <string name="credits_release">リリース</string>
+    <string name="credits_license">ライセンス</string>
+    <string name="credits_attribution">著作者</string>
+    <string name="credits_source_url">元データ</string>
+    <string name="credits_source">資料</string>
+    <string name="credits_changes">加工</string>
+    <string name="credits_not_installed">まだ山データを取得していません。取得すると、データの版と補足に使った資料も表示します。</string>
+    <string name="credits_missing">この山データには出典の情報が残っていません。次に新しい山データを取り込むと表示します。</string>
+    <string name="credits_no_supplements">このデータには、補足に使った資料はありません。</string>
 
     <!-- 事前ダウンロード -->
     <string name="area_title">事前ダウンロード</string>

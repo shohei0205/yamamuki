@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.InstalledPeakData
+import io.github.shohei0205.yamamuki.core.PeakDataCredits
 import io.github.shohei0205.yamamuki.core.TagGroup
 import io.github.shohei0205.yamamuki.core.TagGroups
 import io.github.shohei0205.yamamuki.core.byteSizeText
@@ -82,12 +83,15 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     /** 保存している山データにある山のグループ。読み込み中は null、データにタグが無ければ空で、どちらも行を押せなくする。 */
     peakGroups: List<TagGroup>? = null,
+    /** 取り込み済みの山データの出典を、端末に残した manifest から読む。 */
+    loadCredits: suspend () -> PeakDataCredits? = { null },
 ) {
     BackHandler(onBack = onClose)
     LaunchedEffect(Unit) { onOpen() }
     var showPeakGroups by rememberSaveable { mutableStateOf(false) }
+    var showCredits by rememberSaveable { mutableStateOf(false) }
 
-    // グループの選択画面は、設定画面の上に重ねて出す。
+    // グループの選択画面と出典の画面は、設定画面の上に重ねて出す。
     Box(modifier.fillMaxSize()) {
     Surface(Modifier.fillMaxSize()) {
         Column(
@@ -173,6 +177,12 @@ fun SettingsScreen(
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_about))
             AboutSection()
+            // 山データが無くても OSM の表示は見られるよう、いつでも押せる。
+            NavigationRow(
+                title = stringResource(R.string.settings_credits),
+                value = "",
+                onClick = { showCredits = true },
+            )
         }
     }
 
@@ -183,6 +193,10 @@ fun SettingsScreen(
             onChange = { v -> onSettingsChange { it.copy(peakGroups = v) } },
             onBack = { showPeakGroups = false },
         )
+    }
+
+    if (showCredits) {
+        CreditsScreen(peakData = peakData, loadCredits = loadCredits, onBack = { showCredits = false })
     }
     }
 }
