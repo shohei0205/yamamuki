@@ -452,6 +452,17 @@
         }
       }
     },
+    "credits_osm_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データ © OpenStreetMap contributors (ODbL)"
+          }
+        }
+      }
+    },
     "credits_release": {
       "extractionState": "manual",
       "localizations": {
@@ -1516,17 +1527,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "データの出典とライセンス"
-          }
-        }
-      }
-    },
-    "settings_data_license": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "山データ © OpenStreetMap contributors (ODbL)"
           }
         }
       }

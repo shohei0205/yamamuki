@@ -56,7 +56,7 @@ struct CreditsView: View {
             case .loaded(nil):
                 // 山データが無い・出典が残っていないときも、アプリが持つ OSM の表示は出す。
                 Section {
-                    CreditsItems(items: [CreditsItem(Strings.text("credits_attribution"), "\(Strings.text("settings_data_license")) \(osmCopyrightUrl)")])
+                    CreditsItems(items: [CreditsItem(Strings.text("credits_attribution"), "\(Strings.text("credits_osm_attribution")) \(osmCopyrightUrl)")])
                 } header: {
                     Text(Strings.text("credits_section_data"))
                 } footer: {

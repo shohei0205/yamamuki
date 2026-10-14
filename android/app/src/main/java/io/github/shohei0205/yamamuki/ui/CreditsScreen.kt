@@ -106,7 +106,7 @@ fun CreditsScreen(
                 // 山データが無い・出典が残っていないときも、アプリが持つ OSM の表示は出す。
                 CreditsCard(
                     title = null,
-                    items = listOf(R.string.credits_attribution to "${stringResource(R.string.settings_data_license)} $OSM_COPYRIGHT_URL"),
+                    items = listOf(R.string.credits_attribution to "${stringResource(R.string.credits_osm_attribution)} $OSM_COPYRIGHT_URL"),
                 )
                 Note(stringResource(if (peakData == null) R.string.credits_not_installed else R.string.credits_missing))
             }
