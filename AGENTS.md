@@ -25,6 +25,7 @@
 - ユーザーとのやり取り、コミットメッセージ、PR のタイトルと説明、コードのコメント、画面の文言は日本語で書く。
 - 文体は決めない。簡潔で分かりやすく書き、専門用語より普段の言葉を選ぶ。
 - Issue や PR を指すときは、同じリポジトリなら `#番号`、別リポジトリなら `owner/repo#番号` を使う（例: `shohei0205/yamamuki-data#68`）。README などの Markdown、Issue・PR の本文、GitHub のコメントも同じ。`yamamuki-data の #68` のように書くと、`#68` だけが投稿先や閲覧中のリポジトリにリンクされる。
+- PR で Issue を閉じる `Closes` は、同じリポジトリのときだけ使う（`Closes #番号`）。別リポジトリの Issue には `Closes` を付けない。
 - コミットと PR のタイトルは、何が変わるかを一文で書く（例:「双眼鏡をタップすると現在地の緯度経度と標高を表示する」）。
 - 画面に出す文言はコードに直接書かず、Android は `android/app/src/main/res/values/strings.xml`、iOS は `ios/Yamamuki/Localizable.xcstrings` に書き、コードからはキーで引く（iOS は `Strings.text` / `Strings.format`）。
   - キー名は両 OS で同じにし、同じキーには同じ文言を入れる。OS で文言を変えるときは別のキーにする。片方の OS だけの文言は、`.github/scripts/check-ui-strings.py` の `PLATFORM_ONLY` に理由と一緒に書く。
@@ -167,7 +168,7 @@ git fetch origin main && .github/scripts/peak_data.py check --base origin/main
 - PR はユーザーが明示的に作成を指示した場合だけ作成する。ドラフト PR も同様。
 - 「修正して」「ブランチを作成して」という依頼に、PR 作成の許可は含まれない。作業が終わったら PR は作らず、ブランチ名と変更内容を伝える。
 - 1 つの PR には 1 つの目的だけを入れる。ついでのリファクタリングや整形は別の PR にする。
-- PR の説明は `.github/pull_request_template.md` の見出し（何を変えたか・対象・確認方法・スクリーンショット）に沿って書く。
+- PR の説明は `.github/pull_request_template.md` の見出し（何を変えたか・対象・確認方法・スクリーンショット）に沿って書く。`Closes` の使い方は「言葉づかい」に従う。
 - PR の件名と本文は、スキル `pr-description`（`.agents/skills/pr-description/SKILL.md`）の手順でコミットから作る。PR を作るときや本文を書き直すときは、覚えている書き方で済ませず、毎回このスキルを読む。
   - コミットが複数ある PR は、本文の最後に「マージ時のコミット」の候補を入れる。候補は、マージ画面の欄に合わせて「Commit message」（件名と `(#PR 番号)`）と「Extended description」（本文・検証・作成者）の 2 つのコードブロックに分ける。件名と本文を 1 つのブロックにまとめない。
 - マージはユーザーが行う（スカッシュマージ）。エージェントは PR をマージしない。
