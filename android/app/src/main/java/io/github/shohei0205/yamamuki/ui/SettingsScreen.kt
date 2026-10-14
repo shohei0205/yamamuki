@@ -230,10 +230,8 @@ private fun AboutSection() {
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
         "${info.versionName} (${PackageInfoCompat.getLongVersionCode(info)})"
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(stringResource(R.string.settings_version, version), style = MaterialTheme.typography.bodyLarge)
-        Text(stringResource(R.string.settings_data_license), style = MaterialTheme.typography.bodySmall)
-    }
+    // 山データの著作者表示は方位盤と「データの出典とライセンス」の画面に出すので、ここには出さない。
+    Text(stringResource(R.string.settings_version, version), style = MaterialTheme.typography.bodyLarge)
 }
 
 @Composable
