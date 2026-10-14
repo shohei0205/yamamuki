@@ -166,6 +166,11 @@ git fetch origin main && .github/scripts/peak_data.py check --base origin/main
 - PR はユーザーが明示的に作成を指示した場合だけ作成する。ドラフト PR も同様。
 - 「修正して」「ブランチを作成して」という依頼に、PR 作成の許可は含まれない。作業が終わったら PR は作らず、ブランチ名と変更内容を伝える。
 - 1 つの PR には 1 つの目的だけを入れる。ついでのリファクタリングや整形は別の PR にする。
+- 別のリポジトリの Issue に関わる作業も、作業するリポジトリに Issue を作り、その Issue を PR で閉じる（`Closes #番号`）。Issue・PR・main のコミットが 1 つのリポジトリにそろい、あとから履歴を追いやすいため。
+  - 作業用の Issue の本文には、元の Issue を `owner/repo#番号` で書く（例: `元の Issue: shohei0205/yamamuki-data#68`）。閉じるキーワード（`Closes`・`Fixes` など）は付けない。
+  - PR の本文やコミットメッセージには、別のリポジトリの Issue や PR を書かない。元の Issue は作業用の Issue からたどる。
+  - 別のリポジトリの Issue を閉じるキーワードは使わない（`Closes owner/repo#番号` など）。マージすると相手の Issue が自動で閉じ、そのリポジトリの担当者の判断を飛ばしてしまう。
+  - PR が main に入ったら、元の Issue に main のコミットを `owner/repo@コミット ID` の形で書き（例: `shohei0205/yamamuki@1a2b3c4 で対応しました`）、閉じる。そのリポジトリに担当者がいるときは、閉じるかどうかを任せる。スカッシュマージなので main のコミットは 1 つに決まり、指す先があとから変わらない。
 - PR の説明は `.github/pull_request_template.md` の見出し（何を変えたか・対象・確認方法・スクリーンショット）に沿って書く。
 - PR の件名と本文は、スキル `pr-description`（`.agents/skills/pr-description/SKILL.md`）の手順でコミットから作る。PR を作るときや本文を書き直すときは、覚えている書き方で済ませず、毎回このスキルを読む。
   - コミットが複数ある PR は、本文の最後に「マージ時のコミット」の候補を入れる。候補は、マージ画面の欄に合わせて「Commit message」（件名と `(#PR 番号)`）と「Extended description」（本文・検証・作成者）の 2 つのコードブロックに分ける。件名と本文を 1 つのブロックにまとめない。
