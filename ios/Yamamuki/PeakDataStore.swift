@@ -6,6 +6,8 @@ import YamamukiCore
 struct PeakDataStore {
     private let defaults = UserDefaults.standard
     private let key = "peakData"
+    private let autoCheckedAtKey = "peakDataAutoCheckedAt"
+    private let updateFoundKey = "peakDataUpdateFound"
     private let archiveDirectory: URL = {
         var directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("peak-data", isDirectory: true)
@@ -26,9 +28,23 @@ struct PeakDataStore {
         if let encoded = try? JSONEncoder().encode(data) { defaults.set(encoded, forKey: key) }
     }
 
+    /// 自動の確認で、最後に確かめられた日時。まだ確かめていなければ nil。
+    var autoCheckedAt: Date? { defaults.object(forKey: autoCheckedAtKey) as? Date }
+
+    /// 自動の確認で新しい版が見つかり、まだ取り込んでいない。アプリを開き直しても方位盤のラベルを出し続ける。
+    var updateFound: Bool { defaults.bool(forKey: updateFoundKey) }
+
+    /// 更新を確かめた結果を覚える。`checkedAt` が nil なら、確かめた日時は変えない(利用者が頼んだ確認のとき)。
+    func saveCheckResult(updateFound: Bool, checkedAt: Date? = nil) {
+        defaults.set(updateFound, forKey: updateFoundKey)
+        if let checkedAt { defaults.set(checkedAt, forKey: autoCheckedAtKey) }
+    }
+
     /// 記録と、残した manifest と gz を消す。
     func clear() {
         defaults.removeObject(forKey: key)
+        defaults.removeObject(forKey: autoCheckedAtKey)
+        defaults.removeObject(forKey: updateFoundKey)
         for name in [FilePeakDataArchive.manifestName, FilePeakDataArchive.dataName] {
             try? FileManager.default.removeItem(at: archiveDirectory.appendingPathComponent(name))
         }

@@ -176,6 +176,22 @@ object PeakData {
 
     private val RELEASE_DATE = Regex("^(\\d{4})(\\d{2})(\\d{2})T\\d{6}Z")
 
+    /**
+     * 設定で自動の確認をオンにしたとき、新しい山データがあるかを確かめる間隔(30 日)。
+     * 読むのは参照先ファイル(数百バイト)で、山データはそれほど頻繁に更新しないので、月に 1 回ほどで足りる。
+     */
+    const val AUTO_CHECK_INTERVAL_MILLIS = 30L * 24 * 60 * 60 * 1000
+
+    /**
+     * 自動の確認をする時期か。まだ確かめたことが無い([lastCheckedAtMillis] が null)か、前回から
+     * [AUTO_CHECK_INTERVAL_MILLIS] 以上たったら確かめる。端末の時計が戻って前回が未来になったときも確かめる
+     * (そのままだと、時計が追いつくまで確かめなくなるため)。
+     */
+    fun autoCheckDue(lastCheckedAtMillis: Long?, nowMillis: Long): Boolean {
+        if (lastCheckedAtMillis == null || lastCheckedAtMillis > nowMillis) return true
+        return nowMillis - lastCheckedAtMillis >= AUTO_CHECK_INTERVAL_MILLIS
+    }
+
     /** SHA-256 を小文字の16進数で返す。 */
     fun sha256Hex(data: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { "%02x".format(it) }

@@ -91,6 +91,8 @@ data class DialUiState(
     val peakDataOffer: PeakManifest? = null,
     /** 設定画面に出す、山データの取得の結果(「山データは最新です」など)。 */
     val peakDataNotice: String? = null,
+    /** 自動の確認で新しい山データが見つかり、まだ取り込んでいない。設定で自動の確認をオンにしているときだけ方位盤に出す。 */
+    val peakDataUpdateFound: Boolean = false,
     /** 山データの取得に失敗したときに画面中央で知らせる文言。閉じるまで保つ。 */
     val fetchErrorMessage: String? = null,
     /** 範囲内に一度も取得できていない地域がある。 */
@@ -127,6 +129,13 @@ data class SearchUiState(
 val DialUiState.peakDataRefreshNeeded: Boolean
     get() = !peakDataUpdating && peakData != null && peakData.readerVersion < PeakData.READER_VERSION
 
+/**
+ * 自動の確認で見つかった新しい山データを、方位盤のラベルで知らせる。取り直しが要るとき([peakDataRefreshNeeded])は
+ * そちらのラベルを出すので出さない。設定で自動の確認をオフにしたときと、取得中も出さない。
+ */
+val DialUiState.peakDataUpdateLabelShown: Boolean
+    get() = settings.autoCheckPeakData && peakDataUpdateFound && !peakDataUpdating && !peakDataRefreshNeeded
+
 /** 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ。 */
 class DialViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as YamamukiApp
@@ -136,7 +145,12 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _state = MutableStateFlow(
         appSettings.settings.value.let {
-            DialUiState(settings = it, rangeKm = it.initialRangeKm.toDouble(), peakData = app.peakDataStore.load())
+            DialUiState(
+                settings = it,
+                rangeKm = it.initialRangeKm.toDouble(),
+                peakData = app.peakDataStore.load(),
+                peakDataUpdateFound = app.peakDataStore.updateFound(),
+            )
         },
     )
     val state: StateFlow<DialUiState> = _state.asStateFlow()
@@ -152,6 +166,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     private var peakDataOffer: PeakDataOffer? = null
     /** ダウンロードすると答えたのに取り込めなかった版。「もう一度取得」では確認を飛ばして、この版を取り直す。 */
     private var failedOffer: PeakDataOffer? = null
+    /** 自動の確認。利用者が頼んだ取得を始めたら取り消す(古い記録で上書きしないように)。 */
+    private var autoCheckJob: Job? = null
 
     /** 検索画面を開いている間だけ持つ、全件の山の検索の下ごしらえ。 */
     private var searchIndex: MountainSearch? = null
@@ -198,6 +214,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     private fun onConnectivity(connected: Boolean) {
         if (connected == _state.value.connected) return
         _state.update { it.copy(connected = connected) }
+        // 圏外で確かめられなかった分を、つながったときに確かめる(前回から 30 日たっていなければ何もしない)。
+        if (connected) autoCheckPeakData()
     }
 
     fun onLocation(newPoint: GeoPoint) {
@@ -472,6 +490,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(rangeKm = after.initialRangeKm.toDouble()) }
             if (DialGeometry.fetchRadiusKm(after.initialRangeKm.toDouble()) > fetchedRadiusKm) fetch()
         }
+        // 自動の確認をオンにしたら、次にアプリを開くのを待たずに確かめる(前回から 30 日たっていなければ何もしない)。
+        if (after.autoCheckPeakData && !before.autoCheckPeakData) autoCheckPeakData()
     }
 
     fun refreshCacheInfo() {
@@ -501,6 +521,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun clearCache() {
         fetchJob?.cancel()
+        autoCheckJob?.cancel()
         viewModelScope.launch {
             // 記録を先に消す。消している途中でアプリが終わっても、記録だけが残って「最新です」となり、
             // 取り直せなくなることがないように。
@@ -508,10 +529,46 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             cacheManager.clear(keep = app.savedAreas.tiles())
             peaks = emptyList()
             _state.update {
-                it.copy(mountains = emptyList(), summit = null, cacheInfo = cacheManager.info(), peakData = null, peakDataNotice = null)
+                it.copy(
+                    mountains = emptyList(), summit = null, cacheInfo = cacheManager.info(),
+                    peakData = null, peakDataNotice = null, peakDataUpdateFound = false,
+                )
             }
             refreshPeakGroups()
             fetch()
+        }
+    }
+
+    /**
+     * 設定で自動の確認をオンにしているとき、前回の確認から 30 日たっていれば、新しい山データがあるかを確かめる。
+     * アプリが前面に出たとき、通信できるようになったとき、設定をオンにしたときに呼ぶ。
+     * 確かめるだけで取り込まず、新しい版が見つかったら方位盤にラベルを出す(タップで「更新を確認」と同じ流れ)。
+     * 利用者が頼んだ通信ではないので、失敗しても知らせず、次の機会に確かめ直す。
+     * まだ山データを取得していないときと、取り直しが要るとき(そのラベルが出ている)は確かめない。
+     */
+    fun autoCheckPeakData() {
+        val s = _state.value
+        if (!s.settings.autoCheckPeakData || !s.connected || s.peakDataUpdating || autoCheckJob?.isActive == true) return
+        val installed = app.peakDataStore.load() ?: return
+        if (installed.readerVersion < PeakData.READER_VERSION) return
+        if (!PeakData.autoCheckDue(app.peakDataStore.autoCheckedAtMillis(), System.currentTimeMillis())) return
+        autoCheckJob = viewModelScope.launch {
+            try {
+                val found = when (val check = app.peakDataUpdater.check(installed)) {
+                    is PeakDataUpdater.Check.UpToDate -> {
+                        app.peakDataStore.save(check.installed)
+                        _state.update { it.copy(peakData = check.installed) }
+                        false
+                    }
+                    is PeakDataUpdater.Check.Available -> true
+                }
+                app.peakDataStore.saveCheckResult(found, checkedAtMillis = System.currentTimeMillis())
+                _state.update { it.copy(peakDataUpdateFound = found) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "山データの自動の確認に失敗\n${e.stackTraceToString()}")
+            }
         }
     }
 
@@ -568,7 +625,14 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             when (val check = app.peakDataUpdater.check(installed)) {
                 is PeakDataUpdater.Check.UpToDate -> {
                     app.peakDataStore.save(check.installed)
-                    _state.update { it.copy(peakData = check.installed, peakDataNotice = app.getString(R.string.peak_data_up_to_date)) }
+                    app.peakDataStore.saveCheckResult(updateFound = false)
+                    _state.update {
+                        it.copy(
+                            peakData = check.installed,
+                            peakDataNotice = app.getString(R.string.peak_data_up_to_date),
+                            peakDataUpdateFound = false,
+                        )
+                    }
                 }
                 is PeakDataUpdater.Check.Available -> {
                     peakDataOffer = check.offer
@@ -593,7 +657,10 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             val installed = app.peakDataUpdater.install(offer)
             failedOffer = null
             app.peakDataStore.save(installed)
-            _state.update { it.copy(peakData = installed, peakDataNotice = app.getString(R.string.peak_data_updated)) }
+            app.peakDataStore.saveCheckResult(updateFound = false)
+            _state.update {
+                it.copy(peakData = installed, peakDataNotice = app.getString(R.string.peak_data_updated), peakDataUpdateFound = false)
+            }
             reloadFromCache()
             refreshCacheInfo()
         }
@@ -606,6 +673,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(fetchErrorMessage = offlineNotice(peaks.isNotEmpty()), peakDataNotice = null) }
             return
         }
+        // 自動の確認が古い記録を保存して、これから取り込む版の記録を上書きしないよう取り消す。
+        autoCheckJob?.cancel()
         viewModelScope.launch {
             _state.update { it.copy(peakDataUpdating = true, peakDataNotice = null) }
             try {

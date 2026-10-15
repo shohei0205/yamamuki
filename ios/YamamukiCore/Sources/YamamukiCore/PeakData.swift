@@ -288,6 +288,18 @@ public enum PeakData {
         return "\(String(chars[0..<4]))/\(String(chars[4..<6]))/\(String(chars[6..<8]))"
     }
 
+    /// 設定で自動の確認をオンにしたとき、新しい山データがあるかを確かめる間隔(30 日)。
+    /// 読むのは参照先ファイル(数百バイト)で、山データはそれほど頻繁に更新しないので、月に 1 回ほどで足りる。
+    public static let autoCheckInterval: TimeInterval = 30 * 24 * 60 * 60
+
+    /// 自動の確認をする時期か。まだ確かめたことが無い(`lastCheckedAt` が nil)か、前回から
+    /// `autoCheckInterval` 以上たったら確かめる。端末の時計が戻って前回が未来になったときも確かめる
+    /// (そのままだと、時計が追いつくまで確かめなくなるため)。
+    public static func autoCheckDue(lastCheckedAt: Date?, now: Date) -> Bool {
+        guard let lastCheckedAt, lastCheckedAt <= now else { return true }
+        return now.timeIntervalSince(lastCheckedAt) >= autoCheckInterval
+    }
+
     static func sha256Hex(_ data: Data) -> String {
         #if canImport(CryptoKit)
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()

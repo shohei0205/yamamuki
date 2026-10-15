@@ -68,6 +68,10 @@ final class DialModel: ObservableObject {
     private var failedOffer: PeakDataOffer?
     /// 設定画面に出す、山データの取得の結果(「山データは最新です」など)。
     @Published private(set) var peakDataNotice: String?
+    /// 自動の確認で新しい山データが見つかり、まだ取り込んでいない。設定で自動の確認をオンにしているときだけ方位盤に出す。
+    @Published private(set) var peakDataUpdateFound = false
+    /// 自動の確認。利用者が頼んだ取得を始めたら取り消す(古い記録で上書きしないように)。
+    private var autoCheckTask: Task<Void, Never>?
     /// 山データの取得に失敗したときに画面中央で知らせる文言。閉じるまで保つ。
     @Published private(set) var fetchErrorMessage: String?
     /// 範囲内に一度も取得できていない地域がある。
@@ -90,6 +94,12 @@ final class DialModel: ObservableObject {
     var peakDataRefreshNeeded: Bool {
         guard let peakData, !peakDataUpdating else { return false }
         return peakData.readerVersion < PeakData.readerVersion
+    }
+
+    /// 自動の確認で見つかった新しい山データを、方位盤のラベルで知らせる。取り直しが要るとき(`peakDataRefreshNeeded`)は
+    /// そちらのラベルを出すので出さない。設定で自動の確認をオフにしたときと、取得中も出さない。
+    var peakDataUpdateLabelShown: Bool {
+        settings.autoCheckPeakData && peakDataUpdateFound && !peakDataUpdating && !peakDataRefreshNeeded
     }
 
     private let cache: FileMountainCache
@@ -140,6 +150,7 @@ final class DialModel: ObservableObject {
             archive: peakDataStore.archive
         )
         peakData = peakDataStore.load()
+        peakDataUpdateFound = peakDataStore.updateFound
         areaDownload = AreaDownloadModel(repository: repository, cache: cache)
         let saved = SettingsStore().load()
         settings = saved
@@ -171,6 +182,8 @@ final class DialModel: ObservableObject {
             locationService.requestAuthorization()
         }
         locationService.start()
+        // 設定で選んでいれば、新しい山データがあるかを確かめる(前回から 30 日たっていなければ何もしない)。
+        autoCheckPeakData()
     }
 
     func stop() {
@@ -203,6 +216,8 @@ final class DialModel: ObservableObject {
     private func onConnectivity(_ connected: Bool) {
         guard connected != isConnected else { return }
         isConnected = connected
+        // 圏外で確かめられなかった分を、つながったときに確かめる(前回から 30 日たっていなければ何もしない)。
+        if connected { autoCheckPeakData() }
     }
 
     /// ピンチの倍率(前回からの変化分)。
@@ -452,6 +467,8 @@ final class DialModel: ObservableObject {
             rangeKm = Double(after.initialRangeKm)
             if DialGeometry.fetchRadiusKm(rangeKm) > fetchedRadiusKm { fetch() }
         }
+        // 自動の確認をオンにしたら、次にアプリを開くのを待たずに確かめる(前回から 30 日たっていなければ何もしない)。
+        if after.autoCheckPeakData && !before.autoCheckPeakData { autoCheckPeakData() }
     }
 
     func refreshCacheInfo() {
@@ -482,6 +499,7 @@ final class DialModel: ObservableObject {
     /// 全国の山データも消えるので、取り込み済みの記録も消し、設定画面から取り直せるようにする。
     func clearCache() {
         fetchTask?.cancel()
+        autoCheckTask?.cancel()
         let keep = areaDownload.savedTiles
         Task { @MainActor in
             // 記録を先に消す。消している途中でアプリが終わっても、記録だけが残って「最新です」となり、
@@ -490,6 +508,7 @@ final class DialModel: ObservableObject {
             await cache.clear(keeping: keep)
             peakData = nil
             peakDataNotice = nil
+            peakDataUpdateFound = false
             peaks = []
             mountains = []
             summit = nil
@@ -572,6 +591,40 @@ final class DialModel: ObservableObject {
         }
     }
 
+    /// 設定で自動の確認をオンにしているとき、前回の確認から 30 日たっていれば、新しい山データがあるかを確かめる。
+    /// アプリが前面に出たとき、通信できるようになったとき、設定をオンにしたときに呼ぶ。
+    /// 確かめるだけで取り込まず、新しい版が見つかったら方位盤にラベルを出す(タップで「更新を確認」と同じ流れ)。
+    /// 利用者が頼んだ通信ではないので、失敗しても知らせず、次の機会に確かめ直す。
+    /// まだ山データを取得していないときと、取り直しが要るとき(そのラベルが出ている)は確かめない。
+    func autoCheckPeakData() {
+        guard settings.autoCheckPeakData, isConnected, !peakDataUpdating, autoCheckTask == nil,
+              let installed = peakDataStore.load(), installed.readerVersion >= PeakData.readerVersion,
+              PeakData.autoCheckDue(lastCheckedAt: peakDataStore.autoCheckedAt, now: Date())
+        else { return }
+        autoCheckTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { autoCheckTask = nil }
+            do {
+                let found: Bool
+                let check = try await peakDataUpdater.check(installed: installed)
+                // 利用者が頼んだ取得や消去が始まっていたら、古い記録で上書きしない。
+                guard !Task.isCancelled else { return }
+                switch check {
+                case .upToDate(let latest):
+                    peakDataStore.save(latest)
+                    peakData = latest
+                    found = false
+                case .available:
+                    found = true
+                }
+                peakDataStore.saveCheckResult(updateFound: found, checkedAt: Date())
+                peakDataUpdateFound = found
+            } catch {
+                logger.warning("山データの自動の確認に失敗: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
     /// 全国の山データの最新版を確かめる。初回の問い合わせと設定画面のボタンから呼ぶ。
     /// manifest だけを取り、新しい版があれば大きさを見せて、ダウンロードするかを聞く(`answerPeakDataOffer`)。
     /// 圏外と分かっていれば通信を試さずに知らせる。失敗しても、取り込み済みのデータはそのまま残る。
@@ -584,8 +637,10 @@ final class DialModel: ObservableObject {
             switch try await peakDataUpdater.check(installed: hasMountains ? installed : nil) {
             case .upToDate(let latest):
                 peakDataStore.save(latest)
+                peakDataStore.saveCheckResult(updateFound: false)
                 peakData = latest
                 peakDataNotice = Strings.text("peak_data_up_to_date")
+                peakDataUpdateFound = false
             case .available(let offer):
                 peakDataOffer = offer
             }
@@ -606,7 +661,9 @@ final class DialModel: ObservableObject {
             let installed = try await peakDataUpdater.install(offer)
             failedOffer = nil
             peakDataStore.save(installed)
+            peakDataStore.saveCheckResult(updateFound: false)
             peakData = installed
+            peakDataUpdateFound = false
             peakDataNotice = Strings.text("peak_data_updated")
             reloadFromCache()
             refreshCacheInfo()
@@ -621,6 +678,8 @@ final class DialModel: ObservableObject {
             peakDataNotice = nil
             return
         }
+        // 自動の確認が古い記録を保存して、これから取り込む版の記録を上書きしないよう取り消す。
+        autoCheckTask?.cancel()
         peakDataUpdating = true
         peakDataNotice = nil
         Task { @MainActor [weak self] in
