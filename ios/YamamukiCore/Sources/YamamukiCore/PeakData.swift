@@ -288,9 +288,9 @@ public enum PeakData {
         return "\(String(chars[0..<4]))/\(String(chars[4..<6]))/\(String(chars[6..<8]))"
     }
 
-    /// 設定で自動の確認をオンにしたとき、新しい山データがあるかを確かめる間隔(24 時間)。
-    /// 読むのは参照先ファイル(数百バイト)で、stable の差し替えは手作業の PR でしか変わらないので、1 日 1 回で足りる。
-    public static let autoCheckInterval: TimeInterval = 24 * 60 * 60
+    /// 設定で自動の確認をオンにしたとき、新しい山データがあるかを確かめる間隔(30 日)。
+    /// 読むのは参照先ファイル(数百バイト)で、山データはそれほど頻繁に更新しないので、月に 1 回ほどで足りる。
+    public static let autoCheckInterval: TimeInterval = 30 * 24 * 60 * 60
 
     /// 自動の確認をする時期か。まだ確かめたことが無い(`lastCheckedAt` が nil)か、前回から
     /// `autoCheckInterval` 以上たったら確かめる。端末の時計が戻って前回が未来になったときも確かめる

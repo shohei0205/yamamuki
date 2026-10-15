@@ -244,12 +244,12 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(installed.releaseDate, "2026/10/07")
     }
 
-    func testAutoCheckIsDueOncePerDay() {
+    func testAutoCheckIsDueOncePerMonth() {
         let day = PeakData.autoCheckInterval
         let now = Date(timeIntervalSince1970: 10 * day)
         // まだ確かめたことが無ければ確かめる。
         XCTAssertTrue(PeakData.autoCheckDue(lastCheckedAt: nil, now: now))
-        // 前回から 24 時間たつまでは確かめない。
+        // 前回から 30 日たつまでは確かめない。
         XCTAssertFalse(PeakData.autoCheckDue(lastCheckedAt: now, now: now))
         XCTAssertFalse(PeakData.autoCheckDue(lastCheckedAt: now.addingTimeInterval(-day + 1), now: now))
         XCTAssertTrue(PeakData.autoCheckDue(lastCheckedAt: now.addingTimeInterval(-day), now: now))

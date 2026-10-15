@@ -182,7 +182,7 @@ final class DialModel: ObservableObject {
             locationService.requestAuthorization()
         }
         locationService.start()
-        // 設定で選んでいれば、新しい山データがあるかを確かめる(前回から 1 日たっていなければ何もしない)。
+        // 設定で選んでいれば、新しい山データがあるかを確かめる(前回から 30 日たっていなければ何もしない)。
         autoCheckPeakData()
     }
 
@@ -216,7 +216,7 @@ final class DialModel: ObservableObject {
     private func onConnectivity(_ connected: Bool) {
         guard connected != isConnected else { return }
         isConnected = connected
-        // 圏外で確かめられなかった分を、つながったときに確かめる(前回から 1 日たっていなければ何もしない)。
+        // 圏外で確かめられなかった分を、つながったときに確かめる(前回から 30 日たっていなければ何もしない)。
         if connected { autoCheckPeakData() }
     }
 
@@ -591,7 +591,7 @@ final class DialModel: ObservableObject {
         }
     }
 
-    /// 設定で自動の確認をオンにしているとき、前回の確認から 1 日たっていれば、新しい山データがあるかを確かめる。
+    /// 設定で自動の確認をオンにしているとき、前回の確認から 30 日たっていれば、新しい山データがあるかを確かめる。
     /// アプリが前面に出たとき、通信できるようになったとき、設定をオンにしたときに呼ぶ。
     /// 確かめるだけで取り込まず、新しい版が見つかったら方位盤にラベルを出す(タップで「更新を確認」と同じ流れ)。
     /// 利用者が頼んだ通信ではないので、失敗しても知らせず、次の機会に確かめ直す。

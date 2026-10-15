@@ -158,7 +158,7 @@ fun DialScreen(
     LaunchedEffect(peakDataAsked) {
         if (peakDataAsked && !hasPermission) permissionLauncher.launch(LOCATION_PERMISSIONS)
     }
-    // アプリが前面に出るたびに、設定で選んでいれば新しい山データがあるかを確かめる(前回から 1 日たっていなければ何もしない)。
+    // アプリが前面に出るたびに、設定で選んでいれば新しい山データがあるかを確かめる(前回から 30 日たっていなければ何もしない)。
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.autoCheckPeakData() }
     }

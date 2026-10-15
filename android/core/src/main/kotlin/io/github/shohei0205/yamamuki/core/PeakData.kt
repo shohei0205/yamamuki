@@ -177,10 +177,10 @@ object PeakData {
     private val RELEASE_DATE = Regex("^(\\d{4})(\\d{2})(\\d{2})T\\d{6}Z")
 
     /**
-     * 設定で自動の確認をオンにしたとき、新しい山データがあるかを確かめる間隔(24 時間)。
-     * 読むのは参照先ファイル(数百バイト)で、stable の差し替えは手作業の PR でしか変わらないので、1 日 1 回で足りる。
+     * 設定で自動の確認をオンにしたとき、新しい山データがあるかを確かめる間隔(30 日)。
+     * 読むのは参照先ファイル(数百バイト)で、山データはそれほど頻繁に更新しないので、月に 1 回ほどで足りる。
      */
-    const val AUTO_CHECK_INTERVAL_MILLIS = 24 * 60 * 60 * 1000L
+    const val AUTO_CHECK_INTERVAL_MILLIS = 30L * 24 * 60 * 60 * 1000
 
     /**
      * 自動の確認をする時期か。まだ確かめたことが無い([lastCheckedAtMillis] が null)か、前回から

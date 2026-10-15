@@ -21,7 +21,7 @@ struct Settings: Codable, Equatable {
     var peakDataAsked = false
     /// 方位盤に出す山のグループ(地点のタグ)。どれかを持つ山だけを出す。空なら絞り込まない。
     var peakGroups: Set<String> = []
-    /// アプリを開いたときに、新しい山データがあるかを自動で確かめる(1 日 1 回、取り込みはしない)。
+    /// アプリを開いたときに、新しい山データがあるかを自動で確かめる(30 日に 1 回、取り込みはしない)。
     var autoCheckPeakData = false
 
     static let textScales = [0.85, 1.0, 1.2, 1.4]

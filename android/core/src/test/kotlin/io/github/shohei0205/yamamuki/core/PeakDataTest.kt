@@ -256,12 +256,12 @@ class PeakDataTest {
     }
 
     @Test
-    fun autoCheckIsDueOncePerDay() {
+    fun autoCheckIsDueOncePerMonth() {
         val day = PeakData.AUTO_CHECK_INTERVAL_MILLIS
         val now = 10 * day
         // まだ確かめたことが無ければ確かめる。
         assertTrue(PeakData.autoCheckDue(null, now))
-        // 前回から 24 時間たつまでは確かめない。
+        // 前回から 30 日たつまでは確かめない。
         assertFalse(PeakData.autoCheckDue(now, now))
         assertFalse(PeakData.autoCheckDue(now - day + 1, now))
         assertTrue(PeakData.autoCheckDue(now - day, now))

@@ -28,7 +28,7 @@ data class Settings(
     val peakDataAsked: Boolean = false,
     /** 方位盤に出す山のグループ(地点のタグ)。どれかを持つ山だけを出す。空なら絞り込まない。 */
     val peakGroups: Set<String> = emptySet(),
-    /** アプリを開いたときに、新しい山データがあるかを自動で確かめる(1 日 1 回、取り込みはしない)。 */
+    /** アプリを開いたときに、新しい山データがあるかを自動で確かめる(30 日に 1 回、取り込みはしない)。 */
     val autoCheckPeakData: Boolean = false,
 ) {
     companion object {
