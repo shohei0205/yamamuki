@@ -1531,6 +1531,72 @@
         }
       }
     },
+    "settings_grid_style": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "補助線"
+          }
+        }
+      }
+    },
+    "settings_grid_style_bearing_lines": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方位線"
+          }
+        }
+      }
+    },
+    "settings_grid_style_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方位線は 45° ごとの線と向いている方向の線、目盛りは円に 10° ごとの刻みを足します。"
+          }
+        }
+      }
+    },
+    "settings_grid_style_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "なし"
+          }
+        }
+      }
+    },
+    "settings_grid_style_ring_ticks": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目盛り"
+          }
+        }
+      }
+    },
+    "settings_grid_style_rings": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同心円"
+          }
+        }
+      }
+    },
     "settings_initial_range": {
       "extractionState": "manual",
       "localizations": {

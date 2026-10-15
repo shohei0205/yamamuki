@@ -18,6 +18,8 @@ data class Settings(
     val maxPeaks: Int = 15,
     /** 方位盤の文字の大きさ(標準 = 1.0 に対する倍率)。 */
     val textScale: Float = 1.0f,
+    /** 方位盤に引く補助線の種類。 */
+    val gridStyle: GridStyle = GridStyle.RINGS,
     /** 起動時の表示範囲(現在地から画面上端までの距離)。 */
     val initialRangeKm: Int = DialGeometry.DEFAULT_RANGE_KM.toInt(),
     /** 現在地と方位をどのくらいこまめに測るか。こまめなほど電池を使う。 */
@@ -44,6 +46,18 @@ enum class SensorPrecision(@StringRes val label: Int, val locationIntervalMs: Lo
     PRECISE(R.string.settings_sensor_precision_precise, 5_000L, 20),
 }
 
+/** 方位盤に引く補助線の種類。設定画面ではこの順に並ぶ。 */
+enum class GridStyle(@StringRes val label: Int) {
+    /** 距離の円(同心円)と距離の数字。 */
+    RINGS(R.string.settings_grid_style_rings),
+    /** 同心円に、45° ごとの方位線と、端末を向けている方向の線を足す。 */
+    BEARING_LINES(R.string.settings_grid_style_bearing_lines),
+    /** 同心円の内側に 10° ごとの刻みを入れる。 */
+    RING_TICKS(R.string.settings_grid_style_ring_ticks),
+    /** 補助線を引かない(距離の帯の色分けだけ残す)。 */
+    NONE(R.string.settings_grid_style_none),
+}
+
 /** [Settings] を端末内(SharedPreferences)に保存する。 */
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -59,6 +73,7 @@ class AppSettings(context: Context) {
             .putBoolean(KEY_KEEP_SCREEN_ON, next.keepScreenOn)
             .putInt(KEY_MAX_PEAKS, next.maxPeaks)
             .putFloat(KEY_TEXT_SCALE, next.textScale)
+            .putString(KEY_GRID_STYLE, next.gridStyle.name)
             .putInt(KEY_INITIAL_RANGE, next.initialRangeKm)
             .putInt(KEY_SENSOR_PRECISION, next.sensorPrecision.ordinal)
             .putBoolean(KEY_PEAK_DATA_ASKED, next.peakDataAsked)
@@ -74,6 +89,7 @@ class AppSettings(context: Context) {
             // 以前は山の数(10〜100)だった。山名の数に変えたので、今の範囲に収める。
             maxPeaks = prefs.getInt(KEY_MAX_PEAKS, d.maxPeaks).coerceIn(Settings.MAX_PEAKS_RANGE),
             textScale = prefs.getFloat(KEY_TEXT_SCALE, d.textScale),
+            gridStyle = GridStyle.entries.firstOrNull { it.name == prefs.getString(KEY_GRID_STYLE, null) } ?: d.gridStyle,
             initialRangeKm = prefs.getInt(KEY_INITIAL_RANGE, d.initialRangeKm),
             sensorPrecision = SensorPrecision.entries.getOrNull(prefs.getInt(KEY_SENSOR_PRECISION, -1))
                 ?: d.sensorPrecision,
@@ -88,6 +104,7 @@ class AppSettings(context: Context) {
         const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         const val KEY_MAX_PEAKS = "max_peaks"
         const val KEY_TEXT_SCALE = "text_scale"
+        const val KEY_GRID_STYLE = "grid_style"
         const val KEY_INITIAL_RANGE = "initial_range_km"
         const val KEY_SENSOR_PRECISION = "sensor_precision"
         const val KEY_PEAK_DATA_ASKED = "peak_data_asked"

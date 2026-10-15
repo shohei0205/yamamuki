@@ -40,6 +40,7 @@ struct DialView: View {
                     altitudeM: model.observer?.mslAltitudeM,
                     maxPeaks: model.settings.maxPeaks,
                     textScale: model.settings.textScale,
+                    gridStyle: model.settings.gridStyle,
                     // 双眼鏡の位置。検索位置モードでは選んだ山頂。
                     observerLocation: model.observer,
                     viewportLocation: model.location,

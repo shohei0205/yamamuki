@@ -298,6 +298,7 @@ fun DialScreen(
             altitudeM = location?.mslAltitudeM,
             maxPeaks = state.settings.maxPeaks,
             textScale = state.settings.textScale,
+            gridStyle = state.settings.gridStyle,
             latitude = location?.latitude,
             longitude = location?.longitude,
             viewportLatitude = state.location?.latitude,

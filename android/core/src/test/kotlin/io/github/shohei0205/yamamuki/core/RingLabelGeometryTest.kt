@@ -90,4 +90,22 @@ class RingLabelGeometryTest {
         assertNull(RingLabelGeometry.place(180.0, 748.0, 700.0, 0.0, 76.0, 360.0, 748.0, 60.0, 22.0, angle))
         assertNull(RingLabelGeometry.place(180.0, 748.0, 0.0, 0.0, 76.0, 360.0, 748.0, 60.0, 22.0, angle))
     }
+
+    @Test fun edgePutsLabelInsideScreenEdgeAlongTheRay() {
+        fun edge(cx: Double, cy: Double, angle: Double, minDistance: Double = 50.0) =
+            RingLabelGeometry.edge(cx, cy, 0.0, 76.0, 360.0, 748.0, 40.0, 20.0, angle, minDistance)
+        val up = assertNotNull(edge(180.0, 700.0, -PI / 2))
+        assertEquals(180.0, up.x, 1e-7)
+        assertEquals(86.0, up.y, 1e-7)
+        val right = assertNotNull(edge(180.0, 700.0, 0.0))
+        assertEquals(340.0, right.x, 1e-7)
+        assertEquals(700.0, right.y, 1e-7)
+        // 下へは縁まで近すぎるので省く。
+        assertNull(edge(180.0, 700.0, PI / 2))
+        assertEquals(738.0, assertNotNull(edge(180.0, 700.0, PI / 2, minDistance = 0.0)).y, 1e-7)
+        // 画面の外の中心からでも、画面を通る線には付ける。
+        val fromBelow = assertNotNull(edge(180.0, 900.0, -PI / 2))
+        assertEquals(86.0, fromBelow.y, 1e-7)
+        assertNull(edge(180.0, 900.0, 0.0))
+    }
 }

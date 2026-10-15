@@ -50,4 +50,25 @@ public enum RingLabelGeometry {
         guard x - width / 2 >= left, x + width / 2 <= right, y - height / 2 >= top, y + height / 2 <= bottom else { return nil }
         return RingLabelAnchor(x: x, y: y, angle: angle)
     }
+
+    /// 中心から `angle` の向きに伸ばした半直線が画面の縁に届く手前に、幅 `width`・高さ `height` の文字の中心を置く。
+    /// 方位線の方位名に使う。縁まで `minDistance` に満たない(線がほとんど見えない)ときと、半直線が画面に入らないときは省く。
+    public static func edge(cx: Double, cy: Double, left: Double, top: Double, right: Double, bottom: Double,
+        width: Double, height: Double, angle: Double, minDistance: Double = 0) -> RingLabelAnchor? {
+        guard [cx, cy, left, top, right, bottom, width, height, angle, minDistance].allSatisfy({ $0.isFinite }) else { return nil }
+        let l = left + width / 2, r = right - width / 2
+        let t = top + height / 2, b = bottom - height / 2
+        guard l <= r, t <= b else { return nil }
+        var near = 0.0
+        var far = Double.infinity
+        func clip(_ origin: Double, _ delta: Double, _ low: Double, _ high: Double) -> Bool {
+            if abs(delta) < 1e-9 { return origin >= low && origin <= high }
+            let p = (low - origin) / delta, q = (high - origin) / delta
+            near = max(near, min(p, q))
+            far = min(far, max(p, q))
+            return far >= near
+        }
+        guard clip(cx, cos(angle), l, r), clip(cy, sin(angle), t, b), far >= max(near, minDistance) else { return nil }
+        return RingLabelAnchor(x: cx + far * cos(angle), y: cy + far * sin(angle), angle: angle)
+    }
 }

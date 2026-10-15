@@ -45,4 +45,30 @@ object RingLabelGeometry {
         if (x - width / 2 < left || x + width / 2 > right || y - height / 2 < top || y + height / 2 > bottom) return null
         return RingLabelAnchor(x, y, angle)
     }
+
+    /**
+     * 中心から [angle] の向きに伸ばした半直線が画面の縁に届く手前に、幅 [width]・高さ [height] の文字の中心を置く。
+     * 方位線の方位名に使う。縁まで [minDistance] に満たない(線がほとんど見えない)ときと、半直線が画面に入らないときは省く。
+     */
+    fun edge(cx: Double, cy: Double, left: Double, top: Double, right: Double, bottom: Double,
+        width: Double, height: Double, angle: Double, minDistance: Double = 0.0): RingLabelAnchor? {
+        if (!listOf(cx, cy, left, top, right, bottom, width, height, angle, minDistance).all { it.isFinite() }) return null
+        val l = left + width / 2
+        val r = right - width / 2
+        val t = top + height / 2
+        val b = bottom - height / 2
+        if (l > r || t > b) return null
+        var near = 0.0
+        var far = Double.POSITIVE_INFINITY
+        fun clip(origin: Double, delta: Double, low: Double, high: Double): Boolean {
+            if (abs(delta) < 1e-9) return origin in low..high
+            val p = (low - origin) / delta
+            val q = (high - origin) / delta
+            near = max(near, min(p, q))
+            far = min(far, max(p, q))
+            return far >= near
+        }
+        if (!clip(cx, cos(angle), l, r) || !clip(cy, sin(angle), t, b) || far < max(near, minDistance)) return null
+        return RingLabelAnchor(cx + far * cos(angle), cy + far * sin(angle), angle)
+    }
 }

@@ -54,6 +54,7 @@ import io.github.shohei0205.yamamuki.core.TagGroup
 import io.github.shohei0205.yamamuki.core.TagGroups
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.data.CacheInfo
+import io.github.shohei0205.yamamuki.settings.GridStyle
 import io.github.shohei0205.yamamuki.settings.SensorPrecision
 import io.github.shohei0205.yamamuki.settings.Settings
 import java.text.SimpleDateFormat
@@ -139,6 +140,14 @@ fun SettingsScreen(
                 selected = settings.textScale,
                 label = { textScaleLabel(it) },
                 onSelect = { v -> onSettingsChange { it.copy(textScale = v) } },
+            )
+            Choice(
+                title = stringResource(R.string.settings_grid_style),
+                options = GridStyle.entries,
+                selected = settings.gridStyle,
+                label = { stringResource(it.label) },
+                description = stringResource(R.string.settings_grid_style_description),
+                onSelect = { v -> onSettingsChange { it.copy(gridStyle = v) } },
             )
             Choice(
                 title = stringResource(R.string.settings_initial_range),

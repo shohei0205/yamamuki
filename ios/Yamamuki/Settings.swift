@@ -11,6 +11,8 @@ struct Settings: Codable, Equatable {
     var maxPeaks = 15
     /// 方位盤の文字の大きさ(標準 = 1.0 に対する倍率)。
     var textScale = 1.0
+    /// 方位盤に引く補助線の種類。
+    var gridStyle = GridStyle.rings
     /// 起動時の表示範囲(現在地から画面上端までの距離)。
     var initialRangeKm = Int(DialGeometry.defaultRangeKm)
     /// 現在地と方位をどのくらいこまめに測るか。こまめなほど電池を使う。
@@ -36,6 +38,7 @@ struct Settings: Codable, Equatable {
         let savedMaxPeaks = try c.decodeIfPresent(Int.self, forKey: .maxPeaks) ?? d.maxPeaks
         maxPeaks = min(max(savedMaxPeaks, Settings.maxPeaksRange.lowerBound), Settings.maxPeaksRange.upperBound)
         textScale = try c.decodeIfPresent(Double.self, forKey: .textScale) ?? d.textScale
+        gridStyle = (try? c.decodeIfPresent(GridStyle.self, forKey: .gridStyle)) ?? d.gridStyle
         initialRangeKm = try c.decodeIfPresent(Int.self, forKey: .initialRangeKm) ?? d.initialRangeKm
         sensorPrecision = (try? c.decodeIfPresent(SensorPrecision.self, forKey: .sensorPrecision)) ?? d.sensorPrecision
         peakDataAsked = try c.decodeIfPresent(Bool.self, forKey: .peakDataAsked) ?? d.peakDataAsked
@@ -54,6 +57,27 @@ enum SensorPrecision: Int, Codable, CaseIterable {
         case .saver: return Strings.text("settings_sensor_precision_saver")
         case .standard: return Strings.text("settings_sensor_precision_standard")
         case .precise: return Strings.text("settings_sensor_precision_precise")
+        }
+    }
+}
+
+/// 方位盤に引く補助線の種類。設定画面ではこの順に並ぶ。
+enum GridStyle: String, Codable, CaseIterable {
+    /// 距離の円(同心円)と距離の数字。
+    case rings
+    /// 同心円に、45° ごとの方位線と、端末を向けている方向の線を足す。
+    case bearingLines
+    /// 同心円の内側に 10° ごとの刻みを入れる。
+    case ringTicks
+    /// 補助線を引かない(距離の帯の色分けだけ残す)。
+    case off
+
+    var label: String {
+        switch self {
+        case .rings: return Strings.text("settings_grid_style_rings")
+        case .bearingLines: return Strings.text("settings_grid_style_bearing_lines")
+        case .ringTicks: return Strings.text("settings_grid_style_ring_ticks")
+        case .off: return Strings.text("settings_grid_style_none")
         }
     }
 }
