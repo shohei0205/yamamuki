@@ -7,6 +7,11 @@ let dialGround = Color(hex: 0xFFF4D8)
 /// 距離の円の間の帯。現在地に近い帯から順に塗り、ここにない遠くの帯は地面の色のままにする。
 private let groundBands = [Color(hex: 0xFFE7B0), Color(hex: 0xFFEDC2), Color(hex: 0xFFF1CF)]
 private let ringLine = Color(hex: 0xE8C98F)
+private let ringTick = Color(hex: 0xC49A55)
+private let bearingLine = Color(hex: 0xB88E4E)
+private let headingLine = Color(hex: 0x3A7BD5)
+/// 方位線の向き。北から 45° ごと。
+private let bearingLineDegs = stride(from: 0, to: 360, by: 45).map { Double($0) }
 private let shadowColor = Color.black.opacity(0.2)
 private let northRed = Color(hex: 0xED1C24)
 private let binocularBody = Color(hex: 0x333333)
@@ -64,6 +69,8 @@ struct DialCanvasView: View, Animatable {
     let maxPeaks: Int
     /// 文字の大きさ(標準 = 1.0 に対する倍率)。
     let textScale: Double
+    /// 補助線の種類。
+    var gridStyle = GridStyle.rings
     let observerLocation: GeoPoint?
     let viewportLocation: GeoPoint?
     let compassHeading: Double
@@ -150,7 +157,17 @@ struct DialCanvasView: View, Animatable {
         var ctx = ctx
         ctx.clip(to: Path(CGRect(origin: .zero, size: size)))
         if pxPerKm > 0 {
-            drawRings(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles)
+            // 方位線は円と距離の数字の下に引き、距離の数字を線で隠さない。方位名の札は円の上に置く。
+            if gridStyle == .bearingLines {
+                drawBearingLines(ctx, size: size, observer: observer, chartTop: chartTop)
+            }
+            if gridStyle != .off {
+                drawRings(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles,
+                    ticks: gridStyle == .ringTicks)
+            }
+            if gridStyle == .bearingLines {
+                drawBearingLabels(ctx, size: size, observer: observer, chartTop: chartTop, styles: styles)
+            }
             hitTargets.peaks = drawPeaks(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles)
         } else {
             hitTargets.peaks = []
@@ -195,7 +212,9 @@ struct DialCanvasView: View, Animatable {
         }
     }
 
-    private func drawRings(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, pxPerKm: CGFloat, chartTop: CGFloat, styles: TextStyles) {
+    /// 距離の円と距離の数字。[ticks] なら目盛りリングにして、円の内側に方位の刻みと角度の数字を入れる。
+    private func drawRings(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, pxPerKm: CGFloat, chartTop: CGFloat, styles: TextStyles,
+        ticks: Bool) {
         let step = CGFloat(DialGeometry.ringStepKm(rangeKm))
         let farthest = hypot(max(abs(observer.x), abs(size.width - observer.x)),
             max(abs(chartTop - observer.y), abs(size.height - observer.y)))
@@ -213,6 +232,9 @@ struct DialCanvasView: View, Animatable {
             let label = measuredText(ctx, DialGeometry.ringLabel(Double(km)), size: styles.ringLabel, color: tapeSubtle)
             rings.append((radius, label))
             i += 1
+        }
+        if ticks {
+            for (radius, _) in rings { drawRingTicks(ctx, observer: observer, radius: radius) }
         }
         func placements(_ angle: Double) -> [(MeasuredText, CGRect)] {
             var labels: [(MeasuredText, CGRect)] = []
@@ -236,6 +258,88 @@ struct DialCanvasView: View, Animatable {
         for (label, box) in placements(angle) {
             // 距離の数字は白い札に載せ、円や帯と重なっても読めるようにする。
             ctx.fill(Path(roundedRect: box, cornerRadius: box.height / 2), with: .color(.white.opacity(0.9)))
+            ctx.draw(label.text, at: CGPoint(x: box.minX + 6, y: box.minY + 3), anchor: .topLeading)
+        }
+        // 角度の数字は 30° ごとに、数字がいちばん多く画面に入る円の内側に置く。距離の数字と重なる向きと、画面に入らない数字は省く。
+        if ticks {
+            let margin = 10.0
+            let bottom = Double(size.height - originBottom)
+            let bearings = stride(from: 0, to: 360, by: 30).filter {
+                abs(Heading.delta(angle * 180 / .pi, screenAngle(Double($0)) * 180 / .pi)) >= 12
+            }
+            let radii = rings.map { Double($0.0) - 20 }.filter { $0 > 0 }
+            if let index = RingLabelGeometry.tickRingIndex(cx: Double(observer.x), cy: Double(observer.y), radii: radii,
+                angles: bearings.map { screenAngle(Double($0)) }, left: 0, top: Double(chartTop), right: Double(size.width),
+                bottom: bottom, margin: margin) {
+                for bearing in bearings {
+                    let a = screenAngle(Double(bearing))
+                    let x = Double(observer.x) + radii[index] * cos(a)
+                    let y = Double(observer.y) + radii[index] * sin(a)
+                    guard RingLabelGeometry.inside(x: x, y: y, left: 0, top: Double(chartTop), right: Double(size.width),
+                        bottom: bottom, margin: margin) else { continue }
+                    let label = bearing == 0
+                        ? measuredText(ctx, directionName(0), size: styles.ringLabel, color: northRed)
+                        : measuredText(ctx, "\(bearing)", size: styles.tickLabel, color: ringTick)
+                    ctx.draw(label.text, at: CGPoint(x: x, y: y))
+                }
+            }
+        }
+    }
+
+    /// 方位 [bearingDeg] へ向かう線の画面上の角度(ラジアン、右が 0 で下回り)。
+    private func screenAngle(_ bearingDeg: Double) -> Double {
+        Heading.delta(headingDeg, bearingDeg) * .pi / 180 - .pi / 2
+    }
+
+    /// 目盛りリング。円の内側に 10° ごとの刻みを入れ、30° ごとは長くする。北の刻みは赤。
+    private func drawRingTicks(_ ctx: GraphicsContext, observer: CGPoint, radius: CGFloat) {
+        for bearing in stride(from: 0, to: 360, by: 10) {
+            let major = bearing % 30 == 0
+            let length: CGFloat = major ? 9 : 5
+            guard radius > length else { continue }
+            let a = screenAngle(Double(bearing))
+            let dx = CGFloat(cos(a)), dy = CGFloat(sin(a))
+            ctx.stroke(line(CGPoint(x: observer.x + dx * radius, y: observer.y + dy * radius),
+                    CGPoint(x: observer.x + dx * (radius - length), y: observer.y + dy * (radius - length))),
+                with: .color(bearing == 0 ? northRed : ringTick), lineWidth: major ? 1.8 : 1.2)
+        }
+    }
+
+    /// 方位線。現在地から 45° ごとに細い破線を引く。方位名は drawBearingLabels で円の上に添える。
+    /// あわせて、端末を向けている方向へ青い破線を引く。手動位置モードで地図を回していても、双眼鏡と同じ向きを指す。
+    private func drawBearingLines(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, chartTop: CGFloat) {
+        var ctx = ctx
+        let bottom = size.height - originBottom
+        ctx.clip(to: Path(CGRect(x: 0, y: chartTop, width: size.width, height: max(0, bottom - chartTop))))
+        // 双眼鏡の白い丸の外から引く。
+        let start: CGFloat = 26
+        let reach = hypot(size.width, size.height) * 2
+        func ray(_ a: Double) -> Path {
+            let dx = CGFloat(cos(a)), dy = CGFloat(sin(a))
+            return line(CGPoint(x: observer.x + dx * start, y: observer.y + dy * start),
+                CGPoint(x: observer.x + dx * reach, y: observer.y + dy * reach))
+        }
+        for bearing in bearingLineDegs {
+            ctx.stroke(ray(screenAngle(bearing)), with: .color(bearingLine), style: StrokeStyle(lineWidth: 1.2, dash: [6, 5]))
+        }
+        let forward = Heading.delta(headingDeg, compassHeading) * .pi / 180 - .pi / 2
+        ctx.stroke(ray(forward), with: .color(headingLine), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [9, 6]))
+    }
+
+    /// 方位線の方位名。線が画面の縁に届くところに白い札で添える(北だけ赤)。
+    private func drawBearingLabels(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, chartTop: CGFloat, styles: TextStyles) {
+        var ctx = ctx
+        let bottom = size.height - originBottom
+        ctx.clip(to: Path(CGRect(x: 0, y: chartTop, width: size.width, height: max(0, bottom - chartTop))))
+        for bearing in bearingLineDegs {
+            let a = screenAngle(bearing)
+            let label = measuredText(ctx, directionName(bearing), size: styles.ringLabel, color: bearing == 0 ? northRed : tapeSubtle)
+            let width = label.size.width + 12, height = label.size.height + 6
+            guard let anchor = RingLabelGeometry.edge(cx: Double(observer.x), cy: Double(observer.y), left: 0, top: Double(chartTop),
+                right: Double(size.width), bottom: Double(bottom), width: Double(width), height: Double(height), angle: a, minDistance: 60)
+            else { continue }
+            let box = CGRect(x: CGFloat(anchor.x) - width / 2, y: CGFloat(anchor.y) - height / 2, width: width, height: height)
+            ctx.fill(Path(roundedRect: box, cornerRadius: height / 2), with: .color(.white.opacity(0.9)))
             ctx.draw(label.text, at: CGPoint(x: box.minX + 6, y: box.minY + 3), anchor: .topLeading)
         }
     }
@@ -736,12 +840,15 @@ private struct TextStyles {
     /// 代表の山の山名の下に添える「ほか 3 山」。
     let others: CGFloat
     let ringLabel: CGFloat
+    /// 目盛りリングの角度の数字。
+    let tickLabel: CGFloat
     let readout: CGFloat
 
     init(scale: Double) {
         label = CGFloat(13 * scale)
         others = CGFloat(11 * scale)
         ringLabel = CGFloat(11 * scale)
+        tickLabel = CGFloat(10 * scale)
         readout = CGFloat(15 * scale)
     }
 }

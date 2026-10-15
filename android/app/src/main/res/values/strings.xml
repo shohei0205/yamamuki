@@ -112,6 +112,12 @@
     <string name="settings_text_size_standard">標準</string>
     <string name="settings_text_size_large">大</string>
     <string name="settings_text_size_extra_large">特大</string>
+    <string name="settings_grid_style">補助線</string>
+    <string name="settings_grid_style_rings">同心円</string>
+    <string name="settings_grid_style_bearing_lines">方位線</string>
+    <string name="settings_grid_style_ring_ticks">目盛り</string>
+    <string name="settings_grid_style_none">なし</string>
+    <string name="settings_grid_style_description">方位線は 45° ごとの線と向いている方向の線、目盛りは円に 10° ごとの刻みを足します。</string>
     <string name="settings_initial_range">起動時の表示距離（km）</string>
     <string name="settings_initial_range_description">現在地から画面上端までの距離です。起動後もピンチ操作で変更できます。</string>
     <string name="settings_section_battery">バッテリー</string>

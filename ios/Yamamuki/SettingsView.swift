@@ -56,6 +56,13 @@ struct SettingsView: View {
                         label: textScaleLabel
                     ) { v in model.updateSettings { $0.textScale = v } }
                     Choice(
+                        title: Strings.text("settings_grid_style"),
+                        options: GridStyle.allCases,
+                        selected: settings.gridStyle,
+                        label: { $0.label },
+                        description: Strings.text("settings_grid_style_description")
+                    ) { v in model.updateSettings { $0.gridStyle = v } }
+                    Choice(
                         title: Strings.text("settings_initial_range"),
                         options: Settings.initialRangesKm,
                         selected: settings.initialRangeKm,

@@ -45,4 +45,52 @@ object RingLabelGeometry {
         if (x - width / 2 < left || x + width / 2 > right || y - height / 2 < top || y + height / 2 > bottom) return null
         return RingLabelAnchor(x, y, angle)
     }
+
+    /**
+     * 中心から [angle] の向きに伸ばした半直線が画面の縁に届く手前に、幅 [width]・高さ [height] の文字の中心を置く。
+     * 方位線の方位名に使う。縁まで [minDistance] に満たない(線がほとんど見えない)ときと、半直線が画面に入らないときは省く。
+     */
+    fun edge(cx: Double, cy: Double, left: Double, top: Double, right: Double, bottom: Double,
+        width: Double, height: Double, angle: Double, minDistance: Double = 0.0): RingLabelAnchor? {
+        if (!listOf(cx, cy, left, top, right, bottom, width, height, angle, minDistance).all { it.isFinite() }) return null
+        val l = left + width / 2
+        val r = right - width / 2
+        val t = top + height / 2
+        val b = bottom - height / 2
+        if (l > r || t > b) return null
+        var near = 0.0
+        var far = Double.POSITIVE_INFINITY
+        fun clip(origin: Double, delta: Double, low: Double, high: Double): Boolean {
+            if (abs(delta) < 1e-9) return origin in low..high
+            val p = (low - origin) / delta
+            val q = (high - origin) / delta
+            near = max(near, min(p, q))
+            far = min(far, max(p, q))
+            return far >= near
+        }
+        if (!clip(cx, cos(angle), l, r) || !clip(cy, sin(angle), t, b) || far < max(near, minDistance)) return null
+        return RingLabelAnchor(cx + far * cos(angle), cy + far * sin(angle), angle)
+    }
+
+    /**
+     * 目盛りリングの角度の数字を置く円を選ぶ。[radii] の各円(内側から順)について、[angles] の向きの点のうち
+     * 画面([margin] だけ内側)に入る数を数え、いちばん多い円の番号を返す。同じ数なら外側の円にする。どの円にも入らなければ null。
+     */
+    fun tickRingIndex(cx: Double, cy: Double, radii: List<Double>, angles: List<Double>,
+        left: Double, top: Double, right: Double, bottom: Double, margin: Double): Int? {
+        var best: Int? = null
+        var bestCount = 0
+        radii.forEachIndexed { i, radius ->
+            val count = angles.count { inside(cx + radius * cos(it), cy + radius * sin(it), left, top, right, bottom, margin) }
+            if (count > 0 && count >= bestCount) {
+                best = i
+                bestCount = count
+            }
+        }
+        return best
+    }
+
+    /** 点が画面の [margin] だけ内側に入っているか。 */
+    fun inside(x: Double, y: Double, left: Double, top: Double, right: Double, bottom: Double, margin: Double): Boolean =
+        x >= left + margin && x <= right - margin && y >= top + margin && y <= bottom - margin
 }

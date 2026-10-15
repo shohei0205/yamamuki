@@ -50,4 +50,48 @@ public enum RingLabelGeometry {
         guard x - width / 2 >= left, x + width / 2 <= right, y - height / 2 >= top, y + height / 2 <= bottom else { return nil }
         return RingLabelAnchor(x: x, y: y, angle: angle)
     }
+
+    /// 中心から `angle` の向きに伸ばした半直線が画面の縁に届く手前に、幅 `width`・高さ `height` の文字の中心を置く。
+    /// 方位線の方位名に使う。縁まで `minDistance` に満たない(線がほとんど見えない)ときと、半直線が画面に入らないときは省く。
+    public static func edge(cx: Double, cy: Double, left: Double, top: Double, right: Double, bottom: Double,
+        width: Double, height: Double, angle: Double, minDistance: Double = 0) -> RingLabelAnchor? {
+        guard [cx, cy, left, top, right, bottom, width, height, angle, minDistance].allSatisfy({ $0.isFinite }) else { return nil }
+        let l = left + width / 2, r = right - width / 2
+        let t = top + height / 2, b = bottom - height / 2
+        guard l <= r, t <= b else { return nil }
+        var near = 0.0
+        var far = Double.infinity
+        func clip(_ origin: Double, _ delta: Double, _ low: Double, _ high: Double) -> Bool {
+            if abs(delta) < 1e-9 { return origin >= low && origin <= high }
+            let p = (low - origin) / delta, q = (high - origin) / delta
+            near = max(near, min(p, q))
+            far = min(far, max(p, q))
+            return far >= near
+        }
+        guard clip(cx, cos(angle), l, r), clip(cy, sin(angle), t, b), far >= max(near, minDistance) else { return nil }
+        return RingLabelAnchor(x: cx + far * cos(angle), y: cy + far * sin(angle), angle: angle)
+    }
+
+    /// 目盛りリングの角度の数字を置く円を選ぶ。`radii` の各円(内側から順)について、`angles` の向きの点のうち
+    /// 画面(`margin` だけ内側)に入る数を数え、いちばん多い円の番号を返す。同じ数なら外側の円にする。どの円にも入らなければ nil。
+    public static func tickRingIndex(cx: Double, cy: Double, radii: [Double], angles: [Double],
+        left: Double, top: Double, right: Double, bottom: Double, margin: Double) -> Int? {
+        var best: Int?
+        var bestCount = 0
+        for (i, radius) in radii.enumerated() {
+            let count = angles.filter {
+                inside(x: cx + radius * cos($0), y: cy + radius * sin($0), left: left, top: top, right: right, bottom: bottom, margin: margin)
+            }.count
+            if count > 0, count >= bestCount {
+                best = i
+                bestCount = count
+            }
+        }
+        return best
+    }
+
+    /// 点が画面の `margin` だけ内側に入っているか。
+    public static func inside(x: Double, y: Double, left: Double, top: Double, right: Double, bottom: Double, margin: Double) -> Bool {
+        x >= left + margin && x <= right - margin && y >= top + margin && y <= bottom - margin
+    }
 }

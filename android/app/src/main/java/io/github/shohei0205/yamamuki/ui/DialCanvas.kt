@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -65,11 +66,15 @@ import io.github.shohei0205.yamamuki.core.MapCenter
 import io.github.shohei0205.yamamuki.core.PeakGroup
 import io.github.shohei0205.yamamuki.core.PeakLayout
 import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.settings.GridStyle
 import io.github.shohei0205.yamamuki.core.displayScore
 import io.github.shohei0205.yamamuki.core.elevationClass
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -80,6 +85,9 @@ val DialGround = Color(0xFFFFF4D8)
 /** 距離の円の間の帯。現在地に近い帯から順に塗り、ここにない遠くの帯は地面の色のままにする。 */
 private val GroundBands = listOf(Color(0xFFFFE7B0), Color(0xFFFFEDC2), Color(0xFFFFF1CF))
 private val RingLine = Color(0xFFE8C98F)
+private val RingTick = Color(0xFFC49A55)
+private val BearingLine = Color(0xFFB88E4E)
+private val HeadingLine = Color(0xFF3A7BD5)
 private val NorthRed = Color(0xFFED1C24)
 private val BinocularBody = Color(0xFF333333)
 private val BinocularHinge = Color(0xFF777777)
@@ -107,6 +115,8 @@ private class DialTextStyles(scale: Float) {
     val label = TextStyle(color = TapeInk, fontSize = 13.sp * scale, fontWeight = FontWeight.Bold)
     val others = TextStyle(color = TapeSubtle, fontSize = 11.sp * scale, fontWeight = FontWeight.Bold)
     val ringLabel = TextStyle(color = TapeSubtle, fontSize = 11.sp * scale, fontWeight = FontWeight.Bold)
+    val northLabel = ringLabel.copy(color = NorthRed)
+    val tickLabel = TextStyle(color = RingTick, fontSize = 10.sp * scale, fontWeight = FontWeight.Bold)
     val readout = TextStyle(color = Color.Black, fontSize = 15.sp * scale, fontWeight = FontWeight.Bold)
 }
 
@@ -140,6 +150,8 @@ fun DialCanvas(
     maxPeaks: Int = 40,
     /** 文字の大きさ(標準 = 1.0 に対する倍率)。 */
     textScale: Float = 1f,
+    /** 補助線の種類。 */
+    gridStyle: GridStyle = GridStyle.RINGS,
     latitude: Double? = null,
     longitude: Double? = null,
     viewportLatitude: Double? = latitude,
@@ -203,9 +215,15 @@ fun DialCanvas(
         clipRect {
             val coneAlpha = 1f - viewFanAlpha
             hitTargets.peaks = if (pxPerKm > 0f) {
-                val previousAngle = RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle, hitTargets.ringLabelHeading, headingDeg)
-                hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, previousAngle, headingUp)
-                hitTargets.ringLabelHeading = headingDeg
+                // 方位線は円と距離の数字の下に引き、距離の数字を線で隠さない。方位名の札は円の上に置く。
+                if (gridStyle == GridStyle.BEARING_LINES) drawBearingLines(observer, headingDeg, observerRotation, chartTop)
+                if (gridStyle != GridStyle.NONE) {
+                    val previousAngle = RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle, hitTargets.ringLabelHeading, headingDeg)
+                    hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, texts,
+                        previousAngle, headingUp, ticksHeadingDeg = headingDeg.takeIf { gridStyle == GridStyle.RING_TICKS })
+                    hitTargets.ringLabelHeading = headingDeg
+                }
+                if (gridStyle == GridStyle.BEARING_LINES) drawBearingLabels(observer, headingDeg, chartTop, textMeasurer, styles, texts)
                 drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, texts, maxPeaks, peakSelection, headingUp)
             } else {
                 emptyList()
@@ -252,8 +270,11 @@ private fun DrawScope.drawRings(
     chartTop: Float,
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
+    texts: DialTexts,
     previousAngle: Double?,
     headingUp: Boolean,
+    /** 目盛りリングにするときの、地図の上の方位。null なら円に刻みを入れない。 */
+    ticksHeadingDeg: Double? = null,
 ): Double {
     val step = DialGeometry.ringStepKm(rangeKm)
     val farthestPx = hypot(max(kotlin.math.abs(observer.x), kotlin.math.abs(size.width - observer.x)),
@@ -273,6 +294,9 @@ private fun DrawScope.drawRings(
             val label = textMeasurer.measure(DialGeometry.ringLabel(km), styles.ringLabel)
             rings += radius to label
             i++
+        }
+        if (ticksHeadingDeg != null) {
+            for ((radius, _) in rings) drawRingTicks(observer, radius, ticksHeadingDeg)
         }
         fun placements(direction: Double): List<Triple<TextLayoutResult, Offset, Box>> {
             val labels = mutableListOf<Triple<TextLayoutResult, Offset, Box>>()
@@ -300,8 +324,97 @@ private fun DrawScope.drawRings(
                 size = Size(box.right - box.left, height), cornerRadius = CornerRadius(height / 2))
             drawText(label, topLeft = origin)
         }
+        // 角度の数字は 30° ごとに、数字がいちばん多く画面に入る円の内側に置く。距離の数字と重なる向きと、画面に入らない数字は省く。
+        if (ticksHeadingDeg != null) {
+            val margin = 10.dp.toPx().toDouble()
+            val bottom = (size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()).toDouble()
+            val bearings = (0 until 360 step 30).filter {
+                abs(Heading.delta(Math.toDegrees(angle), Math.toDegrees(screenAngle(ticksHeadingDeg, it.toDouble())))) >= 12.0
+            }
+            val radii = rings.map { (it.first - 20.dp.toPx()).toDouble() }.filter { it > 0 }
+            val index = RingLabelGeometry.tickRingIndex(observer.x.toDouble(), observer.y.toDouble(), radii,
+                bearings.map { screenAngle(ticksHeadingDeg, it.toDouble()) }, 0.0, chartTop.toDouble(), size.width.toDouble(), bottom, margin)
+            if (index != null) for (bearing in bearings) {
+                val a = screenAngle(ticksHeadingDeg, bearing.toDouble())
+                val x = observer.x + radii[index] * cos(a)
+                val y = observer.y + radii[index] * sin(a)
+                if (!RingLabelGeometry.inside(x, y, 0.0, chartTop.toDouble(), size.width.toDouble(), bottom, margin)) continue
+                val label = textMeasurer.measure(if (bearing == 0) texts.direction(0.0) else "$bearing",
+                    if (bearing == 0) styles.northLabel else styles.tickLabel)
+                drawText(label, topLeft = Offset(x.toFloat() - label.size.width / 2f, y.toFloat() - label.size.height / 2f))
+            }
+        }
     }
     return angle
+}
+
+/** 地図の上が [headingDeg] のとき、方位 [bearingDeg] へ向かう線の画面上の角度(ラジアン、右が 0 で下回り)。 */
+private fun screenAngle(headingDeg: Double, bearingDeg: Double): Double =
+    Math.toRadians(Heading.delta(headingDeg, bearingDeg)) - PI / 2
+
+/** 目盛りリング。円の内側に 10° ごとの刻みを入れ、30° ごとは長くする。北の刻みは赤。 */
+private fun DrawScope.drawRingTicks(observer: Offset, radius: Float, headingDeg: Double) {
+    for (bearing in 0 until 360 step 10) {
+        val major = bearing % 30 == 0
+        val length = (if (major) 9 else 5).dp.toPx()
+        if (radius <= length) continue
+        val a = screenAngle(headingDeg, bearing.toDouble())
+        val dir = Offset(cos(a).toFloat(), sin(a).toFloat())
+        drawLine(if (bearing == 0) NorthRed else RingTick, observer + dir * radius, observer + dir * (radius - length),
+            strokeWidth = (if (major) 1.8 else 1.2).dp.toPx())
+    }
+}
+
+/** 方位線の向き。北から 45° ごと。 */
+private val BEARING_LINE_DEGS = (0 until 360 step 45).map { it.toDouble() }
+
+/**
+ * 方位線。現在地から 45° ごとに細い破線を引く。方位名は [drawBearingLabels] で円の上に添える。
+ * あわせて、端末を向けている方向へ青い破線を引く。手動位置モードで地図を回していても、双眼鏡と同じ向きを指す。
+ */
+private fun DrawScope.drawBearingLines(observer: Offset, headingDeg: Double, observerRotation: Float, chartTop: Float) {
+    // 双眼鏡の白い丸の外から引く。
+    val start = 26.dp.toPx()
+    val reach = hypot(size.width, size.height) * 2
+    fun direction(a: Double) = Offset(cos(a).toFloat(), sin(a).toFloat())
+    clipRect(top = chartTop, bottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()) {
+        val dash = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx()))
+        for (bearing in BEARING_LINE_DEGS) {
+            val dir = direction(screenAngle(headingDeg, bearing))
+            drawLine(BearingLine, observer + dir * start, observer + dir * reach, strokeWidth = 1.2.dp.toPx(), pathEffect = dash)
+        }
+        val forward = direction(Math.toRadians(observerRotation.toDouble()) - PI / 2)
+        drawLine(HeadingLine, observer + forward * start, observer + forward * reach, strokeWidth = 2.5.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(9.dp.toPx(), 6.dp.toPx())), cap = StrokeCap.Round)
+    }
+}
+
+/** 方位線の方位名。線が画面の縁に届くところに白い札で添える(北だけ赤)。 */
+private fun DrawScope.drawBearingLabels(
+    observer: Offset,
+    headingDeg: Double,
+    chartTop: Float,
+    textMeasurer: TextMeasurer,
+    styles: DialTextStyles,
+    texts: DialTexts,
+) {
+    val bottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()
+    val pad = 3.dp.toPx()
+    val padX = 6.dp.toPx()
+    clipRect(top = chartTop, bottom = bottom) {
+        for (bearing in BEARING_LINE_DEGS) {
+            val a = screenAngle(headingDeg, bearing)
+            val label = textMeasurer.measure(texts.direction(bearing), if (bearing == 0.0) styles.northLabel else styles.ringLabel)
+            val width = label.size.width + padX * 2
+            val height = label.size.height + pad * 2
+            val anchor = RingLabelGeometry.edge(observer.x.toDouble(), observer.y.toDouble(), 0.0, chartTop.toDouble(),
+                size.width.toDouble(), bottom.toDouble(), width.toDouble(), height.toDouble(), a, minDistance = 60.dp.toPx().toDouble())
+                ?: continue
+            val topLeft = Offset(anchor.x.toFloat() - width / 2f, anchor.y.toFloat() - height / 2f)
+            drawRoundRect(Color.White.copy(alpha = 0.9f), topLeft = topLeft, size = Size(width, height), cornerRadius = CornerRadius(height / 2f))
+            drawText(label, topLeft = topLeft + Offset(padX, pad))
+        }
+    }
 }
 
 private class PlacedPeak(
