@@ -71,4 +71,26 @@ object RingLabelGeometry {
         if (!clip(cx, cos(angle), l, r) || !clip(cy, sin(angle), t, b) || far < max(near, minDistance)) return null
         return RingLabelAnchor(cx + far * cos(angle), cy + far * sin(angle), angle)
     }
+
+    /**
+     * 目盛りリングの角度の数字を置く円を選ぶ。[radii] の各円(内側から順)について、[angles] の向きの点のうち
+     * 画面([margin] だけ内側)に入る数を数え、いちばん多い円の番号を返す。同じ数なら外側の円にする。どの円にも入らなければ null。
+     */
+    fun tickRingIndex(cx: Double, cy: Double, radii: List<Double>, angles: List<Double>,
+        left: Double, top: Double, right: Double, bottom: Double, margin: Double): Int? {
+        var best: Int? = null
+        var bestCount = 0
+        radii.forEachIndexed { i, radius ->
+            val count = angles.count { inside(cx + radius * cos(it), cy + radius * sin(it), left, top, right, bottom, margin) }
+            if (count > 0 && count >= bestCount) {
+                best = i
+                bestCount = count
+            }
+        }
+        return best
+    }
+
+    /** 点が画面の [margin] だけ内側に入っているか。 */
+    fun inside(x: Double, y: Double, left: Double, top: Double, right: Double, bottom: Double, margin: Double): Boolean =
+        x >= left + margin && x <= right - margin && y >= top + margin && y <= bottom - margin
 }

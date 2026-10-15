@@ -127,4 +127,17 @@ final class RingLabelGeometryTests: XCTestCase {
         XCTAssertEqual(fromBelow.y, 86, accuracy: 1e-7)
         XCTAssertNil(edge(180, 900, 0))
     }
+
+    func testTickRingIndexPicksRingWithMostVisibleNumbers() {
+        let angles = stride(from: 0, to: 360, by: 30).map { Double($0) * .pi / 180 }
+        func pick(_ cx: Double, _ radii: [Double]) -> Int? {
+            RingLabelGeometry.tickRingIndex(cx: cx, cy: 700, radii: radii, angles: angles,
+                left: 0, top: 140, right: 360, bottom: 748, margin: 10)
+        }
+        // 外側の大きな円は縦長の画面では上の数字しか入らないので、内側の円を選ぶ。同じ数なら外側。
+        XCTAssertEqual(pick(180, [100, 170, 360, 550]), 1)
+        XCTAssertEqual(pick(180, [100]), 0)
+        XCTAssertNil(pick(180, []))
+        XCTAssertNil(pick(-2000, [100, 170]))
+    }
 }

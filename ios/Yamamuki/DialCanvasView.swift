@@ -10,6 +10,8 @@ private let ringLine = Color(hex: 0xE8C98F)
 private let ringTick = Color(hex: 0xC49A55)
 private let bearingLine = Color(hex: 0xB88E4E)
 private let headingLine = Color(hex: 0x3A7BD5)
+/// 方位線の向き。北から 45° ごと。
+private let bearingLineDegs = stride(from: 0, to: 360, by: 45).map { Double($0) }
 private let shadowColor = Color.black.opacity(0.2)
 private let northRed = Color(hex: 0xED1C24)
 private let binocularBody = Color(hex: 0x333333)
@@ -155,13 +157,16 @@ struct DialCanvasView: View, Animatable {
         var ctx = ctx
         ctx.clip(to: Path(CGRect(origin: .zero, size: size)))
         if pxPerKm > 0 {
-            // 方位線は円と距離の数字の下に引き、距離の数字を線で隠さない。
+            // 方位線は円と距離の数字の下に引き、距離の数字を線で隠さない。方位名の札は円の上に置く。
             if gridStyle == .bearingLines {
-                drawBearingLines(ctx, size: size, observer: observer, chartTop: chartTop, styles: styles)
+                drawBearingLines(ctx, size: size, observer: observer, chartTop: chartTop)
             }
             if gridStyle != .off {
                 drawRings(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles,
                     ticks: gridStyle == .ringTicks)
+            }
+            if gridStyle == .bearingLines {
+                drawBearingLabels(ctx, size: size, observer: observer, chartTop: chartTop, styles: styles)
             }
             hitTargets.peaks = drawPeaks(ctx, size: size, observer: observer, pxPerKm: pxPerKm, chartTop: chartTop, styles: styles)
         } else {
@@ -255,16 +260,28 @@ struct DialCanvasView: View, Animatable {
             ctx.fill(Path(roundedRect: box, cornerRadius: box.height / 2), with: .color(.white.opacity(0.9)))
             ctx.draw(label.text, at: CGPoint(x: box.minX + 6, y: box.minY + 3), anchor: .topLeading)
         }
-        // 角度の数字は 2 本目の円(無ければ 1 本目)の内側に 30° ごとに置く。距離の数字と重なる向きは省く。
-        if ticks, let radius = (rings.count > 1 ? rings[1] : rings.first)?.0, radius > 20 {
-            let inner = radius - 20
-            for bearing in stride(from: 0, to: 360, by: 30) {
-                let a = screenAngle(Double(bearing))
-                if abs(Heading.delta(angle * 180 / .pi, a * 180 / .pi)) < 12 { continue }
-                let label = bearing == 0
-                    ? measuredText(ctx, directionName(0), size: styles.ringLabel, color: northRed)
-                    : measuredText(ctx, "\(bearing)", size: styles.tickLabel, color: ringTick)
-                ctx.draw(label.text, at: CGPoint(x: observer.x + inner * CGFloat(cos(a)), y: observer.y + inner * CGFloat(sin(a))))
+        // 角度の数字は 30° ごとに、数字がいちばん多く画面に入る円の内側に置く。距離の数字と重なる向きと、画面に入らない数字は省く。
+        if ticks {
+            let margin = 10.0
+            let bottom = Double(size.height - originBottom)
+            let bearings = stride(from: 0, to: 360, by: 30).filter {
+                abs(Heading.delta(angle * 180 / .pi, screenAngle(Double($0)) * 180 / .pi)) >= 12
+            }
+            let radii = rings.map { Double($0.0) - 20 }.filter { $0 > 0 }
+            if let index = RingLabelGeometry.tickRingIndex(cx: Double(observer.x), cy: Double(observer.y), radii: radii,
+                angles: bearings.map { screenAngle(Double($0)) }, left: 0, top: Double(chartTop), right: Double(size.width),
+                bottom: bottom, margin: margin) {
+                for bearing in bearings {
+                    let a = screenAngle(Double(bearing))
+                    let x = Double(observer.x) + radii[index] * cos(a)
+                    let y = Double(observer.y) + radii[index] * sin(a)
+                    guard RingLabelGeometry.inside(x: x, y: y, left: 0, top: Double(chartTop), right: Double(size.width),
+                        bottom: bottom, margin: margin) else { continue }
+                    let label = bearing == 0
+                        ? measuredText(ctx, directionName(0), size: styles.ringLabel, color: northRed)
+                        : measuredText(ctx, "\(bearing)", size: styles.tickLabel, color: ringTick)
+                    ctx.draw(label.text, at: CGPoint(x: x, y: y))
+                }
             }
         }
     }
@@ -288,9 +305,9 @@ struct DialCanvasView: View, Animatable {
         }
     }
 
-    /// 方位線。現在地から 45° ごとに細い破線を引き、線が画面の縁に届くところに方位名を添える(北だけ赤)。
+    /// 方位線。現在地から 45° ごとに細い破線を引く。方位名は drawBearingLabels で円の上に添える。
     /// あわせて、端末を向けている方向へ青い破線を引く。手動位置モードで地図を回していても、双眼鏡と同じ向きを指す。
-    private func drawBearingLines(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, chartTop: CGFloat, styles: TextStyles) {
+    private func drawBearingLines(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, chartTop: CGFloat) {
         var ctx = ctx
         let bottom = size.height - originBottom
         ctx.clip(to: Path(CGRect(x: 0, y: chartTop, width: size.width, height: max(0, bottom - chartTop))))
@@ -302,13 +319,19 @@ struct DialCanvasView: View, Animatable {
             return line(CGPoint(x: observer.x + dx * start, y: observer.y + dy * start),
                 CGPoint(x: observer.x + dx * reach, y: observer.y + dy * reach))
         }
-        let bearings = stride(from: 0, to: 360, by: 45).map { Double($0) }
-        for bearing in bearings {
+        for bearing in bearingLineDegs {
             ctx.stroke(ray(screenAngle(bearing)), with: .color(bearingLine), style: StrokeStyle(lineWidth: 1.2, dash: [6, 5]))
         }
         let forward = Heading.delta(headingDeg, compassHeading) * .pi / 180 - .pi / 2
         ctx.stroke(ray(forward), with: .color(headingLine), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [9, 6]))
-        for bearing in bearings {
+    }
+
+    /// 方位線の方位名。線が画面の縁に届くところに白い札で添える(北だけ赤)。
+    private func drawBearingLabels(_ ctx: GraphicsContext, size: CGSize, observer: CGPoint, chartTop: CGFloat, styles: TextStyles) {
+        var ctx = ctx
+        let bottom = size.height - originBottom
+        ctx.clip(to: Path(CGRect(x: 0, y: chartTop, width: size.width, height: max(0, bottom - chartTop))))
+        for bearing in bearingLineDegs {
             let a = screenAngle(bearing)
             let label = measuredText(ctx, directionName(bearing), size: styles.ringLabel, color: bearing == 0 ? northRed : tapeSubtle)
             let width = label.size.width + 12, height = label.size.height + 6

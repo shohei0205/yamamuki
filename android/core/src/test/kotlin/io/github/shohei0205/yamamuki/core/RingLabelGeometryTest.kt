@@ -108,4 +108,15 @@ class RingLabelGeometryTest {
         assertEquals(86.0, fromBelow.y, 1e-7)
         assertNull(edge(180.0, 900.0, 0.0))
     }
+
+    @Test fun tickRingIndexPicksRingWithMostVisibleNumbers() {
+        val angles = (0 until 360 step 30).map { Math.toRadians(it.toDouble()) }
+        fun pick(cx: Double, radii: List<Double>) =
+            RingLabelGeometry.tickRingIndex(cx, 700.0, radii, angles, 0.0, 140.0, 360.0, 748.0, 10.0)
+        // 外側の大きな円は縦長の画面では上の数字しか入らないので、内側の円を選ぶ。同じ数なら外側。
+        assertEquals(1, pick(180.0, listOf(100.0, 170.0, 360.0, 550.0)))
+        assertEquals(0, pick(180.0, listOf(100.0)))
+        assertNull(pick(180.0, emptyList()))
+        assertNull(pick(-2000.0, listOf(100.0, 170.0)))
+    }
 }

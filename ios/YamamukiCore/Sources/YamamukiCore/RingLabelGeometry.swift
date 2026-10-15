@@ -71,4 +71,27 @@ public enum RingLabelGeometry {
         guard clip(cx, cos(angle), l, r), clip(cy, sin(angle), t, b), far >= max(near, minDistance) else { return nil }
         return RingLabelAnchor(x: cx + far * cos(angle), y: cy + far * sin(angle), angle: angle)
     }
+
+    /// 目盛りリングの角度の数字を置く円を選ぶ。`radii` の各円(内側から順)について、`angles` の向きの点のうち
+    /// 画面(`margin` だけ内側)に入る数を数え、いちばん多い円の番号を返す。同じ数なら外側の円にする。どの円にも入らなければ nil。
+    public static func tickRingIndex(cx: Double, cy: Double, radii: [Double], angles: [Double],
+        left: Double, top: Double, right: Double, bottom: Double, margin: Double) -> Int? {
+        var best: Int?
+        var bestCount = 0
+        for (i, radius) in radii.enumerated() {
+            let count = angles.filter {
+                inside(x: cx + radius * cos($0), y: cy + radius * sin($0), left: left, top: top, right: right, bottom: bottom, margin: margin)
+            }.count
+            if count > 0, count >= bestCount {
+                best = i
+                bestCount = count
+            }
+        }
+        return best
+    }
+
+    /// 点が画面の `margin` だけ内側に入っているか。
+    public static func inside(x: Double, y: Double, left: Double, top: Double, right: Double, bottom: Double, margin: Double) -> Bool {
+        x >= left + margin && x <= right - margin && y >= top + margin && y <= bottom - margin
+    }
 }
