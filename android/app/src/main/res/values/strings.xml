@@ -139,7 +139,7 @@
     <string name="settings_peak_data_fetch">山データを更新</string>
     <string name="settings_peak_data_check">更新を確認</string>
     <string name="settings_peak_data_auto_check">更新を自動で確認</string>
-    <string name="settings_peak_data_auto_check_description">アプリを開いたときに 30 日に 1 回確認し、新しい山データがあれば方位盤でお知らせします。ダウンロードは確認後に行います。</string>
+    <string name="settings_peak_data_auto_check_description">30日に1度、アプリ起動時に新しい山データの確認を行います。</string>
     <string name="settings_cache_title">保存データ</string>
     <string name="settings_cache_summary">山 %1$,d 件（取得済みの区画 %2$d 個）・容量 %3$s</string>
     <string name="settings_cache_description">消去すると取得済みの山データも消えます。必要に応じて再取得できます。</string>
