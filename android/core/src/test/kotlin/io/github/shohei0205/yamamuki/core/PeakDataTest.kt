@@ -14,6 +14,7 @@ import java.util.zip.GZIPOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -252,6 +253,20 @@ class PeakDataTest {
         assertEquals("2026/10/07", manifestOf("20261007T071401Z-37585754546-1").releaseDate)
         assertNull(manifestOf("v1").releaseDate)
         assertEquals("2026/10/07", InstalledPeakData("20261007T071401Z-37585754546-1", "", 1, null, 0).releaseDate)
+    }
+
+    @Test
+    fun autoCheckIsDueOncePerDay() {
+        val day = PeakData.AUTO_CHECK_INTERVAL_MILLIS
+        val now = 10 * day
+        // まだ確かめたことが無ければ確かめる。
+        assertTrue(PeakData.autoCheckDue(null, now))
+        // 前回から 24 時間たつまでは確かめない。
+        assertFalse(PeakData.autoCheckDue(now, now))
+        assertFalse(PeakData.autoCheckDue(now - day + 1, now))
+        assertTrue(PeakData.autoCheckDue(now - day, now))
+        // 端末の時計が戻って前回が未来になったら確かめる。
+        assertTrue(PeakData.autoCheckDue(now + 1, now))
     }
 
     @Test

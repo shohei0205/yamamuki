@@ -43,6 +43,19 @@ class PeakDataStore(context: Context) {
             .apply()
     }
 
+    /** 自動の確認で、最後に確かめられた日時。まだ確かめていなければ null。 */
+    fun autoCheckedAtMillis(): Long? = prefs.getLong(KEY_AUTO_CHECKED_AT, -1).takeIf { it >= 0 }
+
+    /** 自動の確認で新しい版が見つかり、まだ取り込んでいない。アプリを開き直しても方位盤のラベルを出し続ける。 */
+    fun updateFound(): Boolean = prefs.getBoolean(KEY_UPDATE_FOUND, false)
+
+    /** 更新を確かめた結果を覚える。[checkedAtMillis] が null なら、確かめた日時は変えない(利用者が頼んだ確認のとき)。 */
+    fun saveCheckResult(updateFound: Boolean, checkedAtMillis: Long? = null) {
+        val editor = prefs.edit().putBoolean(KEY_UPDATE_FOUND, updateFound)
+        if (checkedAtMillis != null) editor.putLong(KEY_AUTO_CHECKED_AT, checkedAtMillis)
+        editor.apply()
+    }
+
     /**
      * 記録と、残した manifest と gz を消す。記録は apply() だと書き込みが後回しになり、直後にアプリが終わると
      * 記録だけが残って取り直せなくなるので、commit() で書き終えてから戻る。
@@ -62,5 +75,7 @@ class PeakDataStore(context: Context) {
         const val KEY_READER_VERSION = "reader_version"
         const val KEY_DATA_SHA256 = "data_sha256"
         const val KEY_MANIFEST_SHA256 = "manifest_sha256"
+        const val KEY_AUTO_CHECKED_AT = "auto_checked_at"
+        const val KEY_UPDATE_FOUND = "update_found"
     }
 }

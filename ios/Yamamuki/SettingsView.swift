@@ -94,6 +94,11 @@ struct SettingsView: View {
                         notice: model.peakDataNotice,
                         onUpdate: model.updatePeakData
                     )
+                    SwitchRow(
+                        title: Strings.text("settings_peak_data_auto_check"),
+                        description: Strings.text("settings_peak_data_auto_check_description"),
+                        isOn: settings.autoCheckPeakData
+                    ) { v in model.updateSettings { $0.autoCheckPeakData = v } }
                     CacheSection(info: model.cacheInfo, onClear: model.clearCache)
                 }
 

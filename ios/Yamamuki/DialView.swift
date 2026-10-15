@@ -81,9 +81,16 @@ struct DialView: View {
                         )
                         StatusLine(message: statusMessage)
                         // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
+                        // どちらも設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
                         if model.peakDataRefreshNeeded {
-                            // 設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
-                            PeakDataRefreshLabel { model.updatePeakData() }
+                            PeakDataLabel(text: Strings.text("peak_data_refresh_needed"), identifier: "peakDataRefreshLabel") {
+                                model.updatePeakData()
+                            }
+                        } else if model.peakDataUpdateLabelShown {
+                            // 設定で自動の確認をオンにしたときに、新しい版が見つかったら出す。
+                            PeakDataLabel(text: Strings.text("peak_data_update_found"), identifier: "peakDataUpdateLabel") {
+                                model.updatePeakData()
+                            }
                         }
                         Spacer()
                     }
@@ -469,15 +476,18 @@ private struct StatusLine: View {
     }
 }
 
-/// 山データの取り直しが要ることを知らせるラベル。タップで更新を確かめる。ほかの知らせと見分けやすいよう、濃い白の札にする。
-private struct PeakDataRefreshLabel: View {
+/// 山データの取り直しが要ることや、新しい山データがあることを知らせるラベル。タップで更新を確かめる。
+/// ほかの知らせと見分けやすいよう、濃い白の札にする。
+private struct PeakDataLabel: View {
+    let text: String
+    let identifier: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.clockwise").foregroundStyle(downloadButtonIconColor)
-                Text(Strings.text("peak_data_refresh_needed")).foregroundStyle(tapeInk)
+                Text(text).foregroundStyle(tapeInk)
             }
             .font(.footnote.bold())
             .padding(.horizontal, 12)
@@ -485,7 +495,7 @@ private struct PeakDataRefreshLabel: View {
             .background(Capsule().fill(Color.white.opacity(0.9)))
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("peakDataRefreshLabel")
+        .accessibilityIdentifier(identifier)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }

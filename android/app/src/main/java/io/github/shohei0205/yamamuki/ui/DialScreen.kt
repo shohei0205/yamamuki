@@ -158,6 +158,10 @@ fun DialScreen(
     LaunchedEffect(peakDataAsked) {
         if (peakDataAsked && !hasPermission) permissionLauncher.launch(LOCATION_PERMISSIONS)
     }
+    // アプリが前面に出るたびに、設定で選んでいれば新しい山データがあるかを確かめる(前回から 1 日たっていなければ何もしない)。
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.autoCheckPeakData() }
+    }
     // 設定の「位置と方位の精度」を変えたら、測り方を変えて頼み直す。
     val precision = state.settings.sensorPrecision
     LaunchedEffect(hasPermission, precision) {
@@ -325,9 +329,12 @@ fun DialScreen(
                 )
                 StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null))
                 // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
+                // どちらも設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
                 if (state.peakDataRefreshNeeded) {
-                    // 設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
-                    PeakDataRefreshLabel(onClick = viewModel::updatePeakData)
+                    PeakDataLabel(stringResource(R.string.peak_data_refresh_needed), onClick = viewModel::updatePeakData)
+                } else if (state.peakDataUpdateLabelShown) {
+                    // 設定で自動の確認をオンにしたときに、新しい版が見つかったら出す。
+                    PeakDataLabel(stringResource(R.string.peak_data_update_found), onClick = viewModel::updatePeakData)
                 }
             }
         }
@@ -853,9 +860,12 @@ private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled:
     )
 }
 
-/** 山データの取り直しが要ることを知らせるラベル。タップで更新を確かめる。ほかの知らせと見分けやすいよう、濃い白の札にする。 */
+/**
+ * 山データの取り直しが要ることや、新しい山データがあることを知らせるラベル。タップで更新を確かめる。
+ * ほかの知らせと見分けやすいよう、濃い白の札にする。
+ */
 @Composable
-private fun PeakDataRefreshLabel(onClick: () -> Unit) {
+private fun PeakDataLabel(text: String, onClick: () -> Unit) {
     Row(
         Modifier
             .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -868,7 +878,7 @@ private fun PeakDataRefreshLabel(onClick: () -> Unit) {
     ) {
         Icon(Icons.Filled.Refresh, contentDescription = null, tint = DOWNLOAD_BUTTON_ICON_COLOR, modifier = Modifier.size(18.dp))
         Text(
-            stringResource(R.string.peak_data_refresh_needed),
+            text,
             style = MaterialTheme.typography.bodySmall,
             color = TapeInk,
             fontWeight = FontWeight.Bold,

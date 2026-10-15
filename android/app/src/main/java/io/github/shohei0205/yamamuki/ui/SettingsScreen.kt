@@ -181,6 +181,12 @@ fun SettingsScreen(
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_peak_data))
             PeakDataSection(peakData, peakDataUpdating, peakDataNotice, onUpdatePeakData)
+            SwitchRow(
+                title = stringResource(R.string.settings_peak_data_auto_check),
+                description = stringResource(R.string.settings_peak_data_auto_check_description),
+                checked = settings.autoCheckPeakData,
+                onChange = { v -> onSettingsChange { it.copy(autoCheckPeakData = v) } },
+            )
             CacheSection(cacheInfo, onClearCache)
 
             HorizontalDivider()

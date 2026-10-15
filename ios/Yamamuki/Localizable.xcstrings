@@ -1289,6 +1289,17 @@
         }
       }
     },
+    "peak_data_update_found": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しい山データあり"
+          }
+        }
+      }
+    },
     "peak_data_updated": {
       "extractionState": "manual",
       "localizations": {
@@ -1692,6 +1703,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "標高 %1$@ m 以上を表示"
+          }
+        }
+      }
+    },
+    "settings_peak_data_auto_check": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新を自動で確認"
+          }
+        }
+      }
+    },
+    "settings_peak_data_auto_check_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリを開いたときに 1 日 1 回確認し、新しい山データがあれば方位盤でお知らせします。ダウンロードは確認後に行います。"
           }
         }
       }
