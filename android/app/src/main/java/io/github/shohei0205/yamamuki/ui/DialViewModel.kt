@@ -490,7 +490,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(rangeKm = after.initialRangeKm.toDouble()) }
             if (DialGeometry.fetchRadiusKm(after.initialRangeKm.toDouble()) > fetchedRadiusKm) fetch()
         }
-        // 自動の確認をオンにしたら、次にアプリを開くのを待たずに確かめる。
+        // 自動の確認をオンにしたら、次にアプリを開くのを待たずに確かめる(前回から 30 日たっていなければ何もしない)。
         if (after.autoCheckPeakData && !before.autoCheckPeakData) autoCheckPeakData()
     }
 

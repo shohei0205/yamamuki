@@ -467,7 +467,7 @@ final class DialModel: ObservableObject {
             rangeKm = Double(after.initialRangeKm)
             if DialGeometry.fetchRadiusKm(rangeKm) > fetchedRadiusKm { fetch() }
         }
-        // 自動の確認をオンにしたら、次にアプリを開くのを待たずに確かめる。
+        // 自動の確認をオンにしたら、次にアプリを開くのを待たずに確かめる(前回から 30 日たっていなければ何もしない)。
         if after.autoCheckPeakData && !before.autoCheckPeakData { autoCheckPeakData() }
     }
 
