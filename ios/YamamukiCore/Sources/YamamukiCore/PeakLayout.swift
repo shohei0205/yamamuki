@@ -11,6 +11,12 @@ extension NearbyMountain {
     }
 }
 
+extension Mountain {
+    /// 山の持つタグ(「日本百名山」などの分類ラベル)の数。同じタグの重なりは 1 つと数える。
+    /// 方位盤では、タグの多い山ほど先に山名を出す。タグの無い山データでは、どの山も 0。
+    public var tagCount: Int { tags.isEmpty ? 0 : Set(tags.filter { !$0.isEmpty }).count }
+}
+
 /// 表示の優先順: 仰角の大きい順、標高不明は後ろ、同じなら近い順。`sorted(by:)` に渡す。
 public func displayPriority(observerAltitudeM: Double?) -> (NearbyMountain, NearbyMountain) -> Bool {
     { a, b in
@@ -33,6 +39,8 @@ public struct PeakGroup<T> {
 }
 
 /// 方位盤に出す山の選び方。2 段階で決める。
+///
+/// どちらの段階でも、タグ([tagCount])の多い山を先にする。タグの数が同じ山どうしは、次の決め方で比べる。
 ///
 /// 1. 候補を選ぶ([candidates])。画面より一回り大きい、画面の周りの円から仰角の大きい順に選ぶ。
 ///    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
@@ -81,7 +89,8 @@ public enum PeakLayout {
         return weight * heightBonusDegPerKm * max(0, elevation) / 1000
     }
 
-    /// 選ぶ順。[displayPriority] の順に、前回選んだ山([keptIds]、OSM の ID)は [keptBonusDeg] だけ上乗せする。
+    /// 選ぶ順。タグ([tagCount])の多い順に、タグの数が同じなら [displayPriority] の順に並べる。
+    /// [displayPriority] の順では、前回選んだ山([keptIds]、OSM の ID)は [keptBonusDeg] だけ上乗せする。
     /// ヘディングアップでは向いている方角([headingDeg])と表示範囲([rangeKm])を渡し、
     /// 正面に近い山に [forwardBonus] を、表示範囲が広いときは高い山に [heightBonus] を上乗せする。
     public static func priorityOrder(
@@ -97,8 +106,11 @@ public enum PeakLayout {
                 + (rangeKm.map { heightBonus(elevationM: m.mountain.elevationM, rangeKm: $0) } ?? 0)
         }
         return mountains
-            .map { (m: $0, score: score($0)) }
-            .sorted { a, b in a.score != b.score ? a.score > b.score : a.m.distanceKm < b.m.distanceKm }
+            .map { (m: $0, tags: $0.mountain.tagCount, score: score($0)) }
+            .sorted { a, b in
+                if a.tags != b.tags { return a.tags > b.tags }
+                return a.score != b.score ? a.score > b.score : a.m.distanceKm < b.m.distanceKm
+            }
             .map(\.m)
     }
 
@@ -148,10 +160,10 @@ public enum PeakLayout {
 
     /// 画面に描く山を決める。画面に入る山([visible]、優先順)を、今の向きの範囲([box]、画面上の位置)で重ならないように置く。
     ///
-    /// - すぐそばの山どうし([neighbors])が今重なるときは、標高([elevationM])の高い順に決め、高い山を残して低い山を省く。
-    ///   どの順で山が来ても同じ結果になる。
-    /// - 残りは前回描いた山([drawnBefore])を先に、それぞれ優先順に置き、置いた山と重なる山を省く。最大 [limit] 件。
-    ///   優先度の高い山が画面の端から入ってきたり、向きが変わったりしても、描いている山は実際に重なるまで消えない。
+    /// - すぐそばの山どうし([neighbors])が今重なるときは、タグ([tagCount])の多い順、タグの数が同じなら標高([elevationM])の高い順に決め、
+    ///   先の山を残してあとの山を省く。どの順で山が来ても同じ結果になる。
+    /// - 残りはタグの多い順に、タグの数が同じなら前回描いた山([drawnBefore])を先に、それぞれ優先順に置き、置いた山と重なる山を省く。最大 [limit] 件。
+    ///   優先度の高い山が画面の端から入ってきたり、向きが変わったりしても、描いている山は、タグの多い山と重なるか、実際に重なるまで消えない。
     /// - 新しく出す山は、範囲を [margin] だけ広げて判定する(境目で出たり消えたりしないようにする)。
     /// - 省いた山は、重なっている置いた山(すぐそばの高い山があればその山)の [PeakGroup.members] に入れる。
     ///   上限で省いた山など、どの山とも重ならない山は入れない。
@@ -164,23 +176,27 @@ public enum PeakLayout {
         drawnBefore: (T) -> Bool,
         neighbors: (T, T) -> Bool,
         elevationM: (T) -> Double?,
-        margin: Double = 0
+        margin: Double = 0,
+        tagCount: (T) -> Int = { _ in 0 }
     ) -> [PeakGroup<T>] {
         let boxes = visible.map(box)
         let drawn = visible.map(drawnBefore)
         let heights = visible.map { elevationM($0) ?? -.infinity }
+        let tags = visible.map(tagCount)
+        // タグの多い山が先、タグの数が同じなら標高の高い山が先。
+        func before(_ j: Int, _ i: Int) -> Bool { tags[j] > tags[i] || (tags[j] == tags[i] && heights[j] > heights[i]) }
         func testBox(_ i: Int) -> ScreenBox {
             let b = boxes[i]
             return drawn[i] ? b : ScreenBox(left: b.left - margin, top: b.top - margin, right: b.right + margin, bottom: b.bottom + margin)
         }
 
-        // そばの山どうしは、標高の高い順に決める。すでに残した高い山と今重なる山は省く。
+        // そばの山どうしは、タグの多い順、標高の高い順に決める。すでに残した先の山と今重なる山は省く。
         var dominator = [Int](repeating: -1, count: visible.count)
         var kept: [Int] = []
-        // 同じ標高なら優先順のまま。
-        for i in visible.indices.sorted(by: { heights[$0] != heights[$1] ? heights[$0] > heights[$1] : $0 < $1 }) {
+        // タグの数も標高も同じなら優先順のまま。
+        for i in visible.indices.sorted(by: { before($0, $1) || (!before($1, $0) && $0 < $1) }) {
             if let d = kept.first(where: { j in
-                heights[j] > heights[i] && boxes[j].intersects(testBox(i)) && neighbors(visible[i], visible[j])
+                before(j, i) && boxes[j].intersects(testBox(i)) && neighbors(visible[i], visible[j])
             }) {
                 dominator[i] = d
             } else {
@@ -190,7 +206,13 @@ public enum PeakLayout {
 
         let free = visible.indices.filter { dominator[$0] < 0 }
         var placed: [Int] = []
-        for i in free.filter({ drawn[$0] }) + free.filter({ !drawn[$0] }) {
+        // タグの数が同じなら前回描いた山を先に、それも同じなら優先順のまま。
+        let order = free.sorted { a, b in
+            if tags[a] != tags[b] { return tags[a] > tags[b] }
+            if drawn[a] != drawn[b] { return drawn[a] }
+            return a < b
+        }
+        for i in order {
             if placed.count >= limit { break }
             let b = testBox(i)
             if !placed.contains(where: { boxes[$0].intersects(b) }) { placed.append(i) }

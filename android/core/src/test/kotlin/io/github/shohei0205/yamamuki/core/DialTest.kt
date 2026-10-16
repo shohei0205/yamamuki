@@ -271,6 +271,7 @@ class PeakLayoutTest {
         limit: Int = 10,
         drawn: Set<String> = emptySet(),
         margin: Float = 0f,
+        tags: Map<String, Int> = emptyMap(),
     ): List<Pair<String, List<String>>> =
         PeakLayout.placeVisible(
             visible, limit,
@@ -279,6 +280,7 @@ class PeakLayoutTest {
             neighbors = { a, b -> a[0] == b[0] },
             elevationM = { it.drop(1).toDoubleOrNull() },
             margin = margin,
+            tagCount = { tags[it] ?: 0 },
         ).map { it.peak to it.members }
 
     @Test
@@ -329,6 +331,59 @@ class PeakLayoutTest {
         // 別の山塊の高い山は、重なっても優先しない(優先順で先に置いた山が残る)。
         val xs = mapOf("A1000" to 0f, "B3000" to 5f)
         assertEquals(listOf("A1000" to listOf("B3000")), place(listOf("A1000", "B3000"), xs))
+    }
+
+    @Test
+    fun tagCountCountsDistinctTags() {
+        fun count(vararg tags: String) = Mountain(1, "山", 0.0, 0.0, 1000.0, tags = tags.toList()).tagCount
+        assertEquals(0, count())
+        assertEquals(1, count("日本百名山"))
+        assertEquals(1, count("日本百名山", "日本百名山", ""))
+        assertEquals(2, count("日本百名山", "花の百名山"))
+    }
+
+    @Test
+    fun priorityOrderPrefersTaggedPeaks() {
+        fun at(name: String, ele: Double, km: Double, vararg tags: String) =
+            NearbyMountain(Mountain(name.hashCode().toLong(), name, 0.0, 0.0, ele, tags = tags.toList()), km, 0.0)
+        val near = at("裏山", 600.0, 2.0)
+        val one = at("百名山", 1500.0, 40.0, "日本百名山")
+        val two = at("二つ", 1200.0, 50.0, "日本百名山", "花の百名山")
+        val oneHigh = at("高い百名山", 2500.0, 40.0, "日本百名山")
+        // タグの多い山が先。タグの数が同じなら、今までどおり見かけの高い山が先。
+        assertEquals(listOf("二つ", "高い百名山", "百名山", "裏山"),
+            PeakLayout.priorityOrder(listOf(near, one, two, oneHigh), 0.0).map { it.mountain.name })
+        // 候補の枠が足りないときも、タグの付いた山を先に選ぶ。
+        assertEquals(listOf("二つ"),
+            PeakLayout.candidates(listOf(near, one, two), 0.0, emptySet(), reachKm = 100.0, limit = 1).map { it.mountain.name })
+        // タグの無い山データでは、今までと同じ順。
+        assertEquals(listOf("裏山"),
+            PeakLayout.candidates(listOf(near, at("遠い山", 1500.0, 40.0)), 0.0, emptySet(), reachKm = 100.0, limit = 1)
+                .map { it.mountain.name })
+    }
+
+    @Test
+    fun placeVisiblePrefersTaggedNeighbor() {
+        val xs = mapOf("A2900" to 0f, "A3190" to 5f)
+        // そばの高い A3190 より、タグの付いた A2900 を代表にする。
+        assertEquals(listOf("A2900" to listOf("A3190")), place(listOf("A3190", "A2900"), xs, tags = mapOf("A2900" to 1)))
+        // タグの数が多いほうを代表にする。
+        assertEquals(listOf("A2900" to listOf("A3190")),
+            place(listOf("A3190", "A2900"), xs, tags = mapOf("A2900" to 2, "A3190" to 1)))
+        // タグの数が同じなら、今までどおり高い山を代表にする。
+        assertEquals(listOf("A3190" to listOf("A2900")),
+            place(listOf("A2900", "A3190"), xs, tags = mapOf("A2900" to 1, "A3190" to 1)))
+    }
+
+    @Test
+    fun placeVisiblePrefersTaggedPeakOverDrawnPeak() {
+        val xs = mapOf("A1000" to 0f, "B800" to 5f, "C1" to 40f)
+        // 別の山塊でも、重なるならタグの付いた B800 の山名を出す。前回描いた A1000 より先にする。
+        assertEquals(listOf("B800" to listOf("A1000"), "C1" to emptyList()),
+            place(listOf("B800", "A1000", "C1"), xs, drawn = setOf("A1000", "C1"), tags = mapOf("B800" to 1)))
+        // 上限に達しているときも、タグの付いた山を先に残す。
+        assertEquals(listOf("B800" to listOf("A1000")),
+            place(listOf("B800", "A1000", "C1"), xs, limit = 1, drawn = setOf("A1000", "C1"), tags = mapOf("B800" to 1)))
     }
 
     @Test

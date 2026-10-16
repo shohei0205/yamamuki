@@ -191,14 +191,16 @@ final class PeakLayoutTests: XCTestCase {
     }
 
     /// 名前の 1 文字目が同じ山を同じ山塊とし、名前の数字を標高とみなす。箱は x の位置に幅 10。
-    private func place(_ visible: [String], _ xs: [String: Double], limit: Int = 10, drawn: Set<String> = [], margin: Double = 0) -> [Group] {
+    private func place(_ visible: [String], _ xs: [String: Double], limit: Int = 10, drawn: Set<String> = [], margin: Double = 0,
+                       tags: [String: Int] = [:]) -> [Group] {
         PeakLayout.placeVisible(
             visible, limit: limit,
             box: { ScreenBox(left: xs[$0]!, top: 0, right: xs[$0]! + 10, bottom: 10) },
             drawnBefore: { drawn.contains($0) },
             neighbors: { $0.first == $1.first },
             elevationM: { Double($0.dropFirst()) },
-            margin: margin
+            margin: margin,
+            tagCount: { tags[$0] ?? 0 }
         ).map { Group($0.peak, $0.members) }
     }
 
@@ -243,6 +245,54 @@ final class PeakLayoutTests: XCTestCase {
         // 別の山塊の高い山は、重なっても優先しない(優先順で先に置いた山が残る)。
         let xs = ["A1000": 0.0, "B3000": 5]
         XCTAssertEqual(place(["A1000", "B3000"], xs), [Group("A1000", ["B3000"])])
+    }
+
+    func testTagCountCountsDistinctTags() {
+        func count(_ tags: String...) -> Int {
+            Mountain(osmId: 1, name: "山", latitude: 0, longitude: 0, elevationM: 1000, tags: tags).tagCount
+        }
+        XCTAssertEqual(count(), 0)
+        XCTAssertEqual(count("日本百名山"), 1)
+        XCTAssertEqual(count("日本百名山", "日本百名山", ""), 1)
+        XCTAssertEqual(count("日本百名山", "花の百名山"), 2)
+    }
+
+    func testPriorityOrderPrefersTaggedPeaks() {
+        func at(_ name: String, _ ele: Double, _ km: Double, _ tags: String...) -> NearbyMountain {
+            NearbyMountain(mountain: Mountain(osmId: Int64(name.hashValue), name: name, latitude: 0, longitude: 0, elevationM: ele, tags: tags),
+                           distanceKm: km, bearingDeg: 0)
+        }
+        let near = at("裏山", 600, 2)
+        let one = at("百名山", 1500, 40, "日本百名山")
+        let two = at("二つ", 1200, 50, "日本百名山", "花の百名山")
+        let oneHigh = at("高い百名山", 2500, 40, "日本百名山")
+        // タグの多い山が先。タグの数が同じなら、今までどおり見かけの高い山が先。
+        XCTAssertEqual(PeakLayout.priorityOrder([near, one, two, oneHigh], observerAltitudeM: 0).map(\.mountain.name),
+                       ["二つ", "高い百名山", "百名山", "裏山"])
+        // 候補の枠が足りないときも、タグの付いた山を先に選ぶ。
+        XCTAssertEqual(PeakLayout.candidates([near, one, two], observerAltitudeM: 0, keptIds: [], reachKm: 100, limit: 1).map(\.mountain.name),
+                       ["二つ"])
+        // タグの無い山データでは、今までと同じ順。
+        XCTAssertEqual(PeakLayout.candidates([near, at("遠い山", 1500, 40)], observerAltitudeM: 0, keptIds: [], reachKm: 100, limit: 1)
+                        .map(\.mountain.name), ["裏山"])
+    }
+
+    func testPlaceVisiblePrefersTaggedNeighbor() {
+        let xs = ["A2900": 0.0, "A3190": 5]
+        // そばの高い A3190 より、タグの付いた A2900 を代表にする。
+        XCTAssertEqual(place(["A3190", "A2900"], xs, tags: ["A2900": 1]), [Group("A2900", ["A3190"])])
+        // タグの数が多いほうを代表にする。
+        XCTAssertEqual(place(["A3190", "A2900"], xs, tags: ["A2900": 2, "A3190": 1]), [Group("A2900", ["A3190"])])
+        // タグの数が同じなら、今までどおり高い山を代表にする。
+        XCTAssertEqual(place(["A2900", "A3190"], xs, tags: ["A2900": 1, "A3190": 1]), [Group("A3190", ["A2900"])])
+    }
+
+    func testPlaceVisiblePrefersTaggedPeakOverDrawnPeak() {
+        let xs = ["A1000": 0.0, "B800": 5, "C1": 40]
+        // 別の山塊でも、重なるならタグの付いた B800 の山名を出す。前回描いた A1000 より先にする。
+        XCTAssertEqual(place(["B800", "A1000", "C1"], xs, drawn: ["A1000", "C1"], tags: ["B800": 1]), [Group("B800", ["A1000"]), Group("C1")])
+        // 上限に達しているときも、タグの付いた山を先に残す。
+        XCTAssertEqual(place(["B800", "A1000", "C1"], xs, limit: 1, drawn: ["A1000", "C1"], tags: ["B800": 1]), [Group("B800", ["A1000"])])
     }
 
     func testElevationClass() {

@@ -69,6 +69,7 @@ import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.settings.GridStyle
 import io.github.shohei0205.yamamuki.core.displayScore
 import io.github.shohei0205.yamamuki.core.elevationClass
+import io.github.shohei0205.yamamuki.core.tagCount
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -612,6 +613,7 @@ private fun DrawScope.drawPeaks(
         neighbors = { a, b -> PeakLayout.areNeighbors(a.mountain, b.mountain) },
         elevationM = { it.mountain.mountain.elevationM },
         margin = NEW_PEAK_MARGIN.toPx(),
+        tagCount = { it.mountain.mountain.tagCount },
     )
     selection.drawnIds = groups.mapTo(HashSet()) { it.peak.mountain.mountain.osmId }
     selection.shownIds = selection.drawnIds + groups.flatMap { g -> g.members.map { it.mountain.mountain.osmId } }
