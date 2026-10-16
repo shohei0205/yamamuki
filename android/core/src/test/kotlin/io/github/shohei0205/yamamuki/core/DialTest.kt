@@ -343,23 +343,23 @@ class PeakLayoutTest {
     }
 
     @Test
-    fun priorityOrderPrefersTaggedPeaks() {
+    fun priorityOrderAddsBonusPerTag() {
         fun at(name: String, ele: Double, km: Double, vararg tags: String) =
             NearbyMountain(Mountain(name.hashCode().toLong(), name, 0.0, 0.0, ele, tags = tags.toList()), km, 0.0)
         val near = at("裏山", 600.0, 2.0)
+        val plain = at("遠い山", 1500.0, 40.0)
         val one = at("百名山", 1500.0, 40.0, "日本百名山")
         val two = at("二つ", 1200.0, 50.0, "日本百名山", "花の百名山")
-        val oneHigh = at("高い百名山", 2500.0, 40.0, "日本百名山")
-        // タグの多い山が先。タグの数が同じなら、今までどおり見かけの高い山が先。
-        assertEquals(listOf("二つ", "高い百名山", "百名山", "裏山"),
-            PeakLayout.priorityOrder(listOf(near, one, two, oneHigh), 0.0).map { it.mountain.name })
-        // 候補の枠が足りないときも、タグの付いた山を先に選ぶ。
-        assertEquals(listOf("二つ"),
-            PeakLayout.candidates(listOf(near, one, two), 0.0, emptySet(), reachKm = 100.0, limit = 1).map { it.mountain.name })
+        val high = at("高い山", 2500.0, 40.0)
+        // タグ 1 つにつき仰角に 3° を上乗せする。すぐ近くの大きく見える山(約 17°)は、タグの付いた遠くの山より先のまま。
+        assertEquals(listOf("裏山", "二つ", "百名山", "高い山", "遠い山"),
+            PeakLayout.priorityOrder(listOf(plain, high, one, two, near), 0.0).map { it.mountain.name })
+        // 候補の枠が足りないときも、同じ見かけの高さならタグの付いた山を先に選ぶ。
+        assertEquals(listOf("百名山"),
+            PeakLayout.candidates(listOf(plain, one), 0.0, emptySet(), reachKm = 100.0, limit = 1).map { it.mountain.name })
         // タグの無い山データでは、今までと同じ順。
-        assertEquals(listOf("裏山"),
-            PeakLayout.candidates(listOf(near, at("遠い山", 1500.0, 40.0)), 0.0, emptySet(), reachKm = 100.0, limit = 1)
-                .map { it.mountain.name })
+        assertEquals(listOf("裏山", "高い山", "遠い山"),
+            PeakLayout.priorityOrder(listOf(plain, high, near), 0.0).map { it.mountain.name })
     }
 
     @Test

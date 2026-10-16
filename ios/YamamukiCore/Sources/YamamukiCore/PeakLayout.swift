@@ -13,7 +13,7 @@ extension NearbyMountain {
 
 extension Mountain {
     /// 山の持つタグ(「日本百名山」などの分類ラベル)の数。同じタグの重なりは 1 つと数える。
-    /// 方位盤では、タグの多い山ほど先に山名を出す。タグの無い山データでは、どの山も 0。
+    /// 方位盤では、タグの多い山ほど山名を出しやすくする([PeakLayout.tagBonusDeg])。タグの無い山データでは、どの山も 0。
     public var tagCount: Int { tags.isEmpty ? 0 : Set(tags.filter { !$0.isEmpty }).count }
 }
 
@@ -40,16 +40,16 @@ public struct PeakGroup<T> {
 
 /// 方位盤に出す山の選び方。2 段階で決める。
 ///
-/// どちらの段階でも、タグ([tagCount])の多い山を先にする。タグの数が同じ山どうしは、次の決め方で比べる。
-///
 /// 1. 候補を選ぶ([candidates])。画面より一回り大きい、画面の周りの円から仰角の大きい順に選ぶ。
 ///    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
 ///    山の一覧・表示範囲・文字の大きさなどが変わったときと、向きを変えたり地図を動かしたりして画面が円からはみ出したときだけ選び直す。
 ///    前回描いた山は、円の中にある限り候補に残す。
+///    タグ([tagCount])の付いた山は、タグの数だけ優先する([tagBonusDeg])。
 ///    ヘディングアップでは、正面に近い山ほど優先する([forwardBonus])。表示範囲を広げるほど、高い山を優先する([heightBonus])。
 /// 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
-///    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
-///    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
+///    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。タグの多い山を代表にし、タグの数が同じなら、
+///    すぐそばの山どうしは標高の高いほうを代表にする。
+///    タグの数が同じなら前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
 ///    新しく出す山は少し余白をとって判定し、境目で出たり消えたりしないようにする。
 public enum PeakLayout {
     /// 前回選んだ山の仰角に上乗せする値(°)。GPS の標高の揺れで、順位が入れ替わって点滅しないようにする。
@@ -89,8 +89,12 @@ public enum PeakLayout {
         return weight * heightBonusDegPerKm * max(0, elevation) / 1000
     }
 
-    /// 選ぶ順。タグ([tagCount])の多い順に、タグの数が同じなら [displayPriority] の順に並べる。
-    /// [displayPriority] の順では、前回選んだ山([keptIds]、OSM の ID)は [keptBonusDeg] だけ上乗せする。
+    /// タグ(「日本百名山」など)1 つあたり、仰角に上乗せする値(°)。タグの付いた山の山名を出しやすくする。
+    /// 一律に先にはせず、すぐ近くの大きく見える山や正面の山とは見かけの高さで比べる。
+    public static let tagBonusDeg = 3.0
+
+    /// 選ぶ順。[displayPriority] の順に、タグの数([tagCount])× [tagBonusDeg] を上乗せし、
+    /// 前回選んだ山([keptIds]、OSM の ID)は [keptBonusDeg] だけ上乗せする。
     /// ヘディングアップでは向いている方角([headingDeg])と表示範囲([rangeKm])を渡し、
     /// 正面に近い山に [forwardBonus] を、表示範囲が広いときは高い山に [heightBonus] を上乗せする。
     public static func priorityOrder(
@@ -102,15 +106,13 @@ public enum PeakLayout {
     ) -> [NearbyMountain] {
         func score(_ m: NearbyMountain) -> Double {
             m.displayScore(observerAltitudeM: observerAltitudeM) + (keptIds.contains(m.mountain.osmId) ? keptBonusDeg : 0)
+                + tagBonusDeg * Double(m.mountain.tagCount)
                 + (headingDeg.map { forwardBonus(bearingDeg: m.bearingDeg, headingDeg: $0) } ?? 0)
                 + (rangeKm.map { heightBonus(elevationM: m.mountain.elevationM, rangeKm: $0) } ?? 0)
         }
         return mountains
-            .map { (m: $0, tags: $0.mountain.tagCount, score: score($0)) }
-            .sorted { a, b in
-                if a.tags != b.tags { return a.tags > b.tags }
-                return a.score != b.score ? a.score > b.score : a.m.distanceKm < b.m.distanceKm
-            }
+            .map { (m: $0, score: score($0)) }
+            .sorted { a, b in a.score != b.score ? a.score > b.score : a.m.distanceKm < b.m.distanceKm }
             .map(\.m)
     }
 

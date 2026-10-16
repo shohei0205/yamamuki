@@ -26,7 +26,7 @@ fun NearbyMountain.displayScore(observerAltitudeM: Double?): Double {
 
 /**
  * 山の持つタグ(「日本百名山」などの分類ラベル)の数。同じタグの重なりは 1 つと数える。
- * 方位盤では、タグの多い山ほど先に山名を出す。タグの無い山データでは、どの山も 0。
+ * 方位盤では、タグの多い山ほど山名を出しやすくする([PeakLayout.TAG_BONUS_DEG])。タグの無い山データでは、どの山も 0。
  */
 val Mountain.tagCount: Int get() = if (tags.isEmpty()) 0 else tags.filter { it.isNotEmpty() }.toSet().size
 
@@ -41,16 +41,16 @@ data class PeakGroup<T>(val peak: T, val members: List<T>)
 /**
  * 方位盤に出す山の選び方。2 段階で決める。
  *
- * どちらの段階でも、タグ([tagCount])の多い山を先にする。タグの数が同じ山どうしは、次の決め方で比べる。
- *
  * 1. 候補を選ぶ([candidates])。画面より一回り大きい、画面の周りの円から仰角の大きい順に選ぶ。
  *    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
  *    山の一覧・表示範囲・文字の大きさなどが変わったときと、向きを変えたり地図を動かしたりして画面が円からはみ出したときだけ選び直す。
  *    前回描いた山は、円の中にある限り候補に残す。
+ *    タグ([tagCount])の付いた山は、タグの数だけ優先する([TAG_BONUS_DEG])。
  *    ヘディングアップでは、正面に近い山ほど優先する([forwardBonus])。表示範囲を広げるほど、高い山を優先する([heightBonus])。
  * 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
- *    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
- *    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
+ *    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。タグの多い山を代表にし、タグの数が同じなら、
+ *    すぐそばの山どうしは標高の高いほうを代表にする。
+ *    タグの数が同じなら前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
  *    新しく出す山は少し余白をとって判定し、境目で出たり消えたりしないようにする。
  */
 object PeakLayout {
@@ -97,8 +97,14 @@ object PeakLayout {
     }
 
     /**
-     * 選ぶ順。タグ([tagCount])の多い順に、タグの数が同じなら [displayPriority] の順に並べる。
-     * [displayPriority] の順では、前回選んだ山([keptIds]、OSM の ID)は [KEPT_BONUS_DEG] だけ上乗せする。
+     * タグ(「日本百名山」など)1 つあたり、仰角に上乗せする値(°)。タグの付いた山の山名を出しやすくする。
+     * 一律に先にはせず、すぐ近くの大きく見える山や正面の山とは見かけの高さで比べる。
+     */
+    const val TAG_BONUS_DEG = 3.0
+
+    /**
+     * 選ぶ順。[displayPriority] の順に、タグの数([tagCount])× [TAG_BONUS_DEG] を上乗せし、
+     * 前回選んだ山([keptIds]、OSM の ID)は [KEPT_BONUS_DEG] だけ上乗せする。
      * ヘディングアップでは向いている方角([headingDeg])と表示範囲([rangeKm])を渡し、
      * 正面に近い山に [forwardBonus] を、表示範囲が広いときは高い山に [heightBonus] を上乗せする。
      */
@@ -111,11 +117,12 @@ object PeakLayout {
     ): List<NearbyMountain> {
         fun score(m: NearbyMountain) =
             m.displayScore(observerAltitudeM) + (if (m.mountain.osmId in keptIds) KEPT_BONUS_DEG else 0.0) +
+                TAG_BONUS_DEG * m.mountain.tagCount +
                 (headingDeg?.let { forwardBonus(m.bearingDeg, it) } ?: 0.0) +
                 (rangeKm?.let { heightBonus(m.mountain.elevationM, it) } ?: 0.0)
-        return mountains.sortedWith(
-            compareByDescending<NearbyMountain> { it.mountain.tagCount }.thenByDescending { score(it) }.thenBy { it.distanceKm },
-        )
+        return mountains.map { it to score(it) }
+            .sortedWith(compareByDescending<Pair<NearbyMountain, Double>> { it.second }.thenBy { it.first.distanceKm })
+            .map { it.first }
     }
 
     /** [a] と [b] が [NEIGHBOR_KM] 以内にある、同じ山塊の山か。 */

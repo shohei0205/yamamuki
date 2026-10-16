@@ -257,24 +257,25 @@ final class PeakLayoutTests: XCTestCase {
         XCTAssertEqual(count("日本百名山", "花の百名山"), 2)
     }
 
-    func testPriorityOrderPrefersTaggedPeaks() {
+    func testPriorityOrderAddsBonusPerTag() {
         func at(_ name: String, _ ele: Double, _ km: Double, _ tags: String...) -> NearbyMountain {
             NearbyMountain(mountain: Mountain(osmId: Int64(name.hashValue), name: name, latitude: 0, longitude: 0, elevationM: ele, tags: tags),
                            distanceKm: km, bearingDeg: 0)
         }
         let near = at("裏山", 600, 2)
+        let plain = at("遠い山", 1500, 40)
         let one = at("百名山", 1500, 40, "日本百名山")
         let two = at("二つ", 1200, 50, "日本百名山", "花の百名山")
-        let oneHigh = at("高い百名山", 2500, 40, "日本百名山")
-        // タグの多い山が先。タグの数が同じなら、今までどおり見かけの高い山が先。
-        XCTAssertEqual(PeakLayout.priorityOrder([near, one, two, oneHigh], observerAltitudeM: 0).map(\.mountain.name),
-                       ["二つ", "高い百名山", "百名山", "裏山"])
-        // 候補の枠が足りないときも、タグの付いた山を先に選ぶ。
-        XCTAssertEqual(PeakLayout.candidates([near, one, two], observerAltitudeM: 0, keptIds: [], reachKm: 100, limit: 1).map(\.mountain.name),
-                       ["二つ"])
+        let high = at("高い山", 2500, 40)
+        // タグ 1 つにつき仰角に 3° を上乗せする。すぐ近くの大きく見える山(約 17°)は、タグの付いた遠くの山より先のまま。
+        XCTAssertEqual(PeakLayout.priorityOrder([plain, high, one, two, near], observerAltitudeM: 0).map(\.mountain.name),
+                       ["裏山", "二つ", "百名山", "高い山", "遠い山"])
+        // 候補の枠が足りないときも、同じ見かけの高さならタグの付いた山を先に選ぶ。
+        XCTAssertEqual(PeakLayout.candidates([plain, one], observerAltitudeM: 0, keptIds: [], reachKm: 100, limit: 1).map(\.mountain.name),
+                       ["百名山"])
         // タグの無い山データでは、今までと同じ順。
-        XCTAssertEqual(PeakLayout.candidates([near, at("遠い山", 1500, 40)], observerAltitudeM: 0, keptIds: [], reachKm: 100, limit: 1)
-                        .map(\.mountain.name), ["裏山"])
+        XCTAssertEqual(PeakLayout.priorityOrder([plain, high, near], observerAltitudeM: 0).map(\.mountain.name),
+                       ["裏山", "高い山", "遠い山"])
     }
 
     func testPlaceVisiblePrefersTaggedNeighbor() {
