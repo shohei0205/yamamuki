@@ -222,6 +222,7 @@ open Yamamuki.xcodeproj
 | 更新を自動で確認 | アプリを開いたときに 30 日に 1 回、新しい山データがあるかを確かめ、あれば方位盤に「新しい山データあり」と出す（ダウンロードは確認してから） | オフ |
 | キャッシュ | 保存している山の件数・容量の確認と消去(消すと山データも消える) | — |
 | データの出典とライセンス | 取り込み済みの山データの出典を見る画面（下の「データの出典とライセンスの画面」） | — |
+| 著作権と開発者 | 「このアプリについて」のバージョンの下に、著作権表示（© 2026 The yamamuki Authors）と開発者の名前を出す。名前は [AUTHORS.md](AUTHORS.md) と合わせる | — |
 
 設定は端末内（Android は SharedPreferences、iOS は UserDefaults）に保存する。
 
@@ -244,7 +245,9 @@ Android 版では、山データのキャッシュと、事前ダウンロード
 
 ## ライセンス
 
-ソースコードは [MIT License](LICENSE) で公開する。
+ソースコードは [MIT License](LICENSE) で公開する。著作権者の「The yamamuki Authors」は [AUTHORS.md](AUTHORS.md) に載せた開発者を指す。
+
+アプリ名「山むき」とアプリアイコン（`android/app/src/main/res/drawable/ic_launcher_*.xml`、`ios/Yamamuki/Assets.xcassets/AppIcon.appiconset/`、`docs/images/app-icon.png`）は MIT License の対象外とする。コードを使って別のアプリを配布するときは、別の名前とアイコンを使う。利用者が公式のアプリと取り違えないようにするため。
 
 アプリが表示する山データは OpenStreetMap のもので、コードとは別に [ODbL](https://opendatacommons.org/licenses/odbl/) の条件で利用している。
 

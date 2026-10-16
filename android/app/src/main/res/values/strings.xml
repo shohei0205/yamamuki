@@ -150,6 +150,8 @@
     <string name="settings_cache_clear_confirm">消去</string>
     <string name="settings_section_about">このアプリについて</string>
     <string name="settings_version">バージョン %1$s</string>
+    <string name="settings_copyright">© 2026 The yamamuki Authors</string>
+    <string name="settings_developers">開発：Shohei.S、Hiroyuki.H</string>
     <string name="settings_credits">データの出典とライセンス</string>
     <string name="credits_section_data">山データ</string>
     <string name="credits_section_supplements">補足に使った資料</string>

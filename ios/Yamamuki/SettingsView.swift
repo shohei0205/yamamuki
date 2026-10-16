@@ -105,6 +105,9 @@ struct SettingsView: View {
                 Section(Strings.text("settings_section_about")) {
                     // 山データの著作者表示は方位盤と「データの出典とライセンス」の画面に出すので、ここには出さない。
                     Text(Strings.format("settings_version", appVersion))
+                    // 名前は AUTHORS.md と合わせる。
+                    Text(Strings.text("settings_copyright"))
+                    Text(Strings.text("settings_developers"))
                     // 山データが無くても OSM の表示は見られるよう、いつでも押せる。
                     NavigationLink {
                         CreditsView(model: model)
