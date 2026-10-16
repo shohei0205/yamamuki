@@ -222,7 +222,7 @@ open Yamamuki.xcodeproj
 | 更新を自動で確認 | アプリを開いたときに 30 日に 1 回、新しい山データがあるかを確かめ、あれば方位盤に「新しい山データあり」と出す（ダウンロードは確認してから） | オフ |
 | キャッシュ | 保存している山の件数・容量の確認と消去(消すと山データも消える) | — |
 | データの出典とライセンス | 取り込み済みの山データの出典を見る画面（下の「データの出典とライセンスの画面」） | — |
-| 著作権と開発者 | 「このアプリについて」のバージョンの下に、著作権表示（© 2026 The yamamuki Authors）と開発者の名前を出す。名前は [AUTHORS.md](AUTHORS.md) と合わせる | — |
+| 著作権と開発者 | 「このアプリについて」のバージョンの下に、著作権表示（© 2026 The yamamuki Authors）と開発者の名前（Developers: Shohei.S, Hiroyuki.H）を出す。名前は [AUTHORS.md](AUTHORS.md) と合わせる | — |
 
 設定は端末内（Android は SharedPreferences、iOS は UserDefaults）に保存する。
 
