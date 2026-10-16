@@ -24,6 +24,12 @@ fun NearbyMountain.displayScore(observerAltitudeM: Double?): Double {
     return GeoMath.elevationAngleDeg(observerAltitudeM ?: 0.0, ele, distanceKm)
 }
 
+/**
+ * 山の持つタグ(「日本百名山」などの分類ラベル)の数。同じタグの重なりは 1 つと数える。
+ * 方位盤では、タグの多い山ほど山名を出しやすくする([PeakLayout.TAG_BONUS_DEG])。タグの無い山データでは、どの山も 0。
+ */
+val Mountain.tagCount: Int get() = if (tags.isEmpty()) 0 else tags.filter { it.isNotEmpty() }.toSet().size
+
 /** 表示の優先順: 仰角の大きい順、標高不明は後ろ、同じなら近い順。 */
 fun displayPriority(observerAltitudeM: Double?): Comparator<NearbyMountain> =
     compareByDescending<NearbyMountain> { it.displayScore(observerAltitudeM) }
@@ -39,10 +45,12 @@ data class PeakGroup<T>(val peak: T, val members: List<T>)
  *    現在地の周り全体から選ぶと、ほかの方角の山に候補の枠を取られ、向けた先に山が出ないことがある。
  *    山の一覧・表示範囲・文字の大きさなどが変わったときと、向きを変えたり地図を動かしたりして画面が円からはみ出したときだけ選び直す。
  *    前回描いた山は、円の中にある限り候補に残す。
+ *    タグ([tagCount])の付いた山は、タグの数だけ優先する([TAG_BONUS_DEG])。
  *    ヘディングアップでは、正面に近い山ほど優先する([forwardBonus])。表示範囲を広げるほど、高い山を優先する([heightBonus])。
  * 2. 画面に描く山を決める([placeVisible])。描くたびに、画面に入る候補を今の向きで重ならないように並べる。
- *    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。すぐそばの山どうしは標高の高いほうを代表にする。
- *    前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
+ *    重なる山は山名を省いてアイコンだけを残し、代表の山にまとめる。タグの多い山を代表にし、タグの数が同じなら、
+ *    すぐそばの山どうしは標高の高いほうを代表にする。
+ *    タグの数が同じなら前回描いた山を先に置くので、向きを変えても、描いている山が後から入ってきた山に押し出されない。
  *    新しく出す山は少し余白をとって判定し、境目で出たり消えたりしないようにする。
  */
 object PeakLayout {
@@ -89,7 +97,14 @@ object PeakLayout {
     }
 
     /**
-     * 選ぶ順。[displayPriority] の順に、前回選んだ山([keptIds]、OSM の ID)は [KEPT_BONUS_DEG] だけ上乗せする。
+     * タグ(「日本百名山」など)1 つあたり、仰角に上乗せする値(°)。タグの付いた山の山名を出しやすくする。
+     * 一律に先にはせず、すぐ近くの大きく見える山や正面の山とは見かけの高さで比べる。
+     */
+    const val TAG_BONUS_DEG = 3.0
+
+    /**
+     * 選ぶ順。[displayPriority] の順に、タグの数([tagCount])× [TAG_BONUS_DEG] を上乗せし、
+     * 前回選んだ山([keptIds]、OSM の ID)は [KEPT_BONUS_DEG] だけ上乗せする。
      * ヘディングアップでは向いている方角([headingDeg])と表示範囲([rangeKm])を渡し、
      * 正面に近い山に [forwardBonus] を、表示範囲が広いときは高い山に [heightBonus] を上乗せする。
      */
@@ -102,9 +117,12 @@ object PeakLayout {
     ): List<NearbyMountain> {
         fun score(m: NearbyMountain) =
             m.displayScore(observerAltitudeM) + (if (m.mountain.osmId in keptIds) KEPT_BONUS_DEG else 0.0) +
+                TAG_BONUS_DEG * m.mountain.tagCount +
                 (headingDeg?.let { forwardBonus(m.bearingDeg, it) } ?: 0.0) +
                 (rangeKm?.let { heightBonus(m.mountain.elevationM, it) } ?: 0.0)
-        return mountains.sortedWith(compareByDescending<NearbyMountain> { score(it) }.thenBy { it.distanceKm })
+        return mountains.map { it to score(it) }
+            .sortedWith(compareByDescending<Pair<NearbyMountain, Double>> { it.second }.thenBy { it.first.distanceKm })
+            .map { it.first }
     }
 
     /** [a] と [b] が [NEIGHBOR_KM] 以内にある、同じ山塊の山か。 */
@@ -153,10 +171,10 @@ object PeakLayout {
     /**
      * 画面に描く山を決める。画面に入る山([visible]、優先順)を、今の向きの範囲([box]、画面上の位置)で重ならないように置く。
      *
-     * - すぐそばの山どうし([neighbors])が今重なるときは、標高([elevationM])の高い順に決め、高い山を残して低い山を省く。
-     *   どの順で山が来ても同じ結果になる。
-     * - 残りは前回描いた山([drawnBefore])を先に、それぞれ優先順に置き、置いた山と重なる山を省く。最大 [limit] 件。
-     *   優先度の高い山が画面の端から入ってきたり、向きが変わったりしても、描いている山は実際に重なるまで消えない。
+     * - すぐそばの山どうし([neighbors])が今重なるときは、タグ([tagCount])の多い順、タグの数が同じなら標高([elevationM])の高い順に決め、
+     *   先の山を残してあとの山を省く。どの順で山が来ても同じ結果になる。
+     * - 残りはタグの多い順に、タグの数が同じなら前回描いた山([drawnBefore])を先に、それぞれ優先順に置き、置いた山と重なる山を省く。最大 [limit] 件。
+     *   優先度の高い山が画面の端から入ってきたり、向きが変わったりしても、描いている山は、タグの多い山と重なるか、実際に重なるまで消えない。
      * - 新しく出す山は、範囲を [margin] だけ広げて判定する(境目で出たり消えたりしないようにする)。
      * - 省いた山は、重なっている置いた山(すぐそばの高い山があればその山)の [PeakGroup.members] に入れる。
      *   上限で省いた山など、どの山とも重ならない山は入れない。
@@ -171,27 +189,31 @@ object PeakLayout {
         neighbors: (T, T) -> Boolean,
         elevationM: (T) -> Double?,
         margin: Float = 0f,
+        tagCount: (T) -> Int = { 0 },
     ): List<PeakGroup<T>> {
         val boxes = visible.map(box)
         val drawn = visible.map(drawnBefore)
         val heights = visible.map { elevationM(it) ?: Double.NEGATIVE_INFINITY }
+        val tags = visible.map(tagCount)
+        // タグの多い山が先、タグの数が同じなら標高の高い山が先。
+        fun before(j: Int, i: Int) = tags[j] > tags[i] || (tags[j] == tags[i] && heights[j] > heights[i])
         fun testBox(i: Int): Box = boxes[i].let { b ->
             if (drawn[i]) b else Box(b.left - margin, b.top - margin, b.right + margin, b.bottom + margin)
         }
 
-        // そばの山どうしは、標高の高い順に決める。すでに残した高い山と今重なる山は省く。
+        // そばの山どうしは、タグの多い順、標高の高い順に決める。すでに残した先の山と今重なる山は省く。
         val dominator = IntArray(visible.size) { -1 }
         val kept = mutableListOf<Int>()
-        for (i in visible.indices.sortedByDescending { heights[it] }) {
+        for (i in visible.indices.sortedWith(compareByDescending<Int> { tags[it] }.thenByDescending { heights[it] })) {
             val d = kept.firstOrNull { j ->
-                heights[j] > heights[i] && boxes[j].intersects(testBox(i)) && neighbors(visible[i], visible[j])
+                before(j, i) && boxes[j].intersects(testBox(i)) && neighbors(visible[i], visible[j])
             }
             if (d != null) dominator[i] = d else kept += i
         }
 
         val free = visible.indices.filter { dominator[it] < 0 }
         val placed = mutableListOf<Int>()
-        for (i in free.filter { drawn[it] } + free.filter { !drawn[it] }) {
+        for (i in free.sortedWith(compareByDescending<Int> { tags[it] }.thenBy { if (drawn[it]) 0 else 1 })) {
             if (placed.size >= limit) break
             val b = testBox(i)
             if (placed.none { boxes[it].intersects(b) }) placed += i

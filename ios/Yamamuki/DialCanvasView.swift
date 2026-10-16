@@ -448,7 +448,8 @@ struct DialCanvasView: View, Animatable {
             drawnBefore: { selection.drawnIds.contains($0.mountain.mountain.osmId) },
             neighbors: { PeakLayout.areNeighbors($0.mountain, $1.mountain) },
             elevationM: { $0.mountain.mountain.elevationM },
-            margin: newPeakMargin
+            margin: newPeakMargin,
+            tagCount: { $0.mountain.mountain.tagCount }
         )
         selection.drawnIds = Set(groups.map { $0.peak.mountain.mountain.osmId })
         selection.shownIds = selection.drawnIds.union(groups.flatMap { $0.members.map(\.mountain.mountain.osmId) })
