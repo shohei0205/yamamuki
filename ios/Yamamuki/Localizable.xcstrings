@@ -1531,6 +1531,17 @@
         }
       }
     },
+    "settings_copyright": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "© 2026 The yamamuki Authors"
+          }
+        }
+      }
+    },
     "settings_credits": {
       "extractionState": "manual",
       "localizations": {
@@ -1538,6 +1549,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "データの出典とライセンス"
+          }
+        }
+      }
+    },
+    "settings_developers": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Developers: Shohei.S, Hiroyuki.H"
           }
         }
       }
