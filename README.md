@@ -80,6 +80,7 @@ cd android
   ```
 - 山データの取得に失敗したときは、原因を logcat にタグ `DialViewModel` で出している。
 - 開発版はアプリ ID が `io.github.shohei0205.yamamuki.debug`、名前が「山むき(開発版)」になり、配布版と同じ端末に並べて入れられる。
+- 配布版(release)は R8 で使わないコードとリソースを削って小さくする。規則は `android/app/proguard-rules.pro` に書く。難読化の対応表(`android/app/build/outputs/mapping/release/mapping.txt`)は AAB に入るので、Play Console のクラッシュの記録も元のクラス名で読める。
 
 ### iOS 版
 
