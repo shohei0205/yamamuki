@@ -59,10 +59,10 @@ android {
         for (type in listOf("debug", "release")) {
             named(type) {
                 if (type in adsBuildTypes) {
-                    java.srcDir("src/ads/java")
+                    kotlin.directories.add("src/ads/kotlin")
                     manifest.srcFile("src/ads/AndroidManifest.xml")
                 } else {
-                    java.srcDir("src/noads/java")
+                    kotlin.directories.add("src/noads/kotlin")
                 }
             }
         }
