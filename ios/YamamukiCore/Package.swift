@@ -4,7 +4,7 @@ import PackageDescription
 // iOS に依存しない山データのロジック(Android 版の core/ に相当)。`swift test` で単体テストできる。
 let package = Package(
     name: "YamamukiCore",
-    platforms: [.iOS(.v15), .macOS(.v13)],
+    platforms: [.iOS("26.0"), .macOS(.v13)],
     products: [
         .library(name: "YamamukiCore", targets: ["YamamukiCore"]),
     ],
