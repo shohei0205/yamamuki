@@ -25,6 +25,10 @@ jobs:
       - name: アプリのビルド
         working-directory: android
         run: ./gradlew :app:assembleDebug
+      # 広告は配布版だけに入るので、配布版もビルドして広告のコードが通るかを見る(署名鍵が無いので署名なし)。
+      - name: 配布版のビルド(広告入り)
+        working-directory: android
+        run: ./gradlew :app:assembleRelease
       - name: アプリの単体テスト(DB の移行など)
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest

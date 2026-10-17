@@ -9,6 +9,10 @@ options:
 packages:
   YamamukiCore:
     path: YamamukiCore
+  # 広告(Google AdMob)。13.4 以降は Xcode 26.2 が要り、CI(Xcode 16.4)でビルドできないので 13.3 系にとどめる。
+  GoogleMobileAds:
+    url: https://github.com/googleads/swift-package-manager-google-mobile-ads
+    minorVersion: 13.3.0
 targets:
   Yamamuki:
     type: application
@@ -16,6 +20,11 @@ targets:
     sources: [Yamamuki]
     dependencies:
       - package: YamamukiCore
+      - package: GoogleMobileAds
+    # 広告の ID(既定は Google のテスト用。本番の ID は手元の Ads.local.xcconfig に書く)。
+    configFiles:
+      Debug: Ads.xcconfig
+      Release: Ads.xcconfig
     settings:
       base:
         PRODUCT_NAME: Yamamuki
@@ -26,6 +35,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: YES
+        # 自動で作る Info.plist に、広告の ID など INFOPLIST_KEY_ で書けない項目を足す。
+        INFOPLIST_FILE: Yamamuki/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: 山むき
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: 現在地から見える山の方位と距離を計算するために使います。
@@ -39,8 +50,12 @@ targets:
       # (DialModel.peakDataChannel)。既定(current)は参照先ファイルの dev(無ければ配布版と同じ stable)。
       # yamamuki-data の dev が公開する最新の開発版(points/osm-peaks-dev/)を直接試すときは、ビルド設定 PEAK_DATA_SOURCE を dev にする
       # (例: xcodebuild ... PEAK_DATA_SOURCE=dev。Xcode ではターゲットの Build Settings の User-Defined で変える)。
+      # 広告(AdMob のバナー)は Release だけで出す(AdBanner.swift)。開発中に試すときは xcodebuild ... ADS_ENABLED=YES のように変える。
       configs:
+        Release:
+          ADS_ENABLED: "YES"
         Debug:
+          ADS_ENABLED: "NO"
           PEAK_DATA_SOURCE: current
           PEAK_DATA_CONDITION_current: ""
           PEAK_DATA_CONDITION_dev: PEAK_DATA_DEV
