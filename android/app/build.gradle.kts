@@ -48,8 +48,12 @@ android {
 
     buildTypes {
         // 山データは、配布版は参照先ファイルの stable、開発版は peakDataSource で選んだほうを読む(YamamukiApp.peakDataChannel)。
+        // R8 で使わないコードとリソースを削って小さくする。難読化の対応表(build/outputs/mapping/release/mapping.txt)は
+        // AAB に入るので、Play Console のクラッシュの記録も元の名前で読める。
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
             buildConfigField("boolean", "PEAK_DATA_DEV", "false")
         }
