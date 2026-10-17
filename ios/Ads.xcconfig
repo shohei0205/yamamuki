@@ -1,0 +1,8 @@
+// 広告(Google AdMob)の ID。Info.plist(Yamamuki/Info.plist)から読む。
+// ここにあるのは Google のテスト用 ID で、「Test Ad」と書かれたテスト広告が出る。
+// 本番の ID はリポジトリに入れず、同じフォルダの Ads.local.xcconfig(.gitignore 済み)に同じ名前で書く。
+// xcconfig では「//」がコメントになるので、ID の「/」は 1 つのまま書けばよい。
+ADMOB_APP_ID = ca-app-pub-3940256099942544~1458002511
+ADMOB_BANNER_ID = ca-app-pub-3940256099942544/2934735716
+
+#include? "Ads.local.xcconfig"

@@ -7,6 +7,9 @@ local.properties
 .DS_Store
 captures/
 
+# 本番の広告 ID(iOS。Android は ~/.gradle/gradle.properties に書く)
+ios/Ads.local.xcconfig
+
 # リリース署名鍵(PC 内の ~/.android に置く。誤って入れないように)
 *.jks
 *.keystore

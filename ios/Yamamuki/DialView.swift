@@ -66,6 +66,16 @@ struct DialView: View {
                 .animation(modeAnimation, value: manualChrome)
                 .animation(modeAnimation, value: model.exploring)
 
+                // 配布版では、ヘッダーの中央にバナー広告(320×50)を出す(Ads.enabled)。
+                if Ads.enabled {
+                    VStack {
+                        AdBanner()
+                            .frame(width: 320, height: 50)
+                            .padding(.top, (CGFloat(DialGeometry.headerHeight) - 50) / 2)
+                        Spacer()
+                    }
+                }
+
                 if model.settings.peakDataAsked && !model.hasLocationPermission {
                     PermissionRequest(denied: model.authorization == .denied || model.authorization == .restricted) {
                         model.requestLocationPermission()
