@@ -583,6 +583,7 @@ private struct ViewpointLabel: View {
                     .foregroundColor(woodInk)
                 Text(verbatim: "\(lat)  \(lon)").font(.system(size: 11 * textScale, weight: .medium)).foregroundColor(woodInkSubtle)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .background(
@@ -606,7 +607,8 @@ private struct ViewpointLabel: View {
                     .padding(.top, 3)
             }
         }
-        .frame(maxWidth: 260, alignment: .leading)
+        // 山名の長さによらず、札の幅は決まった幅にする。撮った画面の見た目がそろう。長い山名は折り返す。
+        .frame(width: 260, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
     }
 }
