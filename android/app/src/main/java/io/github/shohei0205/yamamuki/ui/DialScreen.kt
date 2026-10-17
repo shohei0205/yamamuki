@@ -39,7 +39,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -758,10 +758,12 @@ private fun ViewpointLabel(mountain: Mountain, headingDeg: Double?, textScale: F
         ?: stringResource(R.string.dial_heading_loading)
     val elevation = elevationListLabel(mountain.elevationM)
     val boardShape = RoundedCornerShape(6.dp)
-    Column(Modifier.widthIn(max = 260.dp)) {
+    // 山名の長さによらず、札の幅は決まった幅にする。撮った画面の見た目がそろう。長い山名は折り返す。
+    Column(Modifier.width(260.dp)) {
         // 木の板。木目と、左右のビスを描く。
         Column(
             Modifier
+                .fillMaxWidth()
                 .shadow(4.dp, boardShape)
                 .background(Brush.verticalGradient(listOf(WoodLight, WoodDark)), boardShape)
                 .drawBehind { drawWoodGrain() }
