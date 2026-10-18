@@ -3,6 +3,7 @@
 python3 -m unittest discover -s .github/scripts/tests（リポジトリの直下で実行）
 """
 
+import gzip
 import hashlib
 import json
 import sys
@@ -27,6 +28,11 @@ def manifest_bytes(tag, count=14035, schema=5, data_schema=5):
         "downloadUrl": f"https://github.com/shohei0205/yamamuki-data/releases/download/{tag}/osm-peaks.json.gz",
         "sha256": "0" * 64, "sizeBytes": 505256, "pointCount": count,
     }
+    if schema >= 6:
+        # 版 6 は形式の名前が入り、件数と出典が metadata にまとまる。
+        del manifest["pointCount"]
+        manifest = {"schemaFormat": "yamamuki-manifest", **manifest, "dataSchemaFormat": "yamamuki-points",
+                    "metadata": {"sources": [{"name": "osm-peaks", "license": "ODbL-1.0"}], "pointCount": count}}
     return (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode()
 
 
@@ -85,6 +91,26 @@ class ValidateManifestTest(unittest.TestCase):
             pd.validate_manifest(manifest_bytes(STABLE_NEW, schema=6, data_schema=6), STABLE_NEW, "stable")
         self.assertEqual(6, pd.validate_manifest(data, DEV, "dev")["schemaVersion"])
 
+    def test_reads_count_of_v6_from_metadata(self):
+        manifest = pd.validate_manifest(manifest_bytes(DEV, count=14038, schema=6, data_schema=6), DEV, "dev")
+        self.assertEqual(14038, pd.point_count(manifest))
+        self.assertEqual(14035, pd.point_count(json.loads(manifest_bytes(STABLE_OLD))))
+
+    def test_rejects_v6_of_other_formats_or_without_count(self):
+        def broken(change):
+            manifest = json.loads(manifest_bytes(DEV, schema=6, data_schema=6))
+            change(manifest)
+            return json.dumps(manifest).encode()
+
+        for name, change in (("schemaFormat", lambda m: m.update(schemaFormat="other")),
+                             ("dataSchemaFormat", lambda m: m.update(dataSchemaFormat="other")),
+                             ("metadata なし", lambda m: m.pop("metadata")),
+                             ("件数なし", lambda m: m["metadata"].pop("pointCount")),
+                             ("件数が文字列", lambda m: m["metadata"].update(pointCount="14038")),
+                             ("件数が真偽値", lambda m: m["metadata"].update(pointCount=True))):
+            with self.subTest(name), self.assertRaises(pd.PeakDataError):
+                pd.validate_manifest(broken(change), DEV, "dev")
+
     def test_rejects_version_not_matching_tag(self):
         with self.assertRaises(pd.PeakDataError):
             pd.validate_manifest(manifest_bytes(STABLE_OLD), STABLE_NEW, "stable")
@@ -134,6 +160,55 @@ class SwapTest(SiteTestCase):
         latest.assert_called_once_with("stable")
 
 
+class CheckDataTest(unittest.TestCase):
+    def check(self, document):
+        body = gzip.compress(json.dumps(document).encode())
+        manifest = {"downloadUrl": "https://example.invalid/osm-peaks.json.gz", "sizeBytes": len(body),
+                    "sha256": hashlib.sha256(body).hexdigest()}
+        with mock.patch.object(pd, "http_get", return_value=body):
+            return pd.check_data(manifest, DEV)
+
+    def test_counts_array_of_v5_and_points_of_v6(self):
+        self.assertEqual(2, self.check([{"osmId": 1}, {"osmId": 2}]))
+        self.assertEqual(3, self.check({"schemaFormat": "yamamuki-points", "schemaVersion": 6, "metadata": {},
+                                        "points": [{"id": "osm:1"}, {"id": "osm:2"}, {"id": "gsi-vector:3"}]}))
+
+    def test_rejects_document_without_points(self):
+        for document in ({"schemaVersion": 6}, {"points": {}}, "文字列"):
+            with self.subTest(document=document), self.assertRaises(pd.PeakDataError):
+                self.check(document)
+
+
+class SwapV6Test(SiteTestCase):
+    def test_dev_accepts_v6_and_compares_count_with_v5(self):
+        self.releases[DEV] = (manifest_bytes(DEV, count=14000, schema=6, data_schema=6), {"prerelease": True})
+        result = pd.swap(self.root, "dev", DEV, False)
+        self.assertTrue(result["changed"])
+        body = "\n".join(result["body"])
+        self.assertIn("14,000 件", body)
+        self.assertIn("schemaVersion 6", body)
+        self.assertEqual(DEV, pd.validate_pointer(self.pointer())["dev"])
+
+    def test_stable_still_refuses_v6(self):
+        self.releases[STABLE_NEW] = (manifest_bytes(STABLE_NEW, schema=6, data_schema=6), {})
+        with self.assertRaises(pd.PeakDataError):
+            pd.swap(self.root, "stable", STABLE_NEW, False)
+
+
+class ReleasesTest(unittest.TestCase):
+    def test_reads_every_page(self):
+        pages = {1: [{"tag_name": f"gsi-peaks-dev-{i}"} for i in range(100)], 2: [{"tag_name": STABLE_OLD}]}
+        with mock.patch.object(pd, "api", side_effect=lambda path: pages[int(path.rsplit("=", 1)[1])]) as api:
+            listing = pd.releases()
+        self.assertEqual(101, len(listing))
+        self.assertEqual(STABLE_OLD, listing[-1]["tag_name"])
+        self.assertEqual(2, api.call_count)
+
+    def test_gives_up_after_max_pages(self):
+        with mock.patch.object(pd, "api", return_value=[{}] * 100), self.assertRaises(pd.PeakDataError):
+            pd.releases(max_pages=2)
+
+
 class LatestTagTest(unittest.TestCase):
     def test_picks_newest_of_the_channel(self):
         listing = [
@@ -142,6 +217,8 @@ class LatestTagTest(unittest.TestCase):
             {"tag_name": DEV, "prerelease": True, "published_at": "2026-12-01T00:00:00Z"},
             {"tag_name": "osm-peaks-20261201T000000Z-1-1", "draft": True, "published_at": None},
             {"tag_name": "peaks-20261007T084736Z-37595744056-1", "published_at": "2026-12-02T00:00:00Z"},
+            {"tag_name": "gsi-peaks-20261202T000000Z-1-1", "published_at": "2026-12-03T00:00:00Z"},
+            {"tag_name": "gsi-peaks-dev-20261202T000000Z-1-1", "prerelease": True, "published_at": "2026-12-03T00:00:00Z"},
         ]
         with mock.patch.object(pd, "releases", return_value=listing):
             self.assertEqual(STABLE_NEW, pd.latest_tag("stable"))

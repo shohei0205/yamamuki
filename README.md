@@ -185,7 +185,7 @@ open Yamamuki.xcodeproj
   - `manifests/<タグ>.json`: yamamuki-data の Release の `manifest.json` を書き換えずにコピーしたもの。差し替えるたびに 1 つ増やし、一度置いたファイルは上書きも削除もしない（前の版に戻すとき、そのまま使えるようにするため）。データ本体は yamamuki-data の Release のものを使う。
 - 参照先ファイルは手で書き換えず、Actions の「山データの差し替え PR を作る」を main で手動で動かして、差し替えの PR を作る（実行できるのは書き込み権限のある人だけ）。
   - 「行う操作」で「dev: 開発用アプリで試す山データを選ぶ」「stable: 配布用アプリで使う山データを選ぶ」「remove-dev: 開発用アプリも配布用と同じ山データに戻す」のいずれかを選ぶ。内部では、それぞれ `dev`・`stable`・`remove-dev` として処理する。
-  - 山データを選ぶ操作では、Release のタグを指定する（空欄なら、その種類の最新の Release）。配布用には正式版の Release（タグ `osm-peaks-…`、manifest の版 5）だけを置ける。
+  - 山データを選ぶ操作では、Release のタグを指定する（空欄なら、その種類の最新の Release）。配布用には正式版の Release（タグ `osm-peaks-…`、manifest の版 5）だけを置ける。開発用には版 6 も置ける（配布中のアプリが版 6 を読めないうちに、配布用を版 6 にしないため）。最新の Release は、yamamuki-data の Release の一覧をすべて読んで、`osm-peaks-` のタグから選ぶ。
   - 「同じ山データに戻す」操作では、`dev` の指定だけを外し、既存の `stable` を使う。Release のタグは使わない。`dev` の指定がなければ PR は作らない。
   - 配布用の山データを選ぶときに「開発用アプリも配布用と同じ山データに戻す」にチェックすると、配布用の更新と同時に `dev` の指定も外す。
   - PR は GitHub App のトークンで作る（標準のトークンで作った PR では CI が動かないため）。App の ID と鍵は、main だけが使える環境 `data-swap` の変数 `APP_ID` とシークレット `APP_PRIVATE_KEY` に置いている。
