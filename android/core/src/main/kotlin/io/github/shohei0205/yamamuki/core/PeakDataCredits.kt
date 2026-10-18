@@ -8,13 +8,16 @@ package io.github.shohei0205.yamamuki.core
 data class PeakDataCredits(
     /** データを作った日(UTC)。「2026/10/07」の形。 */
     val releaseDate: String?,
-    /** manifest の license(例: ODbL-1.0)。 */
+    /** manifest の license(例: ODbL-1.0)。版 6 は元データの出典の license。 */
     val license: String?,
-    /** manifest の attribution(例: © OpenStreetMap contributors)。 */
+    /** manifest の attribution(例: © OpenStreetMap contributors)。版 6 は元データの出典の attribution。 */
     val attribution: String?,
-    /** manifest の sourceUrl。元にした OSM データの URL。 */
+    /** manifest の sourceUrl。元にした OSM データの URL。版 6 は元データの出典の source。 */
     val sourceUrl: String?,
-    /** タグ・よみがななどの補足に使った資料(manifest の supplementSources)。出典 ID の文字コード順。 */
+    /**
+     * タグ・よみがななどの補足に使った資料(manifest の supplementSources)。出典 ID の文字コード順。
+     * 版 6 は metadata.sources のうち、元データ以外の出典。
+     */
     val supplements: List<SupplementSource>,
 )
 
@@ -48,6 +51,7 @@ object PeakDataCreditsReader {
      * manifest の本文から出典を読む。JSON のオブジェクトでなければ null。
      * supplementSources が無い・空・オブジェクトでない古いデータでは、補足は空になる。
      * 出典の値がオブジェクトでないものは飛ばし、属性がどれも無い出典は ID だけを出す。
+     * 版 6 は metadata.sources を読む([parseSources])。
      */
     fun parse(body: String): PeakDataCredits? {
         val root = try {
@@ -55,6 +59,7 @@ object PeakDataCreditsReader {
         } catch (e: IllegalArgumentException) {
             return null
         } as? Map<*, *> ?: return null
+        if (root["metadata"] is Map<*, *>) return parseSources(root)
         val supplements = (root["supplementSources"] as? Map<*, *>).orEmpty().mapNotNull { (key, value) ->
             val id = (key as? String)?.trim()?.ifEmpty { null } ?: return@mapNotNull null
             val item = value as? Map<*, *> ?: return@mapNotNull null
@@ -72,6 +77,34 @@ object PeakDataCreditsReader {
             attribution = text(root["attribution"]),
             sourceUrl = text(root["sourceUrl"]),
             supplements = supplements,
+        )
+    }
+
+    /**
+     * manifest 版 6 の metadata.sources から出典を読む。出典の並びに元データと補足の区別は無いので、
+     * データ本体のファイル名(例: osm-peaks.json.gz)の頭(osm-peaks)と同じ名前の出典を元データとし、
+     * それ以外を補足に使った資料として出す。元データの出典が無ければ、すべてを補足に使った資料として出す。
+     * name の無い出典は飛ばす。
+     */
+    private fun parseSources(root: Map<*, *>): PeakDataCredits {
+        val sources = ((root["metadata"] as Map<*, *>)["sources"] as? List<*>).orEmpty().mapNotNull { value ->
+            val item = value as? Map<*, *> ?: return@mapNotNull null
+            SupplementSource(
+                id = text(item["name"]) ?: return@mapNotNull null,
+                source = text(item["source"]),
+                license = text(item["license"]),
+                attribution = text(item["attribution"]),
+                changes = text(item["changes"]),
+            )
+        }
+        val dataName = text(root["fileName"])?.substringBefore('.')
+        val main = sources.firstOrNull { it.id == dataName }
+        return PeakDataCredits(
+            releaseDate = (root["version"] as? String)?.let(PeakData::releaseDate),
+            license = main?.license,
+            attribution = main?.attribution,
+            sourceUrl = main?.source,
+            supplements = sources.filter { it !== main }.sortedBy { it.id },
         )
     }
 

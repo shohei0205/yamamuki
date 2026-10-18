@@ -193,8 +193,10 @@ open Yamamuki.xcodeproj
   - core の単体テスト（`SitePeakDataTest`）が、`current.json` の指す manifest をアプリの読み込み処理で読めるかを確かめる。
   - マージ後は Pages の公開のあとに、公開中の内容が git と同じかを確かめる。公開中の `current.json` から manifest とデータ本体までたどれるかは、「山データの見張り」で毎日確かめ、失敗したら Issue で知らせる。
   - 確認の処理は `.github/scripts/peak_data.py` にある。
-- 対応する manifest の形式は schemaVersion 4 と 5。版 5 では、データ本体の版(`dataSchemaVersion`)が 5 のときだけ取り込む。知らない版や、データ本体の版が書かれていないときは取り込まず、アプリの更新を促す。
+- 対応する manifest の形式は schemaVersion 4・5・6。版 5 以降では、データ本体の版(`dataSchemaVersion`)が 5 か 6 のときだけ取り込む。知らない版や、データ本体の版が書かれていないときは取り込まず、アプリの更新を促す。
+  - 版 6 では件数を `metadata.pointCount` から読み、形式の名前(`schemaFormat` が `yamamuki-manifest`、`dataSchemaFormat` が `yamamuki-points`)が違う manifest は読まない。
 - 版 5 のデータ本体(地点データ)は、山ごとの項目が版 4 までと同じなので、同じ読み方で読む。山頂以外の種別(`type`)の地点と、`osmId` の無い地点は飛ばす。
+- 版 6 のデータ本体は、地点の配列が文書の `points` に入る。`osmId` の代わりに `id` の `osm:<ノード番号>` をノード番号として読み、`osm:` 以外の ID(国土地理院の地点など)は飛ばす。別名は `{name, nameReading}` の配列から `name` を、読み仮名は配列なら最初の空でないものを読む。保存データの形は版 5 と同じ。
   - 山名・座標・標高のほかに、地点の ID(`id`)・読み仮名・別名・Wikipedia と Wikidata の URL(https だけ)・タグ(`tags`、「日本百名山」など)・画像(`graphic` の SVG と倍率)も読んで保存データに残す。今は画面には出していない。形の合わない値は無いものとして扱う。
   - 保存先は、Android が DB の `mountains` の列(DB の版 2 で追加。別名とタグは JSON の配列の文字列)、iOS がタイルごとの JSON(項目は省略可能で、項目の無い古いファイルも読める)。
 - 取り込んだ manifest とデータ本体(gz)は、保存データに取り込み終えてから端末に 1 組だけ残す。新しい版を取り込むと置き換えるので溜まらない(今は約 0.5 MB)。取り込みに失敗したときは、前の組をそのまま残す。アプリが読まない項目(地点の画像など)も、ここには残る。
@@ -260,8 +262,9 @@ Android 版では、山データのキャッシュと、事前ダウンロード
 
 - 取り込んだときに端末へ残した manifest から読むので、オフラインでも見られ、地点データと別の版の出典が混ざらない。残した manifest が取り込み済みの記録の SHA-256 と合わないときは読まない。
 - 「山データ」には、manifest のトップレベルの `license`・`attribution`・`sourceUrl` と、リリース日（データを作った日）を出す。
-- 「補足に使った資料」には、manifest の `supplementSources`（タグ・よみがななどの補足に使った Wikipedia などの資料）を、出典 ID の名前順（文字コード順）に 1 件ずつ出す。項目は資料（`source`）・ライセンス（`license`）・著作者（`attribution`）・加工（`changes`）で、空の項目は出さない。値は省略せずに出し、文中の http(s) の URL はタップでブラウザに開けるリンクにする。
-- `supplementSources` の無いデータでは「補足資料なし」と出す。
+- manifest 版 6 では、出典が `metadata.sources` の配列にまとまっている。データ本体のファイル名の頭（`osm-peaks.json.gz` なら `osm-peaks`）と同じ `name` の出典を「山データ」に出し（`sourceUrl` の代わりに `source`）、それ以外を「補足に使った資料」に出す。画面の形は版 5 と同じ。
+- 「補足に使った資料」には、manifest の `supplementSources`（版 6 は上のとおり `metadata.sources`。タグ・よみがななどの補足に使った Wikipedia などの資料）を、出典 ID（版 6 は `name`）の名前順（文字コード順）に 1 件ずつ出す。項目は資料（`source`）・ライセンス（`license`）・著作者（`attribution`）・加工（`changes`）で、空の項目は出さない。値は省略せずに出し、文中の http(s) の URL はタップでブラウザに開けるリンクにする。
+- 補足に使った資料の無いデータでは「補足資料なし」と出す。
 - 山データをまだ取得していないとき、端末に残した manifest が無いか読めないとき（出典を残す前の版のアプリで取り込んだときなど）は、アプリが持つ「山データ © OpenStreetMap contributors (ODbL)」と OpenStreetMap の著作権のページを出す。未取得なら「山データ未取得」、manifest が読めなければ「出典情報の取得に失敗」と添える。行は山データが無くてもいつでも押せる。
 - 読み込みは `android/core/.../PeakDataCredits.kt` と `ios/YamamukiCore/.../PeakDataCredits.swift`、画面は `CreditsScreen.kt` / `CreditsView.swift` にある。
 

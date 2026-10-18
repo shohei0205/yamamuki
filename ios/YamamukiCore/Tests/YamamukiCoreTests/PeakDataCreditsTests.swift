@@ -52,6 +52,65 @@ final class PeakDataCreditsTests: XCTestCase {
         XCTAssertEqual(PeakDataCreditsReader.parse(Data(#"{"supplementSources": []}"#.utf8))?.supplements, [])
     }
 
+    /// manifest 版 6。出典は metadata.sources に並び、データ本体のファイル名の頭と同じ名前のものが元データ。
+    private let manifestV6 = """
+    {
+      "schemaVersion": 6,
+      "version": "20261018T115955Z-39125410649-1",
+      "fileName": "osm-peaks.json.gz",
+      "metadata": {
+        "sources": [
+          {
+            "name": "日本百名山",
+            "source": "Wikipedia「日本百名山」",
+            "license": "CC BY-SA 4.0",
+            "attribution": "Wikipedia「日本百名山」の投稿者",
+            "changes": "OSM の地点 ID に対応付けた。"
+          },
+          { "name": "国土地理院", "license": "PDL-1.0", "attribution": "出典：国土地理院" },
+          {
+            "name": "osm-peaks",
+            "source": "https://download.geofabrik.de/asia/japan-261017.osm.pbf",
+            "license": "ODbL-1.0",
+            "attribution": "© OpenStreetMap contributors",
+            "latestTimestamp": "2026-10-17T04:42:52Z"
+          },
+          { "license": "名前の無い出典" },
+          "文字列"
+        ],
+        "pointCount": 14038
+      }
+    }
+    """
+
+    func testReadsMetadataSourcesOfManifestV6() throws {
+        let credits = try XCTUnwrap(PeakDataCreditsReader.parse(Data(manifestV6.utf8)))
+        XCTAssertEqual(credits.releaseDate, "2026/10/18")
+        XCTAssertEqual(credits.license, "ODbL-1.0")
+        XCTAssertEqual(credits.attribution, "© OpenStreetMap contributors")
+        XCTAssertEqual(credits.sourceUrl, "https://download.geofabrik.de/asia/japan-261017.osm.pbf")
+        // 元データ以外の出典を、出典名の文字コード順に出す。国(56FD) < 日(65E5)。名前の無いものは飛ばす。
+        XCTAssertEqual(credits.supplements, [
+            SupplementSource(id: "国土地理院", source: nil, license: "PDL-1.0", attribution: "出典：国土地理院", changes: nil),
+            SupplementSource(
+                id: "日本百名山",
+                source: "Wikipedia「日本百名山」",
+                license: "CC BY-SA 4.0",
+                attribution: "Wikipedia「日本百名山」の投稿者",
+                changes: "OSM の地点 ID に対応付けた。"
+            ),
+        ])
+    }
+
+    func testManifestV6WithoutMainSourceListsAllAsSupplements() throws {
+        let other = manifestV6.replacingOccurrences(of: "\"osm-peaks.json.gz\"", with: "\"other.json.gz\"")
+        let credits = try XCTUnwrap(PeakDataCreditsReader.parse(Data(other.utf8)))
+        XCTAssertNil(credits.license)
+        XCTAssertNil(credits.sourceUrl)
+        XCTAssertEqual(credits.supplements.map(\.id), ["osm-peaks", "国土地理院", "日本百名山"])
+        XCTAssertEqual(PeakDataCreditsReader.parse(Data(#"{"metadata": {}}"#.utf8))?.supplements, [])
+    }
+
     func testUnreadableManifestIsNil() {
         XCTAssertNil(PeakDataCreditsReader.parse(Data("{".utf8)))
         XCTAssertNil(PeakDataCreditsReader.parse(Data("[]".utf8)))

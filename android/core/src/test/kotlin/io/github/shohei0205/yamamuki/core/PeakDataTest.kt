@@ -73,16 +73,53 @@ class PeakDataTest {
         assertEquals("", PeakData.parseManifest(manifestV5(sourceTimestamp = null)).sourceTimestamp)
     }
 
+    // yamamuki-data の formats/manifest.md の manifest 版 6 と同じ形。件数と出典は metadata にある。
+    private fun manifestV6(
+        data: ByteArray = gzip,
+        schemaFormat: String = "yamamuki-manifest",
+        dataSchemaFormat: String = "yamamuki-points",
+        dataSchemaVersion: String = "6",
+        metadata: String = """{"sources":[{"name":"osm-peaks","license":"ODbL-1.0"}],"pointCount":2}""",
+    ) = """
+        {"schemaFormat":"$schemaFormat","schemaVersion":6,"dataSchemaVersion":$dataSchemaVersion,"name":"山頂",
+         "version":"20261018T115955Z-39125410649-1","fileName":"osm-peaks.json.gz",
+         "downloadUrl":"https://example.com/osm-peaks.json.gz","sha256":"${sha256(data)}","sizeBytes":${data.size},
+         "uncompressedSizeBytes":100,"dataTimestamp":"2026-10-18T12:00:15Z","dataSchemaFormat":"$dataSchemaFormat",
+         "metadata":$metadata}
+    """.trimIndent()
+
+    @Test
+    fun parsesManifestV6() {
+        val m = PeakData.parseManifest(manifestV6())
+        assertEquals(6, m.schemaVersion)
+        assertEquals("20261018T115955Z-39125410649-1", m.version)
+        assertEquals("https://example.com/osm-peaks.json.gz", m.downloadUrl)
+        assertEquals(2, m.mountainCount, "件数は metadata.pointCount から読む")
+        assertEquals("", m.sourceTimestamp, "版 6 に sourceTimestamp は無い")
+    }
+
+    @Test
+    fun rejectsManifestV6OfOtherFormats() {
+        // 形式の名前が違うものと、件数の無いものは読まない。
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(schemaFormat = "other")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(dataSchemaFormat = "other")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(metadata = """{"sources":[]}""")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(metadata = """{"pointCount":"2"}""")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6().replace("\"metadata\":", "\"meta\":")) }
+        // 版 6 の manifest でも、データ本体の版が読めなければ断る。
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(dataSchemaVersion = "7")) }
+    }
+
     @Test
     fun rejectsUnknownSchemaVersion() {
-        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 6)) }
+        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 7)) }
         assertTrue(e.message!!.contains("アプリを更新"))
         assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 3)) }
     }
 
     @Test
     fun rejectsUnknownDataSchemaVersion() {
-        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "6")) }
+        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "7")) }
         assertTrue(e.message!!.contains("アプリを更新"))
         // データ本体の版が分からないときは、manifest の版から推測せずに断る。
         assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "null")) }
@@ -173,6 +210,67 @@ class PeakDataTest {
             ),
             PeakData.parseMountains(v5),
         )
+    }
+
+    // yamamuki-data の points/formats/data.md の地点データ版 6 と同じ形。地点は points に入り、ID は osm:<ノード番号>。
+    private val pointsV6 = """
+        {"schemaFormat":"yamamuki-points","schemaVersion":6,
+         "metadata":{"sources":[{"name":"osm-peaks"}],"pointCount":5,"tags":[{"name":"日本百名山","nameReading":"にほんひゃくめいざん"}]},
+         "points":[
+          {"id":"osm:3740788022","type":"peak","name":"鳥海山","nameReading":"ちょうかいさん","latitude":39.0990,"longitude":140.0490,
+           "elevationM":2236,"provenance":{"dataSource":"osm","elevationSource":"supplement"},
+           "aliases":[{"name":"出羽富士","nameReading":"でわふじ"},{"name":"鳥海山"},{"nameReading":"なし"},"秋田富士"],
+           "wikipediaUrl":"https://ja.wikipedia.org/wiki/x","wikidataUrl":null,"tags":["日本百名山"]},
+          {"id":"osm:2","type":"peak","name":"読みが二つ","nameReading":[" ","かな","カナ"],"latitude":35.0,"longitude":138.0,"elevationM":null,"aliases":[]},
+          {"id":"gsi-vector:abc","type":"peak","name":"国土地理院の山","latitude":35.1,"longitude":138.1,"elevationM":100},
+          {"id":"osm:x1","type":"peak","name":"番号でない","latitude":35.2,"longitude":138.2},
+          {"id":"osm:3","type":"parking","name":"駐車場","latitude":35.3,"longitude":138.3}]}
+    """.trimIndent()
+
+    @Test
+    fun parsesPointsV6() {
+        // OSM 以外の ID と、形の違う ID の地点は飛ばす。別名は name を読み、読み仮名が配列なら最初の空でないものを読む。
+        assertEquals(
+            listOf(
+                Mountain(
+                    3740788022, "鳥海山", 39.0990, 140.0490, 2236.0,
+                    pointId = "osm:3740788022",
+                    nameReading = "ちょうかいさん",
+                    aliases = listOf("出羽富士", "秋田富士"),
+                    wikipediaUrl = "https://ja.wikipedia.org/wiki/x",
+                    tags = listOf("日本百名山"),
+                ),
+                Mountain(2, "読みが二つ", 35.0, 138.0, null, pointId = "osm:2", nameReading = "かな"),
+            ),
+            PeakData.parseMountains(gzip(pointsV6)),
+        )
+    }
+
+    @Test
+    fun rejectsDocumentWithoutPoints() {
+        assertFailsWith<PeakDataException> { PeakData.parseMountains(gzip("""{"schemaVersion":6}""")) }
+        assertFailsWith<PeakDataException> { PeakData.parseMountains(gzip("\"文字列\"")) }
+    }
+
+    @Test
+    fun replacesV5DataWithV6Data() = runTest {
+        // 版 5 の山データを取り込んだ端末に、版 6 の山データが届いたときに入れ替わる。山は同じノード番号で引き継ぐ。
+        val cache = InMemoryMountainCache()
+        val source = FakeSource(manifestV5(), gzip)
+        val updater = PeakDataUpdater(source, cache)
+        val installed = updater.update(null).installed
+        assertEquals(setOf(3403990450L, 12L), cache.mountains.keys)
+
+        val v6 = gzip(pointsV6)
+        source.manifestBody = manifestV6(data = v6)
+        source.data = v6
+        source.etag = "\"e2\""
+        val result = updater.update(installed)
+
+        assertIs<UpdateResult.Updated>(result)
+        assertEquals("20261018T115955Z-39125410649-1", result.installed.version)
+        assertEquals(setOf(3740788022L, 2L), cache.mountains.keys)
+        assertEquals(2, result.installed.mountainCount, "件数は実際に読めた山の数")
     }
 
     @Test

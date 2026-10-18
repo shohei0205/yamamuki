@@ -106,15 +106,50 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(try PeakData.parseManifest(manifestV5(sourceTimestamp: nil)).sourceTimestamp, "")
     }
 
+    /// yamamuki-data の formats/manifest.md の manifest 版 6 と同じ形。件数と出典は metadata にある。
+    private func manifestV6(data: Data? = nil, schemaFormat: String = "yamamuki-manifest",
+                            dataSchemaFormat: String = "yamamuki-points", dataSchemaVersion: String = "6",
+                            metadata: String = #"{"sources":[{"name":"osm-peaks","license":"ODbL-1.0"}],"pointCount":2}"#,
+                            metadataKey: String = "metadata") -> Data {
+        let data = data ?? gzip
+        return Data("""
+        {"schemaFormat":"\(schemaFormat)","schemaVersion":6,"dataSchemaVersion":\(dataSchemaVersion),"name":"山頂",
+         "version":"20261018T115955Z-39125410649-1","fileName":"osm-peaks.json.gz",
+         "downloadUrl":"https://example.com/osm-peaks.json.gz","sha256":"\(PeakData.sha256Hex(data))","sizeBytes":\(data.count),
+         "uncompressedSizeBytes":100,"dataTimestamp":"2026-10-18T12:00:15Z","dataSchemaFormat":"\(dataSchemaFormat)",
+         "\(metadataKey)":\(metadata)}
+        """.utf8)
+    }
+
+    func testParsesManifestV6() throws {
+        let m = try PeakData.parseManifest(manifestV6())
+        XCTAssertEqual(m.schemaVersion, 6)
+        XCTAssertEqual(m.version, "20261018T115955Z-39125410649-1")
+        XCTAssertEqual(m.downloadUrl.absoluteString, "https://example.com/osm-peaks.json.gz")
+        XCTAssertEqual(m.mountainCount, 2, "件数は metadata.pointCount から読む")
+        XCTAssertEqual(m.sourceTimestamp, "", "版 6 に sourceTimestamp は無い")
+    }
+
+    func testRejectsManifestV6OfOtherFormats() {
+        // 形式の名前が違うものと、件数の無いものは読まない。
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(schemaFormat: "other")))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(dataSchemaFormat: "other")))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(metadata: #"{"sources":[]}"#)))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(metadata: #"{"pointCount":"2"}"#)))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(metadataKey: "meta")))
+        // 版 6 の manifest でも、データ本体の版が読めなければ断る。
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(dataSchemaVersion: "7")))
+    }
+
     func testRejectsUnknownSchemaVersion() {
-        XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 6))) { error in
+        XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 7))) { error in
             XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
         }
         XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 3)))
     }
 
     func testRejectsUnknownDataSchemaVersion() {
-        XCTAssertThrowsError(try PeakData.parseManifest(manifestV5(dataSchemaVersion: "6"))) { error in
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV5(dataSchemaVersion: "7"))) { error in
             XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
         }
         // データ本体の版が分からないときは、manifest の版から推測せずに断る。
@@ -148,6 +183,48 @@ final class PeakDataTests: XCTestCase {
                      pointId: "2", graphic: PointGraphic(svg: "<svg/>", scale: 1.0)),
             Mountain(osmId: 3, name: "山", latitude: 35.0, longitude: 138.0, elevationM: nil, pointId: "3"),
         ])
+    }
+
+    /// yamamuki-data の points/formats/data.md の地点データ版 6 と同じ形。地点は points に入り、ID は osm:<ノード番号>。
+    /// 中身は Android の PeakDataTest.pointsV6 と同じ 5 件を、Python の gzip.compress(mtime=0) で圧縮したもの。
+    private let pointsV6 = Data(base64Encoded:
+        "H4sIAAAAAAAC/3VTy04bMRTd8xWR13lMZngks63UXTet2k3Ewk2s4GZemkcKirLwgECCVIlEKUWN1CeKlPQBbRESCPox7mTgL3o9k4ZkQnb29fU5555jN5BTXiM6fmjaOnaRijawjnWvRjOWSQ3XQelRwzNiO9Q0kLqcXkghnbi4gl2M1AZyTM8uEweppQYysE4AxHT0jEVwzUHN1TSKkB6YngH4S2nk4upU8/DweNj9Gh5dB51XwekpMIqDxwRXqFGFc84GnF1yf5+zn9zf5KzNfcbZFmdvoAgMTaFoJFctLaRSDUQrsQpVWVmUVgoFSZYB192wBKFQNmKB3e2v4+HZ+f3EH7m/w9k2Z3sR34HgSyMNu9T1KnBZKWalYlGCkmlUR7X8opSVFqEIQlKIaKQO7abxCKmyrCyDG7ZZJwY2ykSYJ0x8EhkYCwb48ZVx3fEsSyM6AQObMSzWKHamPQ92LsLrq+BHK/g8uGeUHvfbnJ1x9hYwGrPD/y9O3ulzdggHKOztha9PRtCrsYKXtEYtUqH4qa1B85rrWo6ay73A2fFJ1rSrObHLrYMgsRDTRv2Gp2njlzDzAqJEJ1OcG95N/xtnfzhr/b1ocfYlOXcJpaAUxdcXC3/AN3dhgskIl7KJ/JSCqEwGF6u983xKX9WhmTopu6at4ufleUKDd1dB933QPQk727dHnzj7Hr+4KSH5GSH5aSF5SUpas56fRxke9IP2uUheBLmVJJNnyOQktjIBje2asPTu2/Q6N5e7wYffSVxlBleBL/oPAJhMN2gEAAA="
+    )!
+
+    func testParsesPointsV6() throws {
+        // OSM 以外の ID と、形の違う ID の地点は飛ばす。別名は name を読み、読み仮名が配列なら最初の空でないものを読む。
+        XCTAssertEqual(try PeakData.parseMountains(pointsV6), [
+            Mountain(osmId: 3_740_788_022, name: "鳥海山", latitude: 39.0990, longitude: 140.0490, elevationM: 2236.0,
+                     pointId: "osm:3740788022", nameReading: "ちょうかいさん", aliases: ["出羽富士", "秋田富士"],
+                     wikipediaUrl: "https://ja.wikipedia.org/wiki/x", tags: ["日本百名山"]),
+            Mountain(osmId: 2, name: "読みが二つ", latitude: 35.0, longitude: 138.0, elevationM: nil,
+                     pointId: "osm:2", nameReading: "かな"),
+        ])
+    }
+
+    func testRejectsDocumentWithoutPoints() {
+        // {"schemaVersion":6} と "文字列" を gzip.compress(mtime=0) で圧縮したもの。
+        XCTAssertThrowsError(try PeakData.parseMountains(Data(base64Encoded: "H4sIAAAAAAAC/6tWKk7OSM1NDEstKs7Mz1OyMqsFAMI9SxYTAAAA")!))
+        XCTAssertThrowsError(try PeakData.parseMountains(Data(base64Encoded: "H4sIAAAAAAAC/1N6Nq396drpTzumKwEAMJshHQsAAAA=")!))
+    }
+
+    func testReplacesV5DataWithV6Data() async throws {
+        // 版 5 の山データを取り込んだ端末に、版 6 の山データが届いたときに入れ替わる。山は同じノード番号で引き継ぐ。
+        let source = FakeSource(manifest: manifestV5(), data: gzip)
+        let cache = MemoryCache()
+        let updater = PeakDataUpdater(source: source, cache: cache)
+        let installed = try await updater.update(installed: nil).installed
+        XCTAssertEqual(Set(cache.mountains.keys), [3_403_990_450, 12])
+
+        source.manifestBody = manifestV6(data: pointsV6)
+        source.data = pointsV6
+        source.etag = "\"e2\""
+        let result = try await updater.update(installed: installed)
+
+        guard case .updated(let latest) = result else { return XCTFail("版 6 の山データを取り込むはず") }
+        XCTAssertEqual(latest.version, "20261018T115955Z-39125410649-1")
+        XCTAssertEqual(Set(cache.mountains.keys), [3_740_788_022, 2])
+        XCTAssertEqual(latest.mountainCount, 2, "件数は実際に読めた山の数")
     }
 
     func testRejectsBrokenManifest() {
