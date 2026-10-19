@@ -60,6 +60,68 @@ class PeakDataCreditsTest {
         assertEquals(emptyList(), PeakDataCreditsReader.parse("""{"supplementSources": []}""")!!.supplements)
     }
 
+    // manifest 版 6。出典は metadata.sources に並び、データ本体のファイル名の頭と同じ名前のものが元データ。
+    private val manifestV6 = """
+        {
+          "schemaVersion": 6,
+          "version": "20261018T115955Z-39125410649-1",
+          "fileName": "osm-peaks.json.gz",
+          "metadata": {
+            "sources": [
+              {
+                "name": "日本百名山",
+                "source": "Wikipedia「日本百名山」",
+                "license": "CC BY-SA 4.0",
+                "attribution": "Wikipedia「日本百名山」の投稿者",
+                "changes": "OSM の地点 ID に対応付けた。"
+              },
+              { "name": "国土地理院", "license": "PDL-1.0", "attribution": "出典：国土地理院" },
+              {
+                "name": "osm-peaks",
+                "source": "https://download.geofabrik.de/asia/japan-261017.osm.pbf",
+                "license": "ODbL-1.0",
+                "attribution": "© OpenStreetMap contributors",
+                "latestTimestamp": "2026-10-17T04:42:52Z"
+              },
+              { "license": "名前の無い出典" },
+              "文字列"
+            ],
+            "pointCount": 14038
+          }
+        }
+    """.trimIndent()
+
+    @Test
+    fun readsMetadataSourcesOfManifestV6() {
+        val credits = PeakDataCreditsReader.parse(manifestV6)!!
+        assertEquals("2026/10/18", credits.releaseDate)
+        assertEquals("ODbL-1.0", credits.license)
+        assertEquals("© OpenStreetMap contributors", credits.attribution)
+        assertEquals("https://download.geofabrik.de/asia/japan-261017.osm.pbf", credits.sourceUrl)
+        // 元データ以外の出典を、出典名の文字コード順に出す。国(56FD) < 日(65E5)。名前の無いものは飛ばす。
+        assertEquals(
+            listOf(
+                SupplementSource("国土地理院", source = null, license = "PDL-1.0", attribution = "出典：国土地理院", changes = null),
+                SupplementSource(
+                    "日本百名山",
+                    source = "Wikipedia「日本百名山」",
+                    license = "CC BY-SA 4.0",
+                    attribution = "Wikipedia「日本百名山」の投稿者",
+                    changes = "OSM の地点 ID に対応付けた。",
+                ),
+            ),
+            credits.supplements,
+        )
+    }
+
+    @Test
+    fun manifestV6WithoutMainSourceIsNull() {
+        // 元データの出典が見つからないときは読めないものとし、画面はアプリが持つ OpenStreetMap の表示に戻す。
+        assertNull(PeakDataCreditsReader.parse(manifestV6.replace("\"osm-peaks.json.gz\"", "\"other.json.gz\"")))
+        assertNull(PeakDataCreditsReader.parse(manifestV6.replace("\"name\": \"osm-peaks\"", "\"name\": \"osm\"")))
+        assertNull(PeakDataCreditsReader.parse("""{"metadata": {}}"""))
+    }
+
     @Test
     fun unreadableManifestIsNull() {
         assertNull(PeakDataCreditsReader.parse("{"))

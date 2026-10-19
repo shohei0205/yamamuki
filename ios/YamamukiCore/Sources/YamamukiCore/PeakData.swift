@@ -21,9 +21,10 @@ public struct PeakManifest: Equatable, Sendable {
     public let sha256: String
     /// データ本体のバイト数。
     public let sizeBytes: Int
-    /// 収録した山の数。版 4 は mountainCount、版 5 は pointCount。
+    /// 収録した山の数。版 4 は mountainCount、版 5 は pointCount、版 6 は metadata.pointCount。
     public let mountainCount: Int
-    /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。
+    /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 6 は元データの出典(`PeakData.mainSourceName`)の
+    /// latestTimestamp。版 5 で省略されたときと、版 6 で元データの出典か latestTimestamp が無いときは空文字。
     public let sourceTimestamp: String
 
     /// データを作った日(UTC)。「2026/10/07」の形。`version` から読めなければ nil。
@@ -142,7 +143,8 @@ public enum PeakData {
 
     /// 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先を dev にしたときに直接読む
     /// (`PeakDataChannel.dataDev`)。開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
-    /// yamamuki-data の dev が公開する置き場所(points/osm-peaks-dev/)で、manifest は版 5。
+    /// yamamuki-data の dev が公開する置き場所(points/osm-peaks-dev/)。manifest の版は、yamamuki-data の dev に合わせて変わる
+    /// (2026-10-18 から版 6)。
     public static let devManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json")!
 
     /// `channel` から山データを読む取得元。
@@ -189,12 +191,23 @@ public enum PeakData {
     }
 
     /// 読める manifest の形式の版。版 4 で downloadUrl が入った。版 5 で件数が pointCount になり、
-    /// データ本体の版(dataSchemaVersion)が別に書かれるようになった。
-    public static let supportedSchemaVersions: Set<Int> = [4, 5]
+    /// データ本体の版(dataSchemaVersion)が別に書かれるようになった。版 6 で件数と出典が metadata にまとまり、
+    /// 形式の名前(schemaFormat・dataSchemaFormat)が入った。
+    public static let supportedSchemaVersions: Set<Int> = [4, 5, 6]
 
-    /// 読めるデータ本体の版(manifest 版 5 の dataSchemaVersion)。地点データ版 5 は、山ごとの項目(osmId・name・latitude・
+    /// 読めるデータ本体の版(manifest 版 5 以降の dataSchemaVersion)。地点データ版 5 は、山ごとの項目(osmId・name・latitude・
     /// longitude・elevationM)が版 4 までと同じで、ID・種別・タグ・画像などの項目が増えただけなので、そのまま読める。
-    public static let supportedDataSchemaVersions: Set<Int> = [5]
+    /// 版 6 は地点の配列が文書の points に入り、osmId の代わりに id(osm:<ノード番号>)で OSM の地点を表す。
+    public static let supportedDataSchemaVersions: Set<Int> = [5, 6]
+
+    /// manifest 版 6 の形式の名前(schemaFormat)。
+    public static let manifestSchemaFormat = "yamamuki-manifest"
+
+    /// 読める地点データの形式の名前(manifest 版 6 の dataSchemaFormat)。
+    public static let dataSchemaFormat = "yamamuki-points"
+
+    /// 地点データ版 6 の、OSM のノードを表す ID の頭。後ろはノード番号。
+    static let osmIdPrefix = "osm:"
 
     /// 地点データ版 5 の、山頂の種別。
     static let peakType = "peak"
@@ -232,11 +245,12 @@ public enum PeakData {
             guard let value = root[key] as? String else { throw PeakDataError("manifest に \(key) がありません") }
             return value
         }
-        func int(_ key: String) throws -> Int {
+        /// `object`(省略時は manifest 全体)の `key` の整数。エラーの文には `label`(省略時は `key`)を出す。
+        func int(_ key: String, in object: [String: Any]? = nil, label: String? = nil) throws -> Int {
             // JSONSerialization は true / false も NSNumber で返すので、整数だけを通す。
-            guard let number = root[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+            guard let number = (object ?? root)[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
                   number.doubleValue == number.doubleValue.rounded() else {
-                throw PeakDataError("manifest の \(key) が整数ではありません")
+                throw PeakDataError("manifest の \(label ?? key) が整数ではありません")
             }
             return number.intValue
         }
@@ -252,6 +266,21 @@ public enum PeakData {
                 throw PeakDataError("このアプリが読めない形式の山データです(データの版 \(dataSchemaVersion.map(String.init) ?? "不明"))。アプリを更新してください。")
             }
         }
+        // 版 6 は、形式の名前が違う(別の種類のデータの)manifest を読まない。
+        if schemaVersion >= 6 {
+            guard root["schemaFormat"] as? String == manifestSchemaFormat else {
+                throw PeakDataError("manifest の schemaFormat が \(manifestSchemaFormat) ではありません")
+            }
+            guard root["dataSchemaFormat"] as? String == dataSchemaFormat else {
+                throw PeakDataError("manifest の dataSchemaFormat が \(dataSchemaFormat) ではありません")
+            }
+        }
+        let mountainCount: Int
+        if schemaVersion >= 6 {
+            mountainCount = try int("pointCount", in: root["metadata"] as? [String: Any] ?? [:], label: "metadata.pointCount")
+        } else {
+            mountainCount = try int(schemaVersion == 5 ? "pointCount" : "mountainCount")
+        }
         let downloadText = try string("downloadUrl")
         guard downloadText.hasPrefix("https://"), let downloadUrl = URL(string: downloadText) else {
             throw PeakDataError("manifest の downloadUrl が https ではありません")
@@ -262,13 +291,30 @@ public enum PeakData {
             downloadUrl: downloadUrl,
             sha256: try string("sha256").lowercased(),
             sizeBytes: try int("sizeBytes"),
-            mountainCount: try int(schemaVersion >= 5 ? "pointCount" : "mountainCount"),
-            sourceTimestamp: schemaVersion >= 5 ? root["sourceTimestamp"] as? String ?? "" : try string("sourceTimestamp")
+            mountainCount: mountainCount,
+            sourceTimestamp: schemaVersion >= 6 ? mainSource(root)?["latestTimestamp"] as? String ?? ""
+                : schemaVersion == 5 ? root["sourceTimestamp"] as? String ?? "" : try string("sourceTimestamp")
         )
         guard (1...maxSizeBytes).contains(manifest.sizeBytes) else {
             throw PeakDataError("manifest のサイズ \(manifest.sizeBytes) バイトは受け取れません")
         }
         return manifest
+    }
+
+    /// manifest 版 6 の metadata.sources のうち、元データの出典の名前。データ本体のファイル名(例: osm-peaks.json.gz)の頭(osm-peaks)。
+    /// 出典の並びに元データと補足の区別は無いので、名前で見分ける。
+    static func mainSourceName(_ root: [String: Any]) -> String? {
+        guard let fileName = (root["fileName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        let name = String(fileName.prefix { $0 != "." })
+        return name.isEmpty ? nil : name
+    }
+
+    /// manifest 版 6 の、元データの出典(`mainSourceName` と同じ name の metadata.sources)。無ければ nil。
+    private static func mainSource(_ root: [String: Any]) -> [String: Any]? {
+        guard let name = mainSourceName(root) else { return nil }
+        return ((root["metadata"] as? [String: Any])?["sources"] as? [Any] ?? []).lazy
+            .compactMap { $0 as? [String: Any] }
+            .first(where: { ($0["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == name })
     }
 
     /// 受け取ったデータ本体が、manifest のサイズと SHA-256 に合うか確かめる。
@@ -308,20 +354,23 @@ public enum PeakData {
         #endif
     }
 
-    /// gzip を展開し、JSON 配列の山を読む。名前・座標・osmId のない項目と、山頂以外の種別(type)の項目は飛ばす。
+    /// gzip を展開し、山を読む。版 5 までは JSON 配列、版 6 は文書の points の配列を読む。
+    /// 名前・座標・OSM のノード番号(版 5 までは osmId、版 6 は id の osm:<番号>)のない項目と、山頂以外の種別(type)の項目は飛ばす。
     /// 種別の無い項目(版 4 までと、版 5 で種別不明のもの)は山頂として読む。
     /// 読み仮名・別名・Wikipedia と Wikidata の URL・タグ・画像も読む。形の合わない値は、無いものとして扱う。
+    /// 読み仮名が配列(版 6)なら先頭を、別名が {name, nameReading} の配列(版 6)なら name を読む。
     /// それ以外の知らない項目は読まない(端末に残した gz には残る)。
     public static func parseMountains(_ gzip: Data) throws -> [Mountain] {
         let json = try gunzip(gzip)
-        guard let items = (try? JSONSerialization.jsonObject(with: json)) as? [Any] else {
+        let root = try? JSONSerialization.jsonObject(with: json)
+        guard let items = root as? [Any] ?? (root as? [String: Any])?["points"] as? [Any] else {
             throw PeakDataError("山データを読めません")
         }
         var seen = Set<Int64>()
         return items.compactMap { item -> Mountain? in
             guard let m = item as? [String: Any],
                   (m["type"] as? String ?? peakType) == peakType,
-                  let osmId = (m["osmId"] as? NSNumber)?.int64Value,
+                  let osmId = (m["osmId"] as? NSNumber)?.int64Value ?? osmIdOf(m["id"]),
                   let name = (m["name"] as? String)?.trimmingCharacters(in: .whitespaces), !name.isEmpty,
                   let latitude = (m["latitude"] as? NSNumber)?.doubleValue,
                   let longitude = (m["longitude"] as? NSNumber)?.doubleValue,
@@ -330,7 +379,7 @@ public enum PeakData {
             return Mountain(osmId: osmId, name: name, latitude: latitude, longitude: longitude,
                             elevationM: (m["elevationM"] as? NSNumber)?.doubleValue,
                             pointId: trimmed(m["id"]),
-                            nameReading: trimmed(m["nameReading"]),
+                            nameReading: trimmed(m["nameReading"]) ?? (m["nameReading"] as? [Any])?.lazy.compactMap(trimmed).first,
                             aliases: names(m["aliases"]).filter { $0 != name },
                             wikipediaUrl: httpsUrl(m["wikipediaUrl"]),
                             wikidataUrl: httpsUrl(m["wikidataUrl"]),
@@ -345,10 +394,20 @@ public enum PeakData {
         return text
     }
 
+    /// 地点データ版 6 の id(osm:<ノード番号>)から、OSM のノード番号を読む。OSM 以外の地点や形の違う ID は nil。
+    private static func osmIdOf(_ value: Any?) -> Int64? {
+        guard let id = value as? String, id.hasPrefix(osmIdPrefix) else { return nil }
+        let number = id.dropFirst(osmIdPrefix.count)
+        guard !number.isEmpty, number.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return Int64(number)
+    }
+
     /// 別名やタグの配列。文字列でない・空の要素と重複を除く。配列でなければ空。
+    /// 要素が {name, ...} のオブジェクト(版 6 の別名)なら name を読む。
     private static func names(_ value: Any?) -> [String] {
         var seen = Set<String>()
-        return ((value as? [Any]) ?? []).compactMap(trimmed).filter { seen.insert($0).inserted }
+        return ((value as? [Any]) ?? []).compactMap { trimmed($0) ?? trimmed(($0 as? [String: Any])?["name"]) }
+            .filter { seen.insert($0).inserted }
     }
 
     /// https の URL だけを受け取る。
