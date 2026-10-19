@@ -1,19 +1,27 @@
 name: 山データの差し替え PR を作る
 
-# 山データの参照先ファイル（site/data/osm-peaks/current.json）の stable か dev を、
+# 山データのカタログ（site/data/catalog.json）の、選んだデータの stable か dev を、
 # yamamuki-data の Release の manifest に差し替える PR を作る。人が必要なときに手動で動かす。
+# osm-peaks の stable を変えると、0.6.0・0.7.0 が読む参照先ファイル（site/data/osm-peaks/current.json）も同じ manifest にする。
 # PR は GitHub App のトークンで作る（GITHUB_TOKEN で作った PR では CI が動かないため）。
 # App の鍵は main だけが使える環境 data-swap に置いてある。
 on:
   workflow_dispatch:
     inputs:
+      dataset:
+        description: データの種類（アプリが読むのは osm-peaks だけ。gsi-peaks はカタログに入れておくだけ）
+        type: choice
+        options:
+          - osm-peaks
+          - gsi-peaks
+        default: osm-peaks
       target:
         description: 行う操作
         type: choice
         options:
           - "dev: 開発用アプリで試す山データを選ぶ"
           - "stable: 配布用アプリで使う山データを選ぶ"
-          - "remove-dev: 開発用アプリも配布用と同じ山データに戻す"
+          - "remove-dev: 開発用アプリも配布用と同じ山データに戻す（gsi-peaks では dev を外す）"
         default: "dev: 開発用アプリで試す山データを選ぶ"
       tag:
         description: 差し替える Release のタグ（空欄なら最新。remove-dev 操作では使いません）
@@ -46,9 +54,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           token: ${{ steps.app-token.outputs.token }}
-      - name: 参照先ファイルと manifest のコピーを書き換える
+      - name: カタログと manifest のコピーを書き換える
         id: swap
         env:
+          DATASET: ${{ inputs.dataset }}
           TARGET: ${{ inputs.target }}
           TAG: ${{ inputs.tag }}
           REMOVE_DEV: ${{ inputs.remove_dev }}
@@ -58,7 +67,7 @@ jobs:
             dev|stable|remove-dev) ;;
             *) echo "::error::行う操作が不明です: $TARGET"; exit 1 ;;
           esac
-          args=(--target "$target" --tag "$TAG")
+          args=(--dataset "$DATASET" --target "$target" --tag "$TAG")
           if [ "$REMOVE_DEV" = "true" ]; then args+=(--remove-dev); fi
           .github/scripts/peak_data.py swap "${args[@]}"
       - name: PR を作る
@@ -76,7 +85,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          git add site/data/osm-peaks
+          git add site/data
           git commit -q -m "$TITLE" -m "「山データの差し替え PR を作る」ワークフロー（run ${GITHUB_RUN_ID}）で作った。"
           git push -q origin "$BRANCH"
           gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE"

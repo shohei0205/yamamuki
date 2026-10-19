@@ -35,7 +35,7 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v5
 
-  # 公開した山データの参照先ファイルと manifest が、git の中身と同じになったかを確かめる。
+  # 公開した山データのカタログ・参照先ファイルと manifest が、git の中身と同じになったかを確かめる。
   verify:
     needs: deploy
     runs-on: ubuntu-latest

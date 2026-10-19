@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "datasets": {
+    "osm-peaks": {
+      "stable": {
+        "manifestUrl": "https://shohei0205.github.io/yamamuki/data/osm-peaks/manifests/osm-peaks-20261015T072606Z-38696421314-1.json",
+        "manifestSha256": "b88fa2c9f62505c13046c08d6952ac30b068d8b6f5e4e7702a8ab2511afa4cbd"
+      },
+      "dev": {
+        "manifestUrl": "https://shohei0205.github.io/yamamuki/data/osm-peaks/manifests/osm-peaks-dev-20261018T115955Z-39125410649-1.json",
+        "manifestSha256": "36ce1b256dec5d09d086b57eabf3d0a002fb1db29e5ba4102d101a74dc25a381"
+      }
+    },
+    "gsi-peaks": {
+      "dev": {
+        "manifestUrl": "https://shohei0205.github.io/yamamuki/data/gsi-peaks/manifests/gsi-peaks-dev-20261018T115950Z-39125416076-1.json",
+        "manifestSha256": "cf0b0a66cdaedc891a3780cf8df3dc3ec9a6d964a8a2f6b17868ce042cb68a96"
+      }
+    }
+  }
+}
