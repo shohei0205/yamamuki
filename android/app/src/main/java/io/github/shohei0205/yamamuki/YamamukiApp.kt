@@ -67,7 +67,7 @@ class YamamukiApp : Application() {
         const val USER_AGENT = "yamamuki-android/0.1 (+https://github.com/shohei0205/yamamuki)"
 
         /**
-         * 山データの読み先。配布版は参照先ファイルの stable、開発版は既定で参照先ファイルの dev(無ければ stable)、
+         * 山データの読み先。配布版はカタログの osm-peaks の stable、開発版は既定でカタログの osm-peaks の dev(無ければ stable)、
          * Gradle のプロパティ peakDataSource=dev で作った開発版は yamamuki-data の開発版を直接読む。
          */
         val peakDataChannel = when {

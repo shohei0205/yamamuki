@@ -557,54 +557,82 @@ class PeakDataTest {
         assertTrue(source.fetchData("https://example.com/japan-mountains.json.gz").contentEquals(gzip))
     }
 
-    private val stableUrl = PeakData.POINTER_MANIFEST_URL_PREFIX + "osm-peaks-20261007T071401Z-37585754546-1.json"
-    private val devUrl = PeakData.POINTER_MANIFEST_URL_PREFIX + "osm-peaks-dev-20261010T022253Z-38016527834-1.json"
+    private val stableUrl = PeakData.CATALOG_MANIFEST_URL_PREFIX + "osm-peaks-20261007T071401Z-37585754546-1.json"
+    private val devUrl = PeakData.CATALOG_MANIFEST_URL_PREFIX + "osm-peaks-dev-20261010T022253Z-38016527834-1.json"
+    private val gsiUrl = "https://shohei0205.github.io/yamamuki/data/gsi-peaks/manifests/gsi-peaks-dev-20261018T115950Z-39125416076-1.json"
 
     private fun entry(url: String, sha256: String) = """{"manifestUrl":"$url","manifestSha256":"$sha256"}"""
 
-    private fun pointer(stable: String? = entry(stableUrl, "a".repeat(64)), dev: String? = null, schemaVersion: Int = 1) =
-        listOfNotNull("\"schemaVersion\":$schemaVersion", stable?.let { "\"stable\":$it" }, dev?.let { "\"dev\":$it" })
-            .joinToString(",", "{", "}")
+    private fun channels(stable: String?, dev: String?) =
+        listOfNotNull(stable?.let { "\"stable\":$it" }, dev?.let { "\"dev\":$it" }).joinToString(",", "{", "}")
+
+    /** カタログ。osm-peaks のほかに、アプリが読まない gsi-peaks も入れておく。 */
+    private fun catalog(
+        stable: String? = entry(stableUrl, "a".repeat(64)),
+        dev: String? = null,
+        schemaVersion: Int = 1,
+        gsi: String? = channels(stable = null, dev = entry(gsiUrl, "c".repeat(64))),
+    ) = listOfNotNull("\"osm-peaks\":${channels(stable, dev)}", gsi?.let { "\"gsi-peaks\":$it" })
+        .joinToString(",", "{\"schemaVersion\":$schemaVersion,\"datasets\":{", "}}")
 
     @Test
-    fun pointerPicksStableOrDev() {
-        val withDev = pointer(dev = entry(devUrl, "b".repeat(64)))
-        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parsePointer(withDev, useDev = false))
-        assertEquals(PeakDataPointer(devUrl, "b".repeat(64)), PeakData.parsePointer(withDev, useDev = true))
-        // dev が無ければ、開発用のビルドも stable を読む。
-        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parsePointer(pointer(), useDev = true))
+    fun catalogPicksStableOrDevOfOsmPeaks() {
+        val withDev = catalog(dev = entry(devUrl, "b".repeat(64)))
+        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parseCatalog(withDev, useDev = false))
+        assertEquals(PeakDataPointer(devUrl, "b".repeat(64)), PeakData.parseCatalog(withDev, useDev = true))
+        // dev が無ければ、開発用のビルドも stable を読む。gsi-peaks の dev があっても読まない。
+        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parseCatalog(catalog(), useDev = true))
+        // 知らない種類のデータがあっても、osm-peaks だけを読む。
+        val other = catalog(gsi = """{"stable":{"manifestUrl":"x"},"beta":1}""")
+        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parseCatalog(other, useDev = false))
     }
 
     @Test
-    fun pointerRejectsUnexpectedContent() {
+    fun catalogRejectsUnexpectedContent() {
         val bad = listOf(
-            pointer(schemaVersion = 2),
-            pointer(stable = null),
-            pointer(stable = null, dev = entry(devUrl, "b".repeat(64))),
-            pointer(stable = entry("https://shohei0205.github.io/yamamuki-data/peaks/manifest.json", "a".repeat(64))),
-            pointer(stable = entry(PeakData.POINTER_MANIFEST_URL_PREFIX + "sub/x.json", "a".repeat(64))),
-            pointer(stable = entry(PeakData.POINTER_MANIFEST_URL_PREFIX + "x.txt", "a".repeat(64))),
-            pointer(stable = entry(stableUrl, "A".repeat(64))),
-            pointer(stable = entry(stableUrl, "a".repeat(63))),
+            catalog(schemaVersion = 2),
+            catalog(stable = null),
+            catalog(stable = null, dev = entry(devUrl, "b".repeat(64))),
+            catalog(stable = entry("https://shohei0205.github.io/yamamuki-data/peaks/manifest.json", "a".repeat(64))),
+            // gsi-peaks の置き場所の manifest を osm-peaks として読まない。
+            catalog(stable = entry(gsiUrl, "a".repeat(64))),
+            catalog(stable = entry(PeakData.CATALOG_MANIFEST_URL_PREFIX + "sub/x.json", "a".repeat(64))),
+            catalog(stable = entry(PeakData.CATALOG_MANIFEST_URL_PREFIX + "x.txt", "a".repeat(64))),
+            catalog(stable = entry(stableUrl, "A".repeat(64))),
+            catalog(stable = entry(stableUrl, "a".repeat(63))),
+            """{"schemaVersion":1,"datasets":{"gsi-peaks":${channels(entry(gsiUrl, "a".repeat(64)), null)}}}""",
+            """{"schemaVersion":1,"stable":${entry(stableUrl, "a".repeat(64))}}""",
             "[]",
             "{",
         )
         for (body in bad) {
-            assertFailsWith<PeakDataException>(body) { PeakData.parsePointer(body, useDev = false) }
+            assertFailsWith<PeakDataException>(body) { PeakData.parseCatalog(body, useDev = false) }
         }
         // 開発用のビルドは、dev が壊れていても stable に切り替えない。
-        assertFailsWith<PeakDataException> { PeakData.parsePointer(pointer(dev = entry(devUrl, "x")), useDev = true) }
+        assertFailsWith<PeakDataException> { PeakData.parseCatalog(catalog(dev = entry(devUrl, "x")), useDev = true) }
+        // 読めない版のカタログでは、アプリの更新を促す。
+        val e = assertFailsWith<PeakDataException> { PeakData.parseCatalog(catalog(schemaVersion = 2), useDev = false) }
+        assertTrue(e.message!!.contains("アプリを更新"))
     }
 
     @Test
-    fun pointerSourceFollowsPointerAndSkipsSameManifest() = runTest {
+    fun rejectsManifestOfOtherDataset() {
+        // 版 5 以降は、データ本体のファイル名が osm-peaks.json.gz でなければ読まない(gsi-peaks などを取り違えないため)。
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6().replace("osm-peaks.json.gz\",", "gsi-peaks.json.gz\",")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5().replace("\"fileName\":\"osm-peaks.json.gz\",", "")) }
+        // 版 4 までは、ファイル名を見ない(japan-mountains.json.gz だった)。
+        assertEquals(2, PeakData.parseManifest(manifest()).mountainCount)
+    }
+
+    @Test
+    fun catalogSourceFollowsCatalogAndSkipsSameManifest() = runTest {
         val manifest = manifest(schemaVersion = 4)
         val requests = mutableListOf<String>()
         val engine = MockEngine { request ->
             val url = request.url.toString()
             requests += url
             when (url) {
-                PeakData.POINTER_URL -> respond(pointer(stable = entry(stableUrl, sha256(manifest.toByteArray()))))
+                PeakData.CATALOG_URL -> respond(catalog(stable = entry(stableUrl, sha256(manifest.toByteArray()))))
                 stableUrl -> respond(manifest)
                 else -> respond(gzip)
             }
@@ -615,26 +643,27 @@ class PeakDataTest {
         assertIs<ManifestResponse.Fetched>(fetched)
         assertEquals(manifest, fetched.body)
         assertEquals(sha256(manifest.toByteArray()), fetched.etag)
-        // 指す manifest が前回と同じなら、manifest は取り直さない。
+        // 指す manifest が前回と同じなら、manifest は取り直さない。0.7.0 の current.json で取り込んだ端末も、
+        // 同じ manifest の SHA-256 を覚えているので取り直さない。
         assertIs<ManifestResponse.NotModified>(source.fetchManifest(fetched.etag))
-        assertEquals(listOf(PeakData.POINTER_URL, stableUrl, PeakData.POINTER_URL), requests)
+        assertEquals(listOf(PeakData.CATALOG_URL, stableUrl, PeakData.CATALOG_URL), requests)
     }
 
     @Test
-    fun pointerSourceRejectsManifestWithWrongSha256() = runTest {
+    fun catalogSourceRejectsManifestWithWrongSha256() = runTest {
         val engine = MockEngine { request ->
             when (request.url.toString()) {
-                PeakData.POINTER_URL -> respond(pointer(stable = entry(stableUrl, "a".repeat(64))))
+                PeakData.CATALOG_URL -> respond(catalog(stable = entry(stableUrl, "a".repeat(64))))
                 else -> respond(manifest())
             }
         }
-        val source = PointerPeakDataSource(HttpClient(engine), useDev = false)
+        val source = CatalogPeakDataSource(HttpClient(engine), useDev = false)
         assertFailsWith<PeakDataException> { source.fetchManifest(null) }
     }
 
     @Test
-    fun pointerSourceReportsHttpError() = runTest {
-        val source = PointerPeakDataSource(HttpClient(MockEngine { respond("", HttpStatusCode.NotFound) }), useDev = true)
+    fun catalogSourceReportsHttpError() = runTest {
+        val source = CatalogPeakDataSource(HttpClient(MockEngine { respond("", HttpStatusCode.NotFound) }), useDev = true)
         assertFailsWith<PeakDataException> { source.fetchManifest(null) }
     }
 

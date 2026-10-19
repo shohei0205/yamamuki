@@ -37,7 +37,7 @@ public struct InstalledPeakData: Codable, Equatable, Sendable {
     public var sourceTimestamp: String
     public var mountainCount: Int
     /// manifest を取ったときの目印。次の確認で送り、変わっていなければ manifest も取り直さない。
-    /// 参照先ファイルから読んだときは manifest の SHA-256、manifest を直接読んだときは HTTP の ETag。
+    /// カタログ(0.7.0 までは参照先ファイル)から読んだときは manifest の SHA-256、manifest を直接読んだときは HTTP の ETag。
     public var manifestEtag: String?
     public var installedAt: Date
     /// 保存データを作った読み込み処理の版(`PeakData.readerVersion`)。記録が無い古い版のアプリで取り込んだときは 0。
@@ -108,15 +108,15 @@ public enum ManifestResponse: Sendable {
 
 /// 山データをどこから読むか。ビルドの種類と、開発用のビルドの取得先の設定で決まる。
 public enum PeakDataChannel: Sendable {
-    /// 配布用のビルド: yamamuki の参照先ファイル(current.json)の stable が指す manifest。
+    /// 配布用のビルド: yamamuki のカタログ(catalog.json)の osm-peaks の stable が指す manifest。
     case stable
-    /// 開発用のビルドの既定: 参照先ファイルの dev が指す manifest。dev が無ければ stable。
+    /// 開発用のビルドの既定: カタログの osm-peaks の dev が指す manifest。dev が無ければ stable。
     case dev
     /// 開発用のビルドで取得先を dev にしたとき: yamamuki-data の dev が公開する最新の manifest を直接。
     case dataDev
 }
 
-/// 参照先ファイル(current.json)の、読む manifest の場所と SHA-256。
+/// カタログ(catalog.json)に書いた、読む manifest の場所と SHA-256。
 public struct PeakDataPointer: Equatable, Sendable {
     public let manifestUrl: URL
     public let manifestSha256: String
@@ -130,16 +130,24 @@ public protocol PeakDataSource: Sendable {
 }
 
 public enum PeakData {
-    /// 山データの参照先ファイル。読ませる manifest を yamamuki 側で決めるため、yamamuki の Pages に置いている。
-    /// stable(配布用)と dev(開発用、省略可能)に、manifest の URL と SHA-256 が書いてある。
+    /// 山データのカタログ。読ませる manifest を yamamuki 側で決めるため、yamamuki の Pages に置いている(0.8.0 から)。
+    /// データの種類(datasets の osm-peaks・gsi-peaks)ごとに、stable(配布用)と dev(開発用、省略可能)の
+    /// manifest の URL と SHA-256 が書いてある。このアプリが読むのは osm-peaks(`dataset`)だけ。
     /// 書き換えは「山データの差し替え PR を作る」ワークフローの PR で行う。
-    public static let pointerUrl = URL(string: "https://shohei0205.github.io/yamamuki/data/osm-peaks/current.json")!
+    /// 0.7.0 までは site/data/osm-peaks/current.json を読んでいた(0.9.0 で廃止する予定)。
+    public static let catalogUrl = URL(string: "https://shohei0205.github.io/yamamuki/data/catalog.json")!
 
-    /// 参照先ファイルが指してよい manifest の置き場所。Release の manifest を書き換えずにコピーしたもの。
-    public static let pointerManifestUrlPrefix = "https://shohei0205.github.io/yamamuki/data/osm-peaks/manifests/"
+    /// このアプリが読むデータの種類。カタログのほかの種類(gsi-peaks など)は、地点の ID の形が違うので読まない。
+    public static let dataset = "osm-peaks"
 
-    /// 読める参照先ファイルの形式の版。
-    public static let pointerSchemaVersion = 1
+    /// `dataset` のデータ本体のファイル名(manifest の fileName)。
+    public static let dataFileName = "\(dataset).json.gz"
+
+    /// カタログが指してよい manifest の置き場所。Release の manifest を書き換えずにコピーしたもの。
+    public static let catalogManifestUrlPrefix = "https://shohei0205.github.io/yamamuki/data/\(dataset)/manifests/"
+
+    /// 読めるカタログの形式の版。
+    public static let catalogSchemaVersion = 1
 
     /// 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先を dev にしたときに直接読む
     /// (`PeakDataChannel.dataDev`)。開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
@@ -150,41 +158,44 @@ public enum PeakData {
     /// `channel` から山データを読む取得元。
     public static func source(_ channel: PeakDataChannel, session: URLSession = .shared, userAgent: String) -> PeakDataSource {
         switch channel {
-        case .stable: return PointerPeakDataSource(session: session, useDev: false, userAgent: userAgent)
-        case .dev: return PointerPeakDataSource(session: session, useDev: true, userAgent: userAgent)
+        case .stable: return CatalogPeakDataSource(session: session, useDev: false, userAgent: userAgent)
+        case .dev: return CatalogPeakDataSource(session: session, useDev: true, userAgent: userAgent)
         case .dataDev: return HTTPPeakDataSource(session: session, manifestUrl: devManifestUrl, userAgent: userAgent)
         }
     }
 
-    /// 参照先ファイルを読み、読む manifest の場所を返す。`useDev` なら dev を、dev が無ければ stable を読む。
-    /// よその URL を指していたり、SHA-256 の形がおかしかったりしたら読まない。
-    public static func parsePointer(_ body: Data, useDev: Bool) throws -> PeakDataPointer {
+    /// カタログを読み、`dataset` の読む manifest の場所を返す。`useDev` なら dev を、dev が無ければ stable を読む。
+    /// ほかの種類のデータは見ない。よその URL を指していたり、SHA-256 の形がおかしかったりしたら読まない。
+    public static func parseCatalog(_ body: Data, useDev: Bool) throws -> PeakDataPointer {
         guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
-            throw PeakDataError("山データの参照先ファイルを読めません")
+            throw PeakDataError("山データのカタログを読めません")
         }
         // JSONSerialization は true / false も NSNumber で返すので、整数だけを通す。
         let number = root["schemaVersion"] as? NSNumber
         let schemaVersion = number.flatMap { CFGetTypeID($0) == CFBooleanGetTypeID() ? nil : $0 }
             .flatMap { $0.doubleValue == $0.doubleValue.rounded() ? $0.intValue : nil }
-        guard schemaVersion == pointerSchemaVersion else {
-            throw PeakDataError("このアプリが読めない形式の山データの参照先です(形式の版 \(schemaVersion.map(String.init) ?? "不明"))。アプリを更新してください。")
+        guard schemaVersion == catalogSchemaVersion else {
+            throw PeakDataError("このアプリが読めない形式の山データのカタログです(形式の版 \(schemaVersion.map(String.init) ?? "不明"))。アプリを更新してください。")
         }
-        let channel = useDev && root["dev"] != nil && !(root["dev"] is NSNull) ? "dev" : "stable"
-        guard let entry = root[channel] as? [String: Any] else {
-            throw PeakDataError("山データの参照先ファイルに \(channel) がありません")
+        guard let channels = (root["datasets"] as? [String: Any])?[dataset] as? [String: Any] else {
+            throw PeakDataError("山データのカタログに \(dataset) がありません")
         }
-        guard let url = entry["manifestUrl"] as? String, url.hasPrefix(pointerManifestUrlPrefix),
-              isManifestName(String(url.dropFirst(pointerManifestUrlPrefix.count))), let manifestUrl = URL(string: url) else {
-            throw PeakDataError("山データの参照先ファイルの \(channel) が、決まった置き場所の manifest を指していません")
+        let channel = useDev && channels["dev"] != nil && !(channels["dev"] is NSNull) ? "dev" : "stable"
+        guard let entry = channels[channel] as? [String: Any] else {
+            throw PeakDataError("山データのカタログの \(dataset) に \(channel) がありません")
+        }
+        guard let url = entry["manifestUrl"] as? String, url.hasPrefix(catalogManifestUrlPrefix),
+              isManifestName(String(url.dropFirst(catalogManifestUrlPrefix.count))), let manifestUrl = URL(string: url) else {
+            throw PeakDataError("山データのカタログの \(dataset) の \(channel) が、決まった置き場所の manifest を指していません")
         }
         guard let sha256 = entry["manifestSha256"] as? String, sha256.count == 64,
               sha256.allSatisfy({ "0123456789abcdef".contains($0) }) else {
-            throw PeakDataError("山データの参照先ファイルの \(channel) の manifestSha256 が SHA-256 ではありません")
+            throw PeakDataError("山データのカタログの \(dataset) の \(channel) の manifestSha256 が SHA-256 ではありません")
         }
         return PeakDataPointer(manifestUrl: manifestUrl, manifestSha256: sha256)
     }
 
-    /// 参照先ファイルが指してよい manifest のファイル名(Release のタグ + .json)か。
+    /// カタログが指してよい manifest のファイル名(Release のタグ + .json)か。
     static func isManifestName(_ name: String) -> Bool {
         guard name.hasSuffix(".json"), let first = name.first, first.isASCII, first.isLetter || first.isNumber else { return false }
         return name.dropLast(".json".count).allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }
@@ -275,6 +286,11 @@ public enum PeakData {
                 throw PeakDataError("manifest の dataSchemaFormat が \(dataSchemaFormat) ではありません")
             }
         }
+        // 版 5 以降は、データの種類をデータ本体のファイル名で確かめる。ほかの種類(gsi-peaks など)の manifest を
+        // 取り違えて読むと、osm: の地点が無くて 0 件になり、保存済みの山が消えるため。
+        if schemaVersion >= 5, root["fileName"] as? String != dataFileName {
+            throw PeakDataError("manifest の fileName が \(dataFileName) ではありません(\(root["fileName"].map { "\($0)" } ?? "なし"))")
+        }
         let mountainCount: Int
         if schemaVersion >= 6 {
             mountainCount = try int("pointCount", in: root["metadata"] as? [String: Any] ?? [:], label: "metadata.pointCount")
@@ -335,7 +351,7 @@ public enum PeakData {
     }
 
     /// 設定で自動の確認をオンにしたとき、新しい山データがあるかを確かめる間隔(30 日)。
-    /// 読むのは参照先ファイル(数百バイト)で、山データはそれほど頻繁に更新しないので、月に 1 回ほどで足りる。
+    /// 読むのはカタログ(1 KB ほど)で、山データはそれほど頻繁に更新しないので、月に 1 回ほどで足りる。
     public static let autoCheckInterval: TimeInterval = 30 * 24 * 60 * 60
 
     /// 自動の確認をする時期か。まだ確かめたことが無い(`lastCheckedAt` が nil)か、前回から
@@ -591,28 +607,29 @@ public struct PeakDataUpdater: Sendable {
     }
 }
 
-/// yamamuki の参照先ファイル(current.json)から manifest をたどって、配信データを取得する。
-/// 参照先ファイルは毎回取り直し(数百バイト)、指す manifest の SHA-256 が前回と同じなら manifest は取り直さない。
-/// manifest のコピーは書き換えない決まりなので、SHA-256 を ETag の代わりに使う。
-public struct PointerPeakDataSource: PeakDataSource {
+/// yamamuki のカタログ(catalog.json)から osm-peaks の manifest をたどって、配信データを取得する。
+/// カタログは毎回取り直し(1 KB ほど)、指す manifest の SHA-256 が前回と同じなら manifest は取り直さない。
+/// manifest のコピーは書き換えない決まりなので、SHA-256 を ETag の代わりに使う(0.7.0 までの current.json と同じ扱いなので、
+/// 同じ manifest を指している間は、0.7.0 から上げても取り直さない)。
+public struct CatalogPeakDataSource: PeakDataSource {
     private let session: URLSession
     private let useDev: Bool
-    private let pointerUrl: URL
+    private let catalogUrl: URL
     private let userAgent: String
 
-    public init(session: URLSession = .shared, useDev: Bool, pointerUrl: URL = PeakData.pointerUrl, userAgent: String = "yamamuki-ios") {
+    public init(session: URLSession = .shared, useDev: Bool, catalogUrl: URL = PeakData.catalogUrl, userAgent: String = "yamamuki-ios") {
         self.session = session
         self.useDev = useDev
-        self.pointerUrl = pointerUrl
+        self.catalogUrl = catalogUrl
         self.userAgent = userAgent
     }
 
     public func fetchManifest(etag: String?) async throws -> ManifestResponse {
-        let pointer = try PeakData.parsePointer(try await get(pointerUrl), useDev: useDev)
+        let pointer = try PeakData.parseCatalog(try await get(catalogUrl), useDev: useDev)
         if pointer.manifestSha256 == etag { return .notModified }
         let manifest = try await get(pointer.manifestUrl)
         guard PeakData.sha256Hex(manifest) == pointer.manifestSha256 else {
-            throw PeakDataError("山データの manifest の SHA-256 が参照先ファイルと合いません")
+            throw PeakDataError("山データの manifest の SHA-256 がカタログと合いません")
         }
         return .fetched(body: manifest, etag: pointer.manifestSha256)
     }
@@ -622,7 +639,7 @@ public struct PointerPeakDataSource: PeakDataSource {
     private func get(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        // 差し替えたばかりの参照先ファイルを古いまま読まないよう、端末の HTTP キャッシュは使わない。
+        // 差し替えたばかりのカタログを古いまま読まないよう、端末の HTTP キャッシュは使わない。
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let (data, response) = try await session.data(for: request)
         let http = response as? HTTPURLResponse

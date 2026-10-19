@@ -46,7 +46,7 @@ data class InstalledPeakData(
     val mountainCount: Int,
     /**
      * manifest を取ったときの目印。次の確認で送り、変わっていなければ manifest も取り直さない。
-     * 参照先ファイルから読んだときは manifest の SHA-256、manifest を直接読んだときは HTTP の ETag。
+     * カタログ(0.7.0 までは参照先ファイル)から読んだときは manifest の SHA-256、manifest を直接読んだときは HTTP の ETag。
      */
     val manifestEtag: String?,
     val installedAtMillis: Long,
@@ -88,17 +88,17 @@ sealed interface ManifestResponse {
 
 /** 山データをどこから読むか。ビルドの種類と、開発用のビルドの取得先の設定で決まる。 */
 enum class PeakDataChannel {
-    /** 配布用のビルド: yamamuki の参照先ファイル(current.json)の stable が指す manifest。 */
+    /** 配布用のビルド: yamamuki のカタログ(catalog.json)の osm-peaks の stable が指す manifest。 */
     STABLE,
 
-    /** 開発用のビルドの既定: 参照先ファイルの dev が指す manifest。dev が無ければ stable。 */
+    /** 開発用のビルドの既定: カタログの osm-peaks の dev が指す manifest。dev が無ければ stable。 */
     DEV,
 
     /** 開発用のビルドで取得先を dev にしたとき: yamamuki-data の dev が公開する最新の manifest を直接。 */
     DATA_DEV,
 }
 
-/** 参照先ファイル(current.json)の、読む manifest の場所と SHA-256。 */
+/** カタログ(catalog.json)に書いた、読む manifest の場所と SHA-256。 */
 data class PeakDataPointer(val manifestUrl: String, val manifestSha256: String)
 
 /** 配信データの取得元。テストではフェイクに差し替える。 */
@@ -111,17 +111,25 @@ interface PeakDataSource {
 
 object PeakData {
     /**
-     * 山データの参照先ファイル。読ませる manifest を yamamuki 側で決めるため、yamamuki の Pages に置いている。
-     * stable(配布用)と dev(開発用、省略可能)に、manifest の URL と SHA-256 が書いてある。
+     * 山データのカタログ。読ませる manifest を yamamuki 側で決めるため、yamamuki の Pages に置いている(0.8.0 から)。
+     * データの種類(datasets の osm-peaks・gsi-peaks)ごとに、stable(配布用)と dev(開発用、省略可能)の
+     * manifest の URL と SHA-256 が書いてある。このアプリが読むのは osm-peaks([DATASET])だけ。
      * 書き換えは「山データの差し替え PR を作る」ワークフローの PR で行う。
+     * 0.7.0 までは site/data/osm-peaks/current.json を読んでいた(0.9.0 で廃止する予定)。
      */
-    const val POINTER_URL = "https://shohei0205.github.io/yamamuki/data/osm-peaks/current.json"
+    const val CATALOG_URL = "https://shohei0205.github.io/yamamuki/data/catalog.json"
 
-    /** 参照先ファイルが指してよい manifest の置き場所。Release の manifest を書き換えずにコピーしたもの。 */
-    const val POINTER_MANIFEST_URL_PREFIX = "https://shohei0205.github.io/yamamuki/data/osm-peaks/manifests/"
+    /** このアプリが読むデータの種類。カタログのほかの種類(gsi-peaks など)は、地点の ID の形が違うので読まない。 */
+    const val DATASET = "osm-peaks"
 
-    /** 読める参照先ファイルの形式の版。 */
-    const val POINTER_SCHEMA_VERSION = 1
+    /** [DATASET] のデータ本体のファイル名(manifest の fileName)。 */
+    const val DATA_FILE_NAME = "$DATASET.json.gz"
+
+    /** カタログが指してよい manifest の置き場所。Release の manifest を書き換えずにコピーしたもの。 */
+    const val CATALOG_MANIFEST_URL_PREFIX = "https://shohei0205.github.io/yamamuki/data/$DATASET/manifests/"
+
+    /** 読めるカタログの形式の版。 */
+    const val CATALOG_SCHEMA_VERSION = 1
 
     /**
      * 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先を dev にしたときに直接読む
@@ -133,41 +141,43 @@ object PeakData {
 
     /** [channel] から山データを読む取得元。 */
     fun source(channel: PeakDataChannel, httpClient: HttpClient, userAgent: String): PeakDataSource = when (channel) {
-        PeakDataChannel.STABLE -> PointerPeakDataSource(httpClient, useDev = false, userAgent = userAgent)
-        PeakDataChannel.DEV -> PointerPeakDataSource(httpClient, useDev = true, userAgent = userAgent)
+        PeakDataChannel.STABLE -> CatalogPeakDataSource(httpClient, useDev = false, userAgent = userAgent)
+        PeakDataChannel.DEV -> CatalogPeakDataSource(httpClient, useDev = true, userAgent = userAgent)
         PeakDataChannel.DATA_DEV -> HttpPeakDataSource(httpClient, DEV_MANIFEST_URL, userAgent = userAgent)
     }
 
     /**
-     * 参照先ファイルを読み、読む manifest の場所を返す。[useDev] なら dev を、dev が無ければ stable を読む。
-     * よその URL を指していたり、SHA-256 の形がおかしかったりしたら読まない。
+     * カタログを読み、[DATASET] の読む manifest の場所を返す。[useDev] なら dev を、dev が無ければ stable を読む。
+     * ほかの種類のデータは見ない。よその URL を指していたり、SHA-256 の形がおかしかったりしたら読まない。
      */
-    fun parsePointer(body: String, useDev: Boolean): PeakDataPointer {
+    fun parseCatalog(body: String, useDev: Boolean): PeakDataPointer {
         val root = try {
             SimpleJson.parse(body)
         } catch (e: IllegalArgumentException) {
-            throw PeakDataException("山データの参照先ファイルを読めません", e)
-        } as? Map<*, *> ?: throw PeakDataException("山データの参照先ファイルがオブジェクトではありません")
+            throw PeakDataException("山データのカタログを読めません", e)
+        } as? Map<*, *> ?: throw PeakDataException("山データのカタログがオブジェクトではありません")
         val schemaVersion = root["schemaVersion"] as? Long
-        if (schemaVersion != POINTER_SCHEMA_VERSION.toLong()) {
-            throw PeakDataException("このアプリが読めない形式の山データの参照先です(形式の版 ${schemaVersion ?: "不明"})。アプリを更新してください。")
+        if (schemaVersion != CATALOG_SCHEMA_VERSION.toLong()) {
+            throw PeakDataException("このアプリが読めない形式の山データのカタログです(形式の版 ${schemaVersion ?: "不明"})。アプリを更新してください。")
         }
-        val channel = if (useDev && root["dev"] != null) "dev" else "stable"
-        val entry = root[channel] as? Map<*, *> ?: throw PeakDataException("山データの参照先ファイルに $channel がありません")
+        val dataset = (root["datasets"] as? Map<*, *>)?.get(DATASET) as? Map<*, *>
+            ?: throw PeakDataException("山データのカタログに $DATASET がありません")
+        val channel = if (useDev && dataset["dev"] != null) "dev" else "stable"
+        val entry = dataset[channel] as? Map<*, *> ?: throw PeakDataException("山データのカタログの $DATASET に $channel がありません")
         val url = entry["manifestUrl"] as? String
-        if (url == null || !url.startsWith(POINTER_MANIFEST_URL_PREFIX) ||
-            !MANIFEST_NAME.matches(url.removePrefix(POINTER_MANIFEST_URL_PREFIX))
+        if (url == null || !url.startsWith(CATALOG_MANIFEST_URL_PREFIX) ||
+            !MANIFEST_NAME.matches(url.removePrefix(CATALOG_MANIFEST_URL_PREFIX))
         ) {
-            throw PeakDataException("山データの参照先ファイルの $channel が、決まった置き場所の manifest を指していません")
+            throw PeakDataException("山データのカタログの $DATASET の $channel が、決まった置き場所の manifest を指していません")
         }
         val sha256 = entry["manifestSha256"] as? String
         if (sha256 == null || !SHA256_HEX.matches(sha256)) {
-            throw PeakDataException("山データの参照先ファイルの $channel の manifestSha256 が SHA-256 ではありません")
+            throw PeakDataException("山データのカタログの $DATASET の $channel の manifestSha256 が SHA-256 ではありません")
         }
         return PeakDataPointer(url, sha256)
     }
 
-    /** 参照先ファイルが指してよい manifest のファイル名(Release のタグ + .json)。 */
+    /** カタログが指してよい manifest のファイル名(Release のタグ + .json)。 */
     private val MANIFEST_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]*\\.json")
     private val SHA256_HEX = Regex("[0-9a-f]{64}")
 
@@ -182,7 +192,7 @@ object PeakData {
 
     /**
      * 設定で自動の確認をオンにしたとき、新しい山データがあるかを確かめる間隔(30 日)。
-     * 読むのは参照先ファイル(数百バイト)で、山データはそれほど頻繁に更新しないので、月に 1 回ほどで足りる。
+     * 読むのはカタログ(1 KB ほど)で、山データはそれほど頻繁に更新しないので、月に 1 回ほどで足りる。
      */
     const val AUTO_CHECK_INTERVAL_MILLIS = 30L * 24 * 60 * 60 * 1000
 
@@ -256,6 +266,11 @@ object PeakData {
         if (schemaVersion >= 6) {
             if (root["schemaFormat"] != MANIFEST_SCHEMA_FORMAT) throw PeakDataException("manifest の schemaFormat が $MANIFEST_SCHEMA_FORMAT ではありません")
             if (root["dataSchemaFormat"] != DATA_SCHEMA_FORMAT) throw PeakDataException("manifest の dataSchemaFormat が $DATA_SCHEMA_FORMAT ではありません")
+        }
+        // 版 5 以降は、データの種類をデータ本体のファイル名で確かめる。ほかの種類(gsi-peaks など)の manifest を
+        // 取り違えて読むと、osm: の地点が無くて 0 件になり、保存済みの山が消えるため。
+        if (schemaVersion >= 5 && root["fileName"] != DATA_FILE_NAME) {
+            throw PeakDataException("manifest の fileName が $DATA_FILE_NAME ではありません(${root["fileName"] ?: "なし"})")
         }
         val mountainCount = when {
             schemaVersion >= 6 -> (root["metadata"] as? Map<*, *>)?.get("pointCount") as? Long
@@ -521,22 +536,23 @@ class PeakDataUpdater(
 }
 
 /**
- * yamamuki の参照先ファイル(current.json)から manifest をたどって、配信データを取得する。
- * 参照先ファイルは毎回取り直し(数百バイト)、指す manifest の SHA-256 が前回と同じなら manifest は取り直さない。
- * manifest のコピーは書き換えない決まりなので、SHA-256 を ETag の代わりに使う。
+ * yamamuki のカタログ(catalog.json)から osm-peaks の manifest をたどって、配信データを取得する。
+ * カタログは毎回取り直し(1 KB ほど)、指す manifest の SHA-256 が前回と同じなら manifest は取り直さない。
+ * manifest のコピーは書き換えない決まりなので、SHA-256 を ETag の代わりに使う(0.7.0 までの current.json と同じ扱いなので、
+ * 同じ manifest を指している間は、0.7.0 から上げても取り直さない)。
  */
-class PointerPeakDataSource(
+class CatalogPeakDataSource(
     private val httpClient: HttpClient,
     private val useDev: Boolean,
-    private val pointerUrl: String = PeakData.POINTER_URL,
+    private val catalogUrl: String = PeakData.CATALOG_URL,
     private val userAgent: String = "yamamuki-android",
 ) : PeakDataSource {
     override suspend fun fetchManifest(etag: String?): ManifestResponse {
-        val pointer = PeakData.parsePointer(get(pointerUrl).bodyAsText(), useDev)
+        val pointer = PeakData.parseCatalog(get(catalogUrl).bodyAsText(), useDev)
         if (pointer.manifestSha256 == etag) return ManifestResponse.NotModified
         val manifest = get(pointer.manifestUrl).readRawBytes()
         if (PeakData.sha256Hex(manifest) != pointer.manifestSha256) {
-            throw PeakDataException("山データの manifest の SHA-256 が参照先ファイルと合いません")
+            throw PeakDataException("山データの manifest の SHA-256 がカタログと合いません")
         }
         return ManifestResponse.Fetched(manifest.toString(Charsets.UTF_8), pointer.manifestSha256)
     }

@@ -166,19 +166,20 @@ open Yamamuki.xcodeproj
 - 初回起動時に「山データを取得」を聞く。「取得する」を選ぶと manifest だけを取り、データを作った日とデータ本体の大きさ（manifest の `version` の先頭の日付と `sizeBytes`）を「リリース：2026/10/07、約 493 KB」のように見せて、ダウンロードするかを聞く。「あとで」を選んだときは設定画面の「山データ」から取得できる。位置情報の許可はこのあとに聞く。
 - 設定画面の「山データを更新」(取得済みなら「更新を確認」)で取り直せる。新しい版があれば、初回と同じように作った日と大きさを見せて、ダウンロードするかを聞く。新しい版がなければ確認だけで終わる。
 - 設定の「更新を自動で確認」(既定はオフ)をオンにすると、アプリが前面に出たときに、前回の確認から 30 日たっていれば新しい版があるかを確かめる。圏外で確かめられなかったときは、通信できるようになったときに確かめる。オンにした直後も、前回から 30 日たっていれば確かめる（30 日以内なら通信せず、覚えておいた結果でラベルを出す）。
-  - 確かめるのは `current.json`(数百バイト)と、指す manifest が変わったときの manifest だけで、データ本体は取らない。新しい版が見つかったら、方位盤の上部に「新しい山データあり」のラベルを出す。タップすると設定の「更新を確認」と同じ処理を行い、作った日と大きさを見せてダウンロードするかを聞く。
+  - 確かめるのはカタログ `catalog.json`(1 KB ほど)と、指す manifest が変わったときの manifest だけで、データ本体は取らない。新しい版が見つかったら、方位盤の上部に「新しい山データあり」のラベルを出す。タップすると設定の「更新を確認」と同じ処理を行い、作った日と大きさを見せてダウンロードするかを聞く。
   - 見つかったことは端末に覚え、取り込むか、確認で新しい版が無くなるまで、アプリを開き直してもラベルを出す。設定をオフにするとラベルも消える。
   - 山データをまだ取得していないとき、「山データの更新が必要です」のラベルが出ているときは確かめない。利用者が頼んだ通信ではないので、失敗しても知らせず、次の機会に確かめ直す。
   - 確かめる時期の判定(`PeakData.autoCheckDue`)は core にある。
 - ダウンロードに失敗したときの「もう一度取得」は、確認を聞き直さずに同じ版を取り直す。確認の段階で失敗したときは、確認からやり直す。
-- 読む manifest は、yamamuki の Pages に置いた参照先ファイル `current.json`（https://shohei0205.github.io/yamamuki/data/osm-peaks/current.json ）で決める。URL は core の `PeakData` にある。
-  - 配布用のビルド(Android の release、iOS の Release)は、`current.json` の `stable` が指す manifest を読む。
-  - 開発用のビルド(Android の debug、iOS の Debug)は、既定では `current.json` の `dev` が指す manifest を読む(`dev` が無ければ `stable`)。配布版の `stable` を変えずに、新しい版のデータを試せる。
+- 読む manifest は、yamamuki の Pages に置いたカタログ `catalog.json`（https://shohei0205.github.io/yamamuki/data/catalog.json ）の `osm-peaks` で決める（0.8.0 から。0.7.0 までは `osm-peaks/current.json` を読んでいた）。URL は core の `PeakData` にある。
+  - アプリが読むデータの種類はコードで `osm-peaks` に固定していて、カタログのほかの種類(`gsi-peaks`)は読まない。manifest の版 5 以降では、`fileName` が `osm-peaks.json.gz` でない manifest も読まない。ほかの種類の地点は ID の形が違い、取り違えると 0 件になって保存済みの山が消えるため。
+  - 配布用のビルド(Android の release、iOS の Release)は、カタログの `osm-peaks` の `stable` が指す manifest を読む。
+  - 開発用のビルド(Android の debug、iOS の Debug)は、既定ではカタログの `osm-peaks` の `dev` が指す manifest を読む(`dev` が無ければ `stable`)。配布版の `stable` を変えずに、新しい版のデータを試せる。
   - 開発用のビルドで取得先を `dev` にすると、yamamuki-data の dev が公開する最新の開発版 `https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json` を直接読む。画面からは切り替えられず、ビルドのときに選ぶ。
     - Android: Gradle のプロパティ `peakDataSource=dev` を付ける(例: `./gradlew :app:installDebug -PpeakDataSource=dev`。`~/.gradle/gradle.properties` に書いてもよい。既定は `current`)。`android/app/build.gradle.kts` で `BuildConfig.PEAK_DATA_DEV` になる。
     - iOS: ビルド設定 `PEAK_DATA_SOURCE` を `dev` にする(例: `xcodebuild ... PEAK_DATA_SOURCE=dev`。Xcode ではターゲットの Build Settings の User-Defined で変える。`xcodegen generate` で既定の `current` に戻る)。`ios/project.yml` で `PEAK_DATA_DEV` の条件が付く。
   - 読み先を切り替えたビルドは、前の読み先の版と違えば取り直し、保存している山データを入れ替える。
-- `current.json` は毎回取り直す(数百バイト)。指す manifest の SHA-256 が前回と同じなら、manifest は取り直さない。違えば manifest を取り、SHA-256 が `current.json` と合うかを確かめる。`current.json` が yamamuki の `manifests/` 以外を指しているときは読まない。yamamuki-data の開発版を直接読むときは、manifest に前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。
+- カタログは毎回取り直す(1 KB ほど)。指す manifest の SHA-256 が前回と同じなら、manifest は取り直さない。違えば manifest を取り、SHA-256 がカタログと合うかを確かめる。カタログが yamamuki の `osm-peaks/manifests/` 以外を指しているときは読まない。0.7.0 の `current.json` と同じく manifest の SHA-256 で比べるので、同じ manifest を指している間は、0.7.0 から上げても取り直さない。yamamuki-data の開発版を直接読むときは、manifest に前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。
 - 版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「もう一度取得」で取り直せる)。
 - カタログと参照先ファイルは `site/data/` にある。
   - `catalog.json`(カタログ): データの種類(`datasets` の `osm-peaks`・`gsi-peaks`)ごとに、`stable` と `dev` が指す manifest の URL と SHA-256 を書く。`osm-peaks` の `stable` は必須で、ほかは省略できる。アプリが読むのは `osm-peaks` だけで、`gsi-peaks`(国土地理院の山頂データ)は、あとでアプリが読めるようにするための下準備として入れておく。
@@ -192,7 +193,7 @@ open Yamamuki.xcodeproj
   - 配布用の山データを選ぶときに「開発用アプリも配布用と同じ山データに戻す」にチェックすると、配布用の更新と同時に `dev` の指定も外す。
   - PR は GitHub App のトークンで作る（標準のトークンで作った PR では CI が動かないため）。App の ID と鍵は、main だけが使える環境 `data-swap` の変数 `APP_ID` とシークレット `APP_PRIVATE_KEY` に置いている。
   - PR の CI「山データの確認」が、カタログと `current.json` の形、`current.json` の `stable` がカタログの `osm-peaks` の `stable` と同じか、コピーが Release と同じか、`manifests/` が追加だけか、`osm-peaks` のデータ本体の大きさと SHA-256、`osm-peaks` の `stable` の件数が 5% より多く減っていないかを確かめる。`gsi-peaks` は manifest までを確かめ、データ本体は取らない（アプリが読む対象ではないため）。件数が減るのを確かめたうえで通すときは、PR にラベル「山データの件数減を確認済み」を付ける。
-  - core の単体テスト（`SitePeakDataTest`）が、`current.json` の指す manifest をアプリの読み込み処理で読めるかを確かめる。
+  - core の単体テスト（`SitePeakDataTest`）が、カタログの `osm-peaks` の指す manifest をアプリの読み込み処理で読めるかを確かめる。
   - マージ後は Pages の公開のあとに、公開中のカタログ・`current.json`・manifest が git と同じかを確かめる。公開中のカタログから manifest とデータ本体(`gsi-peaks` は manifest まで)をたどれるかと、公開中の `current.json` がカタログと合っているかは、「山データの見張り」で毎日確かめ、失敗したら Issue で知らせる。
   - 確認の処理は `.github/scripts/peak_data.py` にある。
 - 対応する manifest の形式は schemaVersion 4・5・6。版 5 以降では、データ本体の版(`dataSchemaVersion`)が 5 か 6 のときだけ取り込む。知らない版や、データ本体の版が書かれていないときは取り込まず、アプリの更新を促す。
@@ -246,7 +247,7 @@ Android 版では、山データのキャッシュと、事前ダウンロード
 - 山データの取得は 1 回で約 0.5 MB(gzip 圧縮のまま受け取る。2026 年 10 月 7 日の正式版で 505,256 バイト)。ダウンロードの前に、manifest の大きさを確認の画面に出す。
 - 最新版の確認は manifest(1 KB 未満)だけで、変わっていなければ HTTP 304 で本文も届かない。
 - 方位盤からは通信しない。山の中で使うときも、取得しておけば圏外で表示できる。
-- 設定の「更新を自動で確認」をオンにしたときは、30 日に 1 回 `current.json`(数百バイト)を読む。指す manifest が変わったときだけ manifest(1 KB 未満)も読む。
+- 設定の「更新を自動で確認」をオンにしたときは、30 日に 1 回カタログ `catalog.json`(1 KB ほど)を読む。指す manifest が変わったときだけ manifest(1 KB 未満)も読む。
 
 ## ライセンス
 
