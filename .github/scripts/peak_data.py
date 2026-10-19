@@ -46,6 +46,10 @@ CHANNELS = ("stable", "dev")
 STABLE_SCHEMA_VERSIONS = {5}
 STABLE_DATA_SCHEMA_VERSIONS = {5}
 
+# manifest 版 6 から入った、形式の名前（schemaFormat・dataSchemaFormat）。
+MANIFEST_SCHEMA_FORMAT = "yamamuki-manifest"
+DATA_SCHEMA_FORMAT = "yamamuki-points"
+
 STABLE_TAG = re.compile(r"osm-peaks-\d{8}T\d{6}Z-\d+-\d+")
 DEV_TAG = re.compile(r"osm-peaks-dev-\d{8}T\d{6}Z-\d+-\d+")
 
@@ -93,8 +97,15 @@ def release(tag):
     return api(f"releases/tags/{tag}")
 
 
-def releases():
-    return api("releases?per_page=100")
+def releases(max_pages=50):
+    """yamamuki-data の Release を、ページをめくってすべて返す（新しい順）。"""
+    items = []
+    for page in range(1, max_pages + 1):
+        listing = api(f"releases?per_page=100&page={page}")
+        items.extend(listing)
+        if len(listing) < 100:
+            return items
+    raise PeakDataError(f"yamamuki-data の Release が {max_pages * 100} 件を超えていて、すべてを読めません")
 
 
 def release_manifest(tag):
@@ -170,9 +181,18 @@ def validate_manifest(data, tag, channel):
             f"{tag} の形式（schemaVersion {schema}、dataSchemaVersion {data_schema}）は、配布中のアプリが読める形式"
             f"（schemaVersion {sorted(STABLE_SCHEMA_VERSIONS)}、dataSchemaVersion {sorted(STABLE_DATA_SCHEMA_VERSIONS)}）"
             "ではないので、stable には使えません。新しい形式は dev で試してください。")
-    for key, kind in (("version", str), ("downloadUrl", str), ("sha256", str), ("sizeBytes", int), ("pointCount", int)):
+    for key, kind in (("version", str), ("downloadUrl", str), ("sha256", str), ("sizeBytes", int)):
         if not isinstance(manifest.get(key), kind) or isinstance(manifest.get(key), bool):
             raise PeakDataError(f"{tag} の manifest の {key} がないか、形が違います")
+    if is_v6(manifest):
+        if manifest.get("schemaFormat") != MANIFEST_SCHEMA_FORMAT:
+            raise PeakDataError(f"{tag} の manifest の schemaFormat が {MANIFEST_SCHEMA_FORMAT} ではありません")
+        if manifest.get("dataSchemaFormat") != DATA_SCHEMA_FORMAT:
+            raise PeakDataError(f"{tag} の manifest の dataSchemaFormat が {DATA_SCHEMA_FORMAT} ではありません")
+    count = point_count(manifest)
+    if not isinstance(count, int) or isinstance(count, bool):
+        key = "metadata.pointCount" if is_v6(manifest) else "pointCount"
+        raise PeakDataError(f"{tag} の manifest の {key} がないか、形が違います")
     prefix = "osm-peaks-dev-" if tag_channel(tag) == "dev" else "osm-peaks-"
     if prefix + manifest["version"] != tag:
         raise PeakDataError(f"{tag} の manifest の version（{manifest['version']}）がタグと合いません")
@@ -185,8 +205,23 @@ def validate_manifest(data, tag, channel):
     return manifest
 
 
+def is_v6(manifest):
+    """版 6 以降の manifest か。版 6 で件数と出典が metadata にまとまった。"""
+    schema = manifest.get("schemaVersion")
+    return isinstance(schema, int) and not isinstance(schema, bool) and schema >= 6
+
+
+def point_count(manifest):
+    """manifest の件数。版 5 は pointCount、版 6 以降は metadata.pointCount。無ければ None。"""
+    if is_v6(manifest):
+        metadata = manifest.get("metadata")
+        return metadata.get("pointCount") if isinstance(metadata, dict) else None
+    return manifest.get("pointCount")
+
+
 def check_data(manifest, tag):
-    """データ本体を取り、大きさと SHA-256 を確かめ、展開して件数を返す。"""
+    """データ本体を取り、大きさと SHA-256 を確かめ、展開して件数を返す。
+    版 5 までは地点の配列、版 6 は points に地点の配列を持つ文書。"""
     body = http_get(manifest["downloadUrl"])
     if len(body) != manifest["sizeBytes"]:
         raise PeakDataError(f"{tag} のデータ本体の大きさが合いません（{len(body)} バイト、manifest では {manifest['sizeBytes']} バイト）")
@@ -196,8 +231,10 @@ def check_data(manifest, tag):
         items = json.loads(gzip.decompress(body))
     except (OSError, ValueError) as e:
         raise PeakDataError(f"{tag} のデータ本体を展開して読めません") from e
+    if isinstance(items, dict):
+        items = items.get("points")
     if not isinstance(items, list):
-        raise PeakDataError(f"{tag} のデータ本体が配列ではありません")
+        raise PeakDataError(f"{tag} のデータ本体が、地点の配列でも points の配列を持つ文書でもありません")
     return len(items)
 
 
@@ -261,7 +298,7 @@ def describe(root, tag):
     if tag is None:
         return "なし"
     manifest = json.loads(local_manifest(root, tag))
-    return f"`{tag}`（{manifest['pointCount']:,} 件）"
+    return f"`{tag}`（{point_count(manifest):,} 件）"
 
 
 def swap(root, target, tag, remove_dev):
@@ -313,8 +350,8 @@ def swap(root, target, tag, remove_dev):
     write_pointer(root, pointer)
 
     old_tag = before.get(target)
-    old_count = json.loads(local_manifest(root, old_tag))["pointCount"] if old_tag else None
-    new_count = manifest["pointCount"]
+    old_count = point_count(json.loads(local_manifest(root, old_tag))) if old_tag else None
+    new_count = point_count(manifest)
     since = f"{describe(root, old_tag)} から " if old_tag else ""
     if target == "stable":
         title = f"feat: 配布用の山データを {tag} に差し替える"
@@ -384,7 +421,7 @@ def check(root, base, allow_count_drop):
             continue
         count = attempt(check_data, manifest, tag)
         if count is not None:
-            notes.append(f"{channel}: {tag}（manifest では {manifest['pointCount']:,} 件、データ本体の配列は {count:,} 件）")
+            notes.append(f"{channel}: {tag}（manifest では {point_count(manifest):,} 件、データ本体の配列は {count:,} 件）")
 
     added, others = manifest_changes(git("diff", "--name-status", f"{base}...HEAD", "--", (SITE_DIR / MANIFESTS_NAME).as_posix()))
     for change in others:
@@ -402,8 +439,8 @@ def check(root, base, allow_count_drop):
     try:
         base_pointer = json.loads(git("show", f"{base}:{(SITE_DIR / POINTER_NAME).as_posix()}"))
         base_tag = validate_pointer(base_pointer)["stable"]
-        old = json.loads(git("show", f"{base}:{(SITE_DIR / MANIFESTS_NAME).as_posix()}/{base_tag}.json"))["pointCount"]
-        new = json.loads(local_manifest(root, tags["stable"]))["pointCount"]
+        old = point_count(json.loads(git("show", f"{base}:{(SITE_DIR / MANIFESTS_NAME).as_posix()}/{base_tag}.json")))
+        new = point_count(json.loads(local_manifest(root, tags["stable"])))
         drop = count_drop(old, new)
         if drop > MAX_COUNT_DROP:
             message = (f"stable の件数が {drop:.1%} 減っています（{old:,} → {new:,}）。"
