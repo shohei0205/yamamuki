@@ -27,9 +27,12 @@ data class PeakManifest(
     val sha256: String,
     /** データ本体のバイト数。 */
     val sizeBytes: Long,
-    /** 収録した山の数。版 4 は mountainCount、版 5 は pointCount。 */
+    /** 収録した山の数。版 4 は mountainCount、版 5 は pointCount、版 6 は metadata.pointCount。 */
     val mountainCount: Int,
-    /** 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。 */
+    /**
+     * 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 6 は元データの出典([mainSourceName])の latestTimestamp。
+     * 版 5 で省略されたときと、版 6 で元データの出典か latestTimestamp が無いときは空文字。
+     */
     val sourceTimestamp: String,
 ) {
     /** データを作った日(UTC)。「2026/10/07」の形。[version] から読めなければ null。 */
@@ -123,7 +126,8 @@ object PeakData {
     /**
      * 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先を dev にしたときに直接読む
      * ([PeakDataChannel.DATA_DEV])。開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
-     * yamamuki-data の dev が公開する置き場所(points/osm-peaks-dev/)で、manifest は版 5。
+     * yamamuki-data の dev が公開する置き場所(points/osm-peaks-dev/)。manifest の版は、yamamuki-data の dev に合わせて変わる
+     * (2026-10-18 から版 6)。
      */
     const val DEV_MANIFEST_URL = "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json"
 
@@ -198,15 +202,26 @@ object PeakData {
 
     /**
      * 読める manifest の形式の版。版 4 で downloadUrl が入った。版 5 で件数が pointCount になり、
-     * データ本体の版(dataSchemaVersion)が別に書かれるようになった。
+     * データ本体の版(dataSchemaVersion)が別に書かれるようになった。版 6 で件数と出典が metadata にまとまり、
+     * 形式の名前(schemaFormat・dataSchemaFormat)が入った。
      */
-    val SUPPORTED_SCHEMA_VERSIONS = setOf(4, 5)
+    val SUPPORTED_SCHEMA_VERSIONS = setOf(4, 5, 6)
 
     /**
-     * 読めるデータ本体の版(manifest 版 5 の dataSchemaVersion)。地点データ版 5 は、山ごとの項目(osmId・name・latitude・
+     * 読めるデータ本体の版(manifest 版 5 以降の dataSchemaVersion)。地点データ版 5 は、山ごとの項目(osmId・name・latitude・
      * longitude・elevationM)が版 4 までと同じで、ID・種別・タグ・画像などの項目が増えただけなので、そのまま読める。
+     * 版 6 は地点の配列が文書の points に入り、osmId の代わりに id(osm:<ノード番号>)で OSM の地点を表す。
      */
-    val SUPPORTED_DATA_SCHEMA_VERSIONS = setOf(5)
+    val SUPPORTED_DATA_SCHEMA_VERSIONS = setOf(5, 6)
+
+    /** manifest 版 6 の形式の名前(schemaFormat)。 */
+    const val MANIFEST_SCHEMA_FORMAT = "yamamuki-manifest"
+
+    /** 読める地点データの形式の名前(manifest 版 6 の dataSchemaFormat)。 */
+    const val DATA_SCHEMA_FORMAT = "yamamuki-points"
+
+    /** 地点データ版 6 の、OSM のノードを表す ID の頭。後ろはノード番号。 */
+    private const val OSM_ID_PREFIX = "osm:"
 
     /**
      * 保存データを作る読み込み処理の版。[parseMountains] で読む項目を増やしたり、保存の形を変えたりしたら上げる。
@@ -237,18 +252,47 @@ object PeakData {
                 throw PeakDataException("このアプリが読めない形式の山データです(データの版 ${dataSchemaVersion ?: "不明"})。アプリを更新してください。")
             }
         }
+        // 版 6 は、形式の名前が違う(別の種類のデータの)manifest を読まない。
+        if (schemaVersion >= 6) {
+            if (root["schemaFormat"] != MANIFEST_SCHEMA_FORMAT) throw PeakDataException("manifest の schemaFormat が $MANIFEST_SCHEMA_FORMAT ではありません")
+            if (root["dataSchemaFormat"] != DATA_SCHEMA_FORMAT) throw PeakDataException("manifest の dataSchemaFormat が $DATA_SCHEMA_FORMAT ではありません")
+        }
+        val mountainCount = when {
+            schemaVersion >= 6 -> (root["metadata"] as? Map<*, *>)?.get("pointCount") as? Long
+                ?: throw PeakDataException("manifest の metadata.pointCount が整数ではありません")
+            schemaVersion == 5 -> long("pointCount")
+            else -> long("mountainCount")
+        }
         val manifest = PeakManifest(
             schemaVersion = schemaVersion,
             version = string("version"),
             downloadUrl = string("downloadUrl"),
             sha256 = string("sha256").lowercase(),
             sizeBytes = long("sizeBytes"),
-            mountainCount = long(if (schemaVersion >= 5) "pointCount" else "mountainCount").toInt(),
-            sourceTimestamp = if (schemaVersion >= 5) root["sourceTimestamp"] as? String ?: "" else string("sourceTimestamp"),
+            mountainCount = mountainCount.toInt(),
+            sourceTimestamp = when {
+                schemaVersion >= 6 -> mainSource(root)?.get("latestTimestamp") as? String ?: ""
+                schemaVersion == 5 -> root["sourceTimestamp"] as? String ?: ""
+                else -> string("sourceTimestamp")
+            },
         )
         if (!manifest.downloadUrl.startsWith("https://")) throw PeakDataException("manifest の downloadUrl が https ではありません")
         if (manifest.sizeBytes !in 1..MAX_SIZE_BYTES) throw PeakDataException("manifest のサイズ ${manifest.sizeBytes} バイトは受け取れません")
         return manifest
+    }
+
+    /**
+     * manifest 版 6 の metadata.sources のうち、元データの出典の名前。データ本体のファイル名(例: osm-peaks.json.gz)の頭(osm-peaks)。
+     * 出典の並びに元データと補足の区別は無いので、名前で見分ける。
+     */
+    internal fun mainSourceName(root: Map<*, *>): String? =
+        (root["fileName"] as? String)?.trim()?.substringBefore('.')?.ifEmpty { null }
+
+    /** manifest 版 6 の、元データの出典([mainSourceName] と同じ name の metadata.sources)。無ければ null。 */
+    private fun mainSource(root: Map<*, *>): Map<*, *>? {
+        val name = mainSourceName(root) ?: return null
+        return ((root["metadata"] as? Map<*, *>)?.get("sources") as? List<*>).orEmpty()
+            .filterIsInstance<Map<*, *>>().firstOrNull { (it["name"] as? String)?.trim() == name }
     }
 
     /** 受け取ったデータ本体が、manifest のサイズと SHA-256 に合うか確かめる。 */
@@ -260,9 +304,11 @@ object PeakData {
     }
 
     /**
-     * gzip を展開し、JSON 配列の山を読む。名前・座標・osmId のない項目と、山頂以外の種別(type)の項目は飛ばす。
+     * gzip を展開し、山を読む。版 5 までは JSON 配列、版 6 は文書の points の配列を読む。
+     * 名前・座標・OSM のノード番号(版 5 までは osmId、版 6 は id の osm:<番号>)のない項目と、山頂以外の種別(type)の項目は飛ばす。
      * 種別の無い項目(版 4 までと、版 5 で種別不明のもの)は山頂として読む。
      * 読み仮名・別名・Wikipedia と Wikidata の URL・タグ・画像も読む。形の合わない値は、無いものとして扱う。
+     * 読み仮名が配列(版 6)なら先頭を、別名が {name, nameReading} の配列(版 6)なら name を読む。
      * それ以外の知らない項目は読まない(端末に残した gz には残る)。
      */
     fun parseMountains(gzip: ByteArray): List<Mountain> {
@@ -271,23 +317,25 @@ object PeakData {
         } catch (e: java.io.IOException) {
             throw PeakDataException("山データを展開できません", e)
         }
-        val items = try {
+        val root = try {
             SimpleJson.parse(json)
         } catch (e: IllegalArgumentException) {
             throw PeakDataException("山データを読めません", e)
-        } as? List<*> ?: throw PeakDataException("山データが配列ではありません")
+        }
+        val items = root as? List<*> ?: (root as? Map<*, *>)?.get("points") as? List<*>
+            ?: throw PeakDataException("山データが配列でも、points の配列を持つ文書でもありません")
         return items.mapNotNull { item ->
             val m = item as? Map<*, *> ?: return@mapNotNull null
             if ((m["type"] as? String ?: PEAK_TYPE) != PEAK_TYPE) return@mapNotNull null
             val name = (m["name"] as? String)?.trim()?.ifEmpty { null } ?: return@mapNotNull null
             Mountain(
-                osmId = m["osmId"] as? Long ?: return@mapNotNull null,
+                osmId = m["osmId"] as? Long ?: osmIdOf(m["id"]) ?: return@mapNotNull null,
                 name = name,
                 latitude = (m["latitude"] as? Number)?.toDouble() ?: return@mapNotNull null,
                 longitude = (m["longitude"] as? Number)?.toDouble() ?: return@mapNotNull null,
                 elevationM = (m["elevationM"] as? Number)?.toDouble(),
                 pointId = trimmed(m["id"]),
-                nameReading = trimmed(m["nameReading"]),
+                nameReading = trimmed(m["nameReading"]) ?: (m["nameReading"] as? List<*>)?.firstNotNullOfOrNull(::trimmed),
                 aliases = names(m["aliases"]).filter { it != name },
                 wikipediaUrl = httpsUrl(m["wikipediaUrl"]),
                 wikidataUrl = httpsUrl(m["wikidataUrl"]),
@@ -300,9 +348,17 @@ object PeakData {
     /** 前後の空白を除いた文字列。文字列でないか空なら null。 */
     private fun trimmed(value: Any?): String? = (value as? String)?.trim()?.ifEmpty { null }
 
-    /** 別名やタグの配列。文字列でない・空の要素と重複を除く。配列でなければ空。 */
+    /** 地点データ版 6 の id(osm:<ノード番号>)から、OSM のノード番号を読む。OSM 以外の地点や形の違う ID は null。 */
+    private fun osmIdOf(value: Any?): Long? =
+        (value as? String)?.takeIf { it.startsWith(OSM_ID_PREFIX) }?.removePrefix(OSM_ID_PREFIX)
+            ?.takeIf { id -> id.isNotEmpty() && id.all { it in '0'..'9' } }?.toLongOrNull()
+
+    /**
+     * 別名やタグの配列。文字列でない・空の要素と重複を除く。配列でなければ空。
+     * 要素が {name, ...} のオブジェクト(版 6 の別名)なら name を読む。
+     */
     private fun names(value: Any?): List<String> =
-        (value as? List<*>).orEmpty().mapNotNull(::trimmed).distinct()
+        (value as? List<*>).orEmpty().mapNotNull { trimmed(it) ?: trimmed((it as? Map<*, *>)?.get("name")) }.distinct()
 
     /** https の URL だけを受け取る。 */
     private fun httpsUrl(value: Any?): String? = trimmed(value)?.takeIf { it.startsWith("https://") }

@@ -6,13 +6,14 @@ import Foundation
 public struct PeakDataCredits: Equatable, Sendable {
     /// データを作った日(UTC)。「2026/10/07」の形。
     public let releaseDate: String?
-    /// manifest の license(例: ODbL-1.0)。
+    /// manifest の license(例: ODbL-1.0)。版 6 は元データの出典の license。
     public let license: String?
-    /// manifest の attribution(例: © OpenStreetMap contributors)。
+    /// manifest の attribution(例: © OpenStreetMap contributors)。版 6 は元データの出典の attribution。
     public let attribution: String?
-    /// manifest の sourceUrl。元にした OSM データの URL。
+    /// manifest の sourceUrl。元にした OSM データの URL。版 6 は元データの出典の source。
     public let sourceUrl: String?
     /// タグ・よみがななどの補足に使った資料(manifest の supplementSources)。出典 ID の文字コード順。
+    /// 版 6 は metadata.sources のうち、元データ以外の出典。
     public let supplements: [SupplementSource]
 
     public init(releaseDate: String?, license: String?, attribution: String?, sourceUrl: String?, supplements: [SupplementSource]) {
@@ -58,8 +59,10 @@ public enum PeakDataCreditsReader {
     /// manifest の本文から出典を読む。JSON のオブジェクトでなければ nil。
     /// supplementSources が無い・空・オブジェクトでない古いデータでは、補足は空になる。
     /// 出典の値がオブジェクトでないものは飛ばし、属性がどれも無い出典は ID だけを出す。
+    /// 版 6 は metadata.sources を読む(`parseSources`)。元データの出典が無ければ nil。
     public static func parse(_ body: Data) -> PeakDataCredits? {
         guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return nil }
+        if let metadata = root["metadata"] as? [String: Any] { return parseSources(root, metadata: metadata) }
         let sources = (root["supplementSources"] as? [String: Any]) ?? [:]
         let supplements = sources.compactMap { key, value -> SupplementSource? in
             guard let id = text(key), let item = value as? [String: Any] else { return nil }
@@ -76,6 +79,34 @@ public enum PeakDataCreditsReader {
             license: text(root["license"]),
             attribution: text(root["attribution"]),
             sourceUrl: text(root["sourceUrl"]),
+            supplements: supplements
+        )
+    }
+
+    /// manifest 版 6 の metadata.sources から出典を読む。データ本体のファイル名の頭と同じ名前の出典
+    /// (`PeakData.mainSourceName`)を元データとし、それ以外を補足に使った資料として出す。name の無い出典は飛ばす。
+    /// 元データの出典が無いとき(yamamuki-data が出典の名前やファイル名を変えたときなど)は nil を返し、
+    /// 画面はアプリが持つ OpenStreetMap の表示に戻す(ライセンスの表示を消さないため)。
+    private static func parseSources(_ root: [String: Any], metadata: [String: Any]) -> PeakDataCredits? {
+        let sources = ((metadata["sources"] as? [Any]) ?? []).compactMap { value -> SupplementSource? in
+            guard let item = value as? [String: Any], let name = text(item["name"]) else { return nil }
+            return SupplementSource(
+                id: name,
+                source: text(item["source"]),
+                license: text(item["license"]),
+                attribution: text(item["attribution"]),
+                changes: text(item["changes"])
+            )
+        }
+        let dataName = PeakData.mainSourceName(root)
+        guard let mainIndex = sources.firstIndex(where: { $0.id == dataName }) else { return nil }
+        let main = sources[mainIndex]
+        let supplements = sources.indices.filter { $0 != mainIndex }.map { sources[$0] }.sorted { $0.id < $1.id }
+        return PeakDataCredits(
+            releaseDate: (root["version"] as? String).flatMap(PeakData.releaseDate),
+            license: main.license,
+            attribution: main.attribution,
+            sourceUrl: main.source,
             supplements: supplements
         )
     }
