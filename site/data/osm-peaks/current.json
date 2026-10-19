@@ -3,9 +3,5 @@
   "stable": {
     "manifestUrl": "https://shohei0205.github.io/yamamuki/data/osm-peaks/manifests/osm-peaks-20261015T072606Z-38696421314-1.json",
     "manifestSha256": "b88fa2c9f62505c13046c08d6952ac30b068d8b6f5e4e7702a8ab2511afa4cbd"
-  },
-  "dev": {
-    "manifestUrl": "https://shohei0205.github.io/yamamuki/data/osm-peaks/manifests/osm-peaks-dev-20261018T115955Z-39125410649-1.json",
-    "manifestSha256": "36ce1b256dec5d09d086b57eabf3d0a002fb1db29e5ba4102d101a74dc25a381"
   }
 }
