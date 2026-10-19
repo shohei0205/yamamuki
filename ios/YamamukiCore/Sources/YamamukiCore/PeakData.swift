@@ -23,7 +23,8 @@ public struct PeakManifest: Equatable, Sendable {
     public let sizeBytes: Int
     /// 収録した山の数。版 4 は mountainCount、版 5 は pointCount、版 6 は metadata.pointCount。
     public let mountainCount: Int
-    /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 5 で省略されたときは空文字。
+    /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 6 は元データの出典(`PeakData.mainSourceName`)の
+    /// latestTimestamp。版 5 で省略されたときと、版 6 で元データの出典か latestTimestamp が無いときは空文字。
     public let sourceTimestamp: String
 
     /// データを作った日(UTC)。「2026/10/07」の形。`version` から読めなければ nil。
@@ -142,7 +143,8 @@ public enum PeakData {
 
     /// 開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先を dev にしたときに直接読む
     /// (`PeakDataChannel.dataDev`)。開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
-    /// yamamuki-data の dev が公開する置き場所(points/osm-peaks-dev/)で、manifest は版 5。
+    /// yamamuki-data の dev が公開する置き場所(points/osm-peaks-dev/)。manifest の版は、yamamuki-data の dev に合わせて変わる
+    /// (2026-10-18 から版 6)。
     public static let devManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json")!
 
     /// `channel` から山データを読む取得元。
@@ -243,11 +245,12 @@ public enum PeakData {
             guard let value = root[key] as? String else { throw PeakDataError("manifest に \(key) がありません") }
             return value
         }
-        func int(_ key: String) throws -> Int {
+        /// `object`(省略時は manifest 全体)の `key` の整数。エラーの文には `label`(省略時は `key`)を出す。
+        func int(_ key: String, in object: [String: Any]? = nil, label: String? = nil) throws -> Int {
             // JSONSerialization は true / false も NSNumber で返すので、整数だけを通す。
-            guard let number = root[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+            guard let number = (object ?? root)[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
                   number.doubleValue == number.doubleValue.rounded() else {
-                throw PeakDataError("manifest の \(key) が整数ではありません")
+                throw PeakDataError("manifest の \(label ?? key) が整数ではありません")
             }
             return number.intValue
         }
@@ -274,12 +277,7 @@ public enum PeakData {
         }
         let mountainCount: Int
         if schemaVersion >= 6 {
-            // JSONSerialization は true / false も NSNumber で返すので、整数だけを通す。
-            guard let number = (root["metadata"] as? [String: Any])?["pointCount"] as? NSNumber,
-                  CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue == number.doubleValue.rounded() else {
-                throw PeakDataError("manifest の metadata.pointCount が整数ではありません")
-            }
-            mountainCount = number.intValue
+            mountainCount = try int("pointCount", in: root["metadata"] as? [String: Any] ?? [:], label: "metadata.pointCount")
         } else {
             mountainCount = try int(schemaVersion == 5 ? "pointCount" : "mountainCount")
         }
@@ -294,12 +292,29 @@ public enum PeakData {
             sha256: try string("sha256").lowercased(),
             sizeBytes: try int("sizeBytes"),
             mountainCount: mountainCount,
-            sourceTimestamp: schemaVersion >= 5 ? root["sourceTimestamp"] as? String ?? "" : try string("sourceTimestamp")
+            sourceTimestamp: schemaVersion >= 6 ? mainSource(root)?["latestTimestamp"] as? String ?? ""
+                : schemaVersion == 5 ? root["sourceTimestamp"] as? String ?? "" : try string("sourceTimestamp")
         )
         guard (1...maxSizeBytes).contains(manifest.sizeBytes) else {
             throw PeakDataError("manifest のサイズ \(manifest.sizeBytes) バイトは受け取れません")
         }
         return manifest
+    }
+
+    /// manifest 版 6 の metadata.sources のうち、元データの出典の名前。データ本体のファイル名(例: osm-peaks.json.gz)の頭(osm-peaks)。
+    /// 出典の並びに元データと補足の区別は無いので、名前で見分ける。
+    static func mainSourceName(_ root: [String: Any]) -> String? {
+        guard let fileName = (root["fileName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        let name = String(fileName.prefix { $0 != "." })
+        return name.isEmpty ? nil : name
+    }
+
+    /// manifest 版 6 の、元データの出典(`mainSourceName` と同じ name の metadata.sources)。無ければ nil。
+    private static func mainSource(_ root: [String: Any]) -> [String: Any]? {
+        guard let name = mainSourceName(root) else { return nil }
+        return ((root["metadata"] as? [String: Any])?["sources"] as? [Any] ?? []).lazy
+            .compactMap { $0 as? [String: Any] }
+            .first(where: { ($0["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == name })
     }
 
     /// 受け取ったデータ本体が、manifest のサイズと SHA-256 に合うか確かめる。

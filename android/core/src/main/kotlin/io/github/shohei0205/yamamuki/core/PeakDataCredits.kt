@@ -51,7 +51,7 @@ object PeakDataCreditsReader {
      * manifest の本文から出典を読む。JSON のオブジェクトでなければ null。
      * supplementSources が無い・空・オブジェクトでない古いデータでは、補足は空になる。
      * 出典の値がオブジェクトでないものは飛ばし、属性がどれも無い出典は ID だけを出す。
-     * 版 6 は metadata.sources を読む([parseSources])。
+     * 版 6 は metadata.sources を読む([parseSources])。元データの出典が無ければ null。
      */
     fun parse(body: String): PeakDataCredits? {
         val root = try {
@@ -81,12 +81,12 @@ object PeakDataCreditsReader {
     }
 
     /**
-     * manifest 版 6 の metadata.sources から出典を読む。出典の並びに元データと補足の区別は無いので、
-     * データ本体のファイル名(例: osm-peaks.json.gz)の頭(osm-peaks)と同じ名前の出典を元データとし、
-     * それ以外を補足に使った資料として出す。元データの出典が無ければ、すべてを補足に使った資料として出す。
-     * name の無い出典は飛ばす。
+     * manifest 版 6 の metadata.sources から出典を読む。データ本体のファイル名の頭と同じ名前の出典
+     * ([PeakData.mainSourceName])を元データとし、それ以外を補足に使った資料として出す。name の無い出典は飛ばす。
+     * 元データの出典が無いとき(yamamuki-data が出典の名前やファイル名を変えたときなど)は null を返し、
+     * 画面はアプリが持つ OpenStreetMap の表示に戻す(ライセンスの表示を消さないため)。
      */
-    private fun parseSources(root: Map<*, *>): PeakDataCredits {
+    private fun parseSources(root: Map<*, *>): PeakDataCredits? {
         val sources = ((root["metadata"] as Map<*, *>)["sources"] as? List<*>).orEmpty().mapNotNull { value ->
             val item = value as? Map<*, *> ?: return@mapNotNull null
             SupplementSource(
@@ -97,13 +97,13 @@ object PeakDataCreditsReader {
                 changes = text(item["changes"]),
             )
         }
-        val dataName = text(root["fileName"])?.substringBefore('.')
-        val main = sources.firstOrNull { it.id == dataName }
+        val dataName = PeakData.mainSourceName(root)
+        val main = sources.firstOrNull { it.id == dataName } ?: return null
         return PeakDataCredits(
             releaseDate = (root["version"] as? String)?.let(PeakData::releaseDate),
-            license = main?.license,
-            attribution = main?.attribution,
-            sourceUrl = main?.source,
+            license = main.license,
+            attribution = main.attribution,
+            sourceUrl = main.source,
             supplements = sources.filter { it !== main }.sortedBy { it.id },
         )
     }

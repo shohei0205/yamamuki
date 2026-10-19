@@ -102,13 +102,13 @@ final class PeakDataCreditsTests: XCTestCase {
         ])
     }
 
-    func testManifestV6WithoutMainSourceListsAllAsSupplements() throws {
-        let other = manifestV6.replacingOccurrences(of: "\"osm-peaks.json.gz\"", with: "\"other.json.gz\"")
-        let credits = try XCTUnwrap(PeakDataCreditsReader.parse(Data(other.utf8)))
-        XCTAssertNil(credits.license)
-        XCTAssertNil(credits.sourceUrl)
-        XCTAssertEqual(credits.supplements.map(\.id), ["osm-peaks", "国土地理院", "日本百名山"])
-        XCTAssertEqual(PeakDataCreditsReader.parse(Data(#"{"metadata": {}}"#.utf8))?.supplements, [])
+    func testManifestV6WithoutMainSourceIsNil() {
+        // 元データの出典が見つからないときは読めないものとし、画面はアプリが持つ OpenStreetMap の表示に戻す。
+        let otherFile = manifestV6.replacingOccurrences(of: "\"osm-peaks.json.gz\"", with: "\"other.json.gz\"")
+        XCTAssertNil(PeakDataCreditsReader.parse(Data(otherFile.utf8)))
+        let otherName = manifestV6.replacingOccurrences(of: "\"name\": \"osm-peaks\"", with: "\"name\": \"osm\"")
+        XCTAssertNil(PeakDataCreditsReader.parse(Data(otherName.utf8)))
+        XCTAssertNil(PeakDataCreditsReader.parse(Data(#"{"metadata": {}}"#.utf8)))
     }
 
     func testUnreadableManifestIsNil() {

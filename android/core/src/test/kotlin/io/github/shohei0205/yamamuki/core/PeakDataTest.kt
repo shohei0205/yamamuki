@@ -79,7 +79,8 @@ class PeakDataTest {
         schemaFormat: String = "yamamuki-manifest",
         dataSchemaFormat: String = "yamamuki-points",
         dataSchemaVersion: String = "6",
-        metadata: String = """{"sources":[{"name":"osm-peaks","license":"ODbL-1.0"}],"pointCount":2}""",
+        metadata: String = """{"sources":[{"name":"日本百名山","latestTimestamp":"2026-01-01T00:00:00Z"},""" +
+            """{"name":"osm-peaks","license":"ODbL-1.0","latestTimestamp":"2026-10-17T04:42:52Z"}],"pointCount":2}""",
     ) = """
         {"schemaFormat":"$schemaFormat","schemaVersion":6,"dataSchemaVersion":$dataSchemaVersion,"name":"山頂",
          "version":"20261018T115955Z-39125410649-1","fileName":"osm-peaks.json.gz",
@@ -95,7 +96,10 @@ class PeakDataTest {
         assertEquals("20261018T115955Z-39125410649-1", m.version)
         assertEquals("https://example.com/osm-peaks.json.gz", m.downloadUrl)
         assertEquals(2, m.mountainCount, "件数は metadata.pointCount から読む")
-        assertEquals("", m.sourceTimestamp, "版 6 に sourceTimestamp は無い")
+        assertEquals("2026-10-17T04:42:52Z", m.sourceTimestamp, "元データの出典の latestTimestamp を読む")
+        // 元データの出典か latestTimestamp が無いときは空文字。
+        assertEquals("", PeakData.parseManifest(manifestV6(metadata = """{"sources":[{"name":"osm-peaks"}],"pointCount":2}""")).sourceTimestamp)
+        assertEquals("", PeakData.parseManifest(manifestV6(metadata = """{"pointCount":2}""")).sourceTimestamp)
     }
 
     @Test

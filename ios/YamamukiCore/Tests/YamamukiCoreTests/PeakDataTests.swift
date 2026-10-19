@@ -109,7 +109,8 @@ final class PeakDataTests: XCTestCase {
     /// yamamuki-data の formats/manifest.md の manifest 版 6 と同じ形。件数と出典は metadata にある。
     private func manifestV6(data: Data? = nil, schemaFormat: String = "yamamuki-manifest",
                             dataSchemaFormat: String = "yamamuki-points", dataSchemaVersion: String = "6",
-                            metadata: String = #"{"sources":[{"name":"osm-peaks","license":"ODbL-1.0"}],"pointCount":2}"#,
+                            metadata: String = #"{"sources":[{"name":"日本百名山","latestTimestamp":"2026-01-01T00:00:00Z"},"#
+                                + #"{"name":"osm-peaks","license":"ODbL-1.0","latestTimestamp":"2026-10-17T04:42:52Z"}],"pointCount":2}"#,
                             metadataKey: String = "metadata") -> Data {
         let data = data ?? gzip
         return Data("""
@@ -127,7 +128,10 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(m.version, "20261018T115955Z-39125410649-1")
         XCTAssertEqual(m.downloadUrl.absoluteString, "https://example.com/osm-peaks.json.gz")
         XCTAssertEqual(m.mountainCount, 2, "件数は metadata.pointCount から読む")
-        XCTAssertEqual(m.sourceTimestamp, "", "版 6 に sourceTimestamp は無い")
+        XCTAssertEqual(m.sourceTimestamp, "2026-10-17T04:42:52Z", "元データの出典の latestTimestamp を読む")
+        // 元データの出典か latestTimestamp が無いときは空文字。
+        XCTAssertEqual(try PeakData.parseManifest(manifestV6(metadata: #"{"sources":[{"name":"osm-peaks"}],"pointCount":2}"#)).sourceTimestamp, "")
+        XCTAssertEqual(try PeakData.parseManifest(manifestV6(metadata: #"{"pointCount":2}"#)).sourceTimestamp, "")
     }
 
     func testRejectsManifestV6OfOtherFormats() {

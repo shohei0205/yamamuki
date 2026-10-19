@@ -115,12 +115,11 @@ class PeakDataCreditsTest {
     }
 
     @Test
-    fun manifestV6WithoutMainSourceListsAllAsSupplements() {
-        val credits = PeakDataCreditsReader.parse(manifestV6.replace("\"osm-peaks.json.gz\"", "\"other.json.gz\""))!!
-        assertNull(credits.license)
-        assertNull(credits.sourceUrl)
-        assertEquals(listOf("osm-peaks", "国土地理院", "日本百名山"), credits.supplements.map { it.id })
-        assertEquals(emptyList(), PeakDataCreditsReader.parse("""{"metadata": {}}""")!!.supplements)
+    fun manifestV6WithoutMainSourceIsNull() {
+        // 元データの出典が見つからないときは読めないものとし、画面はアプリが持つ OpenStreetMap の表示に戻す。
+        assertNull(PeakDataCreditsReader.parse(manifestV6.replace("\"osm-peaks.json.gz\"", "\"other.json.gz\"")))
+        assertNull(PeakDataCreditsReader.parse(manifestV6.replace("\"name\": \"osm-peaks\"", "\"name\": \"osm\"")))
+        assertNull(PeakDataCreditsReader.parse("""{"metadata": {}}"""))
     }
 
     @Test

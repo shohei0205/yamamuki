@@ -59,7 +59,7 @@ public enum PeakDataCreditsReader {
     /// manifest の本文から出典を読む。JSON のオブジェクトでなければ nil。
     /// supplementSources が無い・空・オブジェクトでない古いデータでは、補足は空になる。
     /// 出典の値がオブジェクトでないものは飛ばし、属性がどれも無い出典は ID だけを出す。
-    /// 版 6 は metadata.sources を読む(`parseSources`)。
+    /// 版 6 は metadata.sources を読む(`parseSources`)。元データの出典が無ければ nil。
     public static func parse(_ body: Data) -> PeakDataCredits? {
         guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return nil }
         if let metadata = root["metadata"] as? [String: Any] { return parseSources(root, metadata: metadata) }
@@ -83,11 +83,11 @@ public enum PeakDataCreditsReader {
         )
     }
 
-    /// manifest 版 6 の metadata.sources から出典を読む。出典の並びに元データと補足の区別は無いので、
-    /// データ本体のファイル名(例: osm-peaks.json.gz)の頭(osm-peaks)と同じ名前の出典を元データとし、
-    /// それ以外を補足に使った資料として出す。元データの出典が無ければ、すべてを補足に使った資料として出す。
-    /// name の無い出典は飛ばす。
-    private static func parseSources(_ root: [String: Any], metadata: [String: Any]) -> PeakDataCredits {
+    /// manifest 版 6 の metadata.sources から出典を読む。データ本体のファイル名の頭と同じ名前の出典
+    /// (`PeakData.mainSourceName`)を元データとし、それ以外を補足に使った資料として出す。name の無い出典は飛ばす。
+    /// 元データの出典が無いとき(yamamuki-data が出典の名前やファイル名を変えたときなど)は nil を返し、
+    /// 画面はアプリが持つ OpenStreetMap の表示に戻す(ライセンスの表示を消さないため)。
+    private static func parseSources(_ root: [String: Any], metadata: [String: Any]) -> PeakDataCredits? {
         let sources = ((metadata["sources"] as? [Any]) ?? []).compactMap { value -> SupplementSource? in
             guard let item = value as? [String: Any], let name = text(item["name"]) else { return nil }
             return SupplementSource(
@@ -98,15 +98,15 @@ public enum PeakDataCreditsReader {
                 changes: text(item["changes"])
             )
         }
-        let dataName = text(root["fileName"]).map { String($0.prefix { $0 != "." }) }
-        let mainIndex = sources.firstIndex { $0.id == dataName }
-        let main = mainIndex.map { sources[$0] }
+        let dataName = PeakData.mainSourceName(root)
+        guard let mainIndex = sources.firstIndex(where: { $0.id == dataName }) else { return nil }
+        let main = sources[mainIndex]
         let supplements = sources.indices.filter { $0 != mainIndex }.map { sources[$0] }.sorted { $0.id < $1.id }
         return PeakDataCredits(
             releaseDate: (root["version"] as? String).flatMap(PeakData.releaseDate),
-            license: main?.license,
-            attribution: main?.attribution,
-            sourceUrl: main?.source,
+            license: main.license,
+            attribution: main.attribution,
+            sourceUrl: main.source,
             supplements: supplements
         )
     }
