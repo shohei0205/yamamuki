@@ -145,6 +145,17 @@ final class PeakDataTests: XCTestCase {
         XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(dataSchemaVersion: "7")))
     }
 
+    func testRejectsManifestOfOtherDataset() throws {
+        // 版 5 以降は、データ本体のファイル名が osm-peaks.json.gz でなければ読まない(gsi-peaks などを取り違えないため)。
+        func replacing(_ data: Data, _ target: String, _ replacement: String) -> Data {
+            Data(String(decoding: data, as: UTF8.self).replacingOccurrences(of: target, with: replacement).utf8)
+        }
+        XCTAssertThrowsError(try PeakData.parseManifest(replacing(manifestV6(), #""fileName":"osm-peaks.json.gz""#, #""fileName":"gsi-peaks.json.gz""#)))
+        XCTAssertThrowsError(try PeakData.parseManifest(replacing(manifestV5(), #""fileName":"osm-peaks.json.gz","#, "")))
+        // 版 4 までは、ファイル名を見ない(japan-mountains.json.gz だった)。
+        XCTAssertEqual(try PeakData.parseManifest(manifest()).mountainCount, 2)
+    }
+
     func testRejectsUnknownSchemaVersion() {
         XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 7))) { error in
             XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
