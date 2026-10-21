@@ -61,12 +61,13 @@ Overpass を使っていたころのコード（`OverpassClient` など）は事
 ### データの作り方
 
 - Overpass は使わず、Geofabrik の日本全国の PBF（約 2.5 GB）から `osmium tags-filter` で山頂だけを抜き出す。全国で約 14,000 件、gzip で約 0.45 MB（展開後 2.7 MB）なので、地域ごとに分けなくてよい。
-- 形式は yamamuki-data の [peaks/README.md](https://github.com/shohei0205/yamamuki-data/blob/main/peaks/README.md) にある。アプリは manifest の `schemaVersion` が 4 のものだけを読み、知らない版なら「アプリを更新してください」と出す。
+- 形式は yamamuki-data の [points/osm-peaks/README.md](https://github.com/shohei0205/yamamuki-data/blob/main/points/osm-peaks/README.md) にある。アプリは読める manifest の `schemaVersion` を決めておき、知らない版なら「アプリを更新してください」と出す。0.5.0 が読む版4 の `peaks/manifest.json` は、2026-10-21 に `{"schemaVersion": 999}` に置き換えて公開を終えた（yamamuki-data #48）。
 
 ### 最新版の目印の置き場所
 
 - はじめは固定の Release（`peaks-dev-latest`）の `manifest.json` を `gh release upload --clobber` で差し替えていた。この方法は古いファイルを消してから上げ直すので、その間にアプリが取りに来ると 404 になる。どれが公開済みかも Releases の一覧から分かりにくかった。
-- 今は最新版の manifest を GitHub Pages に置き、データ本体は版ごとの Release に置く（manifest の `downloadUrl`）。差し替えの途中で欠けず、古い manifest が返っても対応する本体は取れる。
+- 次に、最新版の manifest を yamamuki-data の GitHub Pages に置き、データ本体は版ごとの Release に置く形にした（manifest の `downloadUrl`）。差し替えの途中で欠けず、古い manifest が返っても対応する本体は取れる。
+- 2026-10-07 に yamamuki-data の公開で配布版の manifest が消える事故（yamamuki-data #44）があり、0.6.0 からはアプリが読む版を yamamuki 側で決める形にした。yamamuki の Pages の参照先ファイル（0.6.0・0.7.0 は `site/data/osm-peaks/current.json`、0.8.0 からはカタログ `site/data/catalog.json`）が、yamamuki にコピーした Release の manifest を指す。yamamuki-data の正式版は Release を作るところまでで、Pages には置かない。
 - GitHub の定期実行（`schedule`）はデフォルトブランチ（main）のワークフローでしか動かない。dev にだけ書いても毎月の自動生成は動かない。
 
 ### アプリでの取り込み
