@@ -12,6 +12,10 @@
       }
     },
     "gsi-peaks": {
+      "stable": {
+        "manifestUrl": "https://shohei0205.github.io/yamamuki/data/gsi-peaks/manifests/gsi-peaks-20261020T014704Z-39355286679-1.json",
+        "manifestSha256": "0395804a0c8d273b788e553f3bba157fcbcf7af7b39f2b4c0b1f456fd9fe4413"
+      },
       "dev": {
         "manifestUrl": "https://shohei0205.github.io/yamamuki/data/gsi-peaks/manifests/gsi-peaks-dev-20261020T020029Z-39356481359-1.json",
         "manifestSha256": "3bb426f6068f4280cd567ce5845607fc8f234d36fd53d9e6256f53f03dc96683"
