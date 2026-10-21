@@ -91,22 +91,22 @@ final class PeakDataCreditsTests: XCTestCase {
         XCTAssertNil(credits.license)
         XCTAssertNil(credits.attribution)
         XCTAssertNil(credits.sourceUrl)
-        // 元データも含めたすべての出典を、出典名の文字コード順に出す。O(004F) < 国(56FD) < 日(65E5)。名前の無いものは飛ばす。
+        // 元データも含めたすべての出典を、manifest の並び順のまま出す(並べ替えない)。名前の無いものは飛ばす。
         XCTAssertEqual(credits.supplements, [
-            SupplementSource(
-                id: "OpenStreetMap（日本・Geofabrik 配布）",
-                source: "https://download.geofabrik.de/asia/japan-261017.osm.pbf",
-                license: "ODbL-1.0",
-                attribution: "© OpenStreetMap contributors",
-                changes: nil
-            ),
-            SupplementSource(id: "国土地理院", source: nil, license: "PDL-1.0", attribution: "出典：国土地理院", changes: nil),
             SupplementSource(
                 id: "日本百名山",
                 source: "Wikipedia「日本百名山」",
                 license: "CC BY-SA 4.0",
                 attribution: "Wikipedia「日本百名山」の投稿者",
                 changes: "OSM の地点 ID に対応付けた。"
+            ),
+            SupplementSource(id: "国土地理院", source: nil, license: "PDL-1.0", attribution: "出典：国土地理院", changes: nil),
+            SupplementSource(
+                id: "OpenStreetMap（日本・Geofabrik 配布）",
+                source: "https://download.geofabrik.de/asia/japan-261017.osm.pbf",
+                license: "ODbL-1.0",
+                attribution: "© OpenStreetMap contributors",
+                changes: nil
             ),
         ])
     }
@@ -118,7 +118,7 @@ final class PeakDataCreditsTests: XCTestCase {
         // 2026-10-18 の版のように、ファイル名の頭と同じ名前の出典があっても、ほかと同じに並べる。
         let oldName = manifestV6.replacingOccurrences(of: "OpenStreetMap（日本・Geofabrik 配布）", with: "osm-peaks")
         let old = try XCTUnwrap(PeakDataCreditsReader.parse(Data(oldName.utf8)))
-        XCTAssertEqual(old.supplements.map(\.id), ["osm-peaks", "国土地理院", "日本百名山"])
+        XCTAssertEqual(old.supplements.map(\.id), ["日本百名山", "国土地理院", "osm-peaks"])
         XCTAssertNil(old.license)
     }
 

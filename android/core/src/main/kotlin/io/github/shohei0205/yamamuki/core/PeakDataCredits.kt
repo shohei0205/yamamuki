@@ -16,7 +16,7 @@ data class PeakDataCredits(
     val sourceUrl: String?,
     /**
      * タグ・よみがななどの補足に使った資料(manifest の supplementSources)。出典 ID の文字コード順。
-     * 版 6 は metadata.sources のすべての出典(元データも含む、[listsAllSources])。
+     * 版 6 は metadata.sources のすべての出典(元データも含む、[listsAllSources])で、manifest の並び順のまま。
      */
     val supplements: List<SupplementSource>,
     /**
@@ -86,8 +86,9 @@ object PeakDataCreditsReader {
     }
 
     /**
-     * manifest 版 6 の metadata.sources から出典を読む。元データと補足を分けず、すべての出典を出典名の文字コード順に出す
+     * manifest 版 6 の metadata.sources から出典を読む。元データと補足を分けず、すべての出典を manifest の並び順のまま出す
      * (出典の並びに区別の項目が無く、名前も版ごとに変わるため。2026-10-20 の版から「OpenStreetMap（日本・Geofabrik 配布）」など)。
+     * 並び順は yamamuki-data が決めたものとして、並べ替えない。
      * name の無い出典は飛ばす。名前のある出典が 1 つも無いときは null を返し、
      * 画面はアプリが持つ OpenStreetMap の表示に戻す(ライセンスの表示を消さないため)。
      */
@@ -108,7 +109,7 @@ object PeakDataCreditsReader {
             license = null,
             attribution = null,
             sourceUrl = null,
-            supplements = sources.sortedBy { it.id },
+            supplements = sources,
             listsAllSources = true,
         )
     }

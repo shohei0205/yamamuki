@@ -101,23 +101,23 @@ class PeakDataCreditsTest {
         assertNull(credits.license)
         assertNull(credits.attribution)
         assertNull(credits.sourceUrl)
-        // 元データも含めたすべての出典を、出典名の文字コード順に出す。O(004F) < 国(56FD) < 日(65E5)。名前の無いものは飛ばす。
+        // 元データも含めたすべての出典を、manifest の並び順のまま出す(並べ替えない)。名前の無いものは飛ばす。
         assertEquals(
             listOf(
-                SupplementSource(
-                    "OpenStreetMap（日本・Geofabrik 配布）",
-                    source = "https://download.geofabrik.de/asia/japan-261017.osm.pbf",
-                    license = "ODbL-1.0",
-                    attribution = "© OpenStreetMap contributors",
-                    changes = null,
-                ),
-                SupplementSource("国土地理院", source = null, license = "PDL-1.0", attribution = "出典：国土地理院", changes = null),
                 SupplementSource(
                     "日本百名山",
                     source = "Wikipedia「日本百名山」",
                     license = "CC BY-SA 4.0",
                     attribution = "Wikipedia「日本百名山」の投稿者",
                     changes = "OSM の地点 ID に対応付けた。",
+                ),
+                SupplementSource("国土地理院", source = null, license = "PDL-1.0", attribution = "出典：国土地理院", changes = null),
+                SupplementSource(
+                    "OpenStreetMap（日本・Geofabrik 配布）",
+                    source = "https://download.geofabrik.de/asia/japan-261017.osm.pbf",
+                    license = "ODbL-1.0",
+                    attribution = "© OpenStreetMap contributors",
+                    changes = null,
                 ),
             ),
             credits.supplements,
@@ -131,7 +131,7 @@ class PeakDataCreditsTest {
         assertEquals(3, gsi.supplements.size)
         // 2026-10-18 の版のように、ファイル名の頭と同じ名前の出典があっても、ほかと同じに並べる。
         val old = PeakDataCreditsReader.parse(manifestV6.replace("OpenStreetMap（日本・Geofabrik 配布）", "osm-peaks"))!!
-        assertEquals(listOf("osm-peaks", "国土地理院", "日本百名山"), old.supplements.map { it.id })
+        assertEquals(listOf("日本百名山", "国土地理院", "osm-peaks"), old.supplements.map { it.id })
         assertNull(old.license)
     }
 

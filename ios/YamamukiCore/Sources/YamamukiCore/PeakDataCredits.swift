@@ -13,7 +13,7 @@ public struct PeakDataCredits: Equatable, Sendable {
     /// manifest の sourceUrl。元にした OSM データの URL。版 6 は nil。
     public let sourceUrl: String?
     /// タグ・よみがななどの補足に使った資料(manifest の supplementSources)。出典 ID の文字コード順。
-    /// 版 6 は metadata.sources のすべての出典(元データも含む、`listsAllSources`)。
+    /// 版 6 は metadata.sources のすべての出典(元データも含む、`listsAllSources`)で、manifest の並び順のまま。
     public let supplements: [SupplementSource]
     /// `supplements` が補足の資料だけでなく、元データを含むすべての出典か(manifest 版 6)。
     /// 画面はこのとき見出しを「出典」にする。版 6 の出典の並びには元データと補足の区別が無いため。
@@ -88,8 +88,9 @@ public enum PeakDataCreditsReader {
         )
     }
 
-    /// manifest 版 6 の metadata.sources から出典を読む。元データと補足を分けず、すべての出典を出典名の文字コード順に出す
+    /// manifest 版 6 の metadata.sources から出典を読む。元データと補足を分けず、すべての出典を manifest の並び順のまま出す
     /// (出典の並びに区別の項目が無く、名前も版ごとに変わるため。2026-10-20 の版から「OpenStreetMap（日本・Geofabrik 配布）」など)。
+    /// 並び順は yamamuki-data が決めたものとして、並べ替えない。
     /// name の無い出典は飛ばす。名前のある出典が 1 つも無いときは nil を返し、
     /// 画面はアプリが持つ OpenStreetMap の表示に戻す(ライセンスの表示を消さないため)。
     private static func parseSources(_ root: [String: Any], metadata: [String: Any]) -> PeakDataCredits? {
@@ -109,7 +110,7 @@ public enum PeakDataCreditsReader {
             license: nil,
             attribution: nil,
             sourceUrl: nil,
-            supplements: sources.sorted { $0.id < $1.id },
+            supplements: sources,
             listsAllSources: true
         )
     }
