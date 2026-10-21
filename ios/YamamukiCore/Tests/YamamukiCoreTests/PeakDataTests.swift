@@ -128,8 +128,12 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(m.version, "20261018T115955Z-39125410649-1")
         XCTAssertEqual(m.downloadUrl.absoluteString, "https://example.com/osm-peaks.json.gz")
         XCTAssertEqual(m.mountainCount, 2, "件数は metadata.pointCount から読む")
-        XCTAssertEqual(m.sourceTimestamp, "2026-10-17T04:42:52Z", "元データの出典の latestTimestamp を読む")
-        // 元データの出典か latestTimestamp が無いときは空文字。
+        XCTAssertEqual(m.sourceTimestamp, "2026-10-17T04:42:52Z", "出典の latestTimestamp を読む")
+        // 出典の名前によらず、latestTimestamp のうち最も新しいものを読む(2026-10-20 の版から元データの出典の名前が変わったため)。
+        let renamed = #"{"sources":[{"name":"日本百名山"},{"name":"OpenStreetMap（ロシア極東連邦管区・Geofabrik 配布）","latestTimestamp":"2026-10-16T21:00:00Z"},"#
+            + #"{"name":"OpenStreetMap（日本・Geofabrik 配布）","latestTimestamp":"2026-10-17T04:42:52Z"}],"pointCount":2}"#
+        XCTAssertEqual(try PeakData.parseManifest(manifestV6(metadata: renamed)).sourceTimestamp, "2026-10-17T04:42:52Z")
+        // どの出典にも latestTimestamp が無いときは空文字。
         XCTAssertEqual(try PeakData.parseManifest(manifestV6(metadata: #"{"sources":[{"name":"osm-peaks"}],"pointCount":2}"#)).sourceTimestamp, "")
         XCTAssertEqual(try PeakData.parseManifest(manifestV6(metadata: #"{"pointCount":2}"#)).sourceTimestamp, "")
     }

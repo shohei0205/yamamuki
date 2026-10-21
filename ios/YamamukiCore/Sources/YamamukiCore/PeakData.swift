@@ -23,8 +23,8 @@ public struct PeakManifest: Equatable, Sendable {
     public let sizeBytes: Int
     /// 収録した山の数。版 4 は mountainCount、版 5 は pointCount、版 6 は metadata.pointCount。
     public let mountainCount: Int
-    /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 6 は元データの出典(`PeakData.mainSourceName`)の
-    /// latestTimestamp。版 5 で省略されたときと、版 6 で元データの出典か latestTimestamp が無いときは空文字。
+    /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 6 は metadata.sources の latestTimestamp のうち
+    /// 最も新しいもの。版 5 で省略されたときと、版 6 でどの出典にも latestTimestamp が無いときは空文字。
     public let sourceTimestamp: String
 
     /// データを作った日(UTC)。「2026/10/07」の形。`version` から読めなければ nil。
@@ -308,7 +308,7 @@ public enum PeakData {
             sha256: try string("sha256").lowercased(),
             sizeBytes: try int("sizeBytes"),
             mountainCount: mountainCount,
-            sourceTimestamp: schemaVersion >= 6 ? mainSource(root)?["latestTimestamp"] as? String ?? ""
+            sourceTimestamp: schemaVersion >= 6 ? latestTimestamp(root)
                 : schemaVersion == 5 ? root["sourceTimestamp"] as? String ?? "" : try string("sourceTimestamp")
         )
         guard (1...maxSizeBytes).contains(manifest.sizeBytes) else {
@@ -317,20 +317,14 @@ public enum PeakData {
         return manifest
     }
 
-    /// manifest 版 6 の metadata.sources のうち、元データの出典の名前。データ本体のファイル名(例: osm-peaks.json.gz)の頭(osm-peaks)。
-    /// 出典の並びに元データと補足の区別は無いので、名前で見分ける。
-    static func mainSourceName(_ root: [String: Any]) -> String? {
-        guard let fileName = (root["fileName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
-        let name = String(fileName.prefix { $0 != "." })
-        return name.isEmpty ? nil : name
-    }
-
-    /// manifest 版 6 の、元データの出典(`mainSourceName` と同じ name の metadata.sources)。無ければ nil。
-    private static func mainSource(_ root: [String: Any]) -> [String: Any]? {
-        guard let name = mainSourceName(root) else { return nil }
-        return ((root["metadata"] as? [String: Any])?["sources"] as? [Any] ?? []).lazy
-            .compactMap { $0 as? [String: Any] }
-            .first(where: { ($0["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == name })
+    /// manifest 版 6 の、元データの基準日時。metadata.sources の latestTimestamp のうち最も新しいもの(UTC の決まった書式なので、文字列で比べる)。
+    /// 出典の並びに元データと補足の区別は無く、出典の名前も版ごとに変わる(2026-10-20 の版から「OpenStreetMap（日本・Geofabrik 配布）」など)ので、
+    /// 名前では選ばない。どの出典にも無ければ空文字。
+    private static func latestTimestamp(_ root: [String: Any]) -> String {
+        ((root["metadata"] as? [String: Any])?["sources"] as? [Any] ?? [])
+            .compactMap { (($0 as? [String: Any])?["latestTimestamp"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .max() ?? ""
     }
 
     /// 受け取ったデータ本体が、manifest のサイズと SHA-256 に合うか確かめる。

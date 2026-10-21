@@ -30,8 +30,8 @@ data class PeakManifest(
     /** 収録した山の数。版 4 は mountainCount、版 5 は pointCount、版 6 は metadata.pointCount。 */
     val mountainCount: Int,
     /**
-     * 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 6 は元データの出典([mainSourceName])の latestTimestamp。
-     * 版 5 で省略されたときと、版 6 で元データの出典か latestTimestamp が無いときは空文字。
+     * 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 6 は metadata.sources の latestTimestamp のうち最も新しいもの。
+     * 版 5 で省略されたときと、版 6 でどの出典にも latestTimestamp が無いときは空文字。
      */
     val sourceTimestamp: String,
 ) {
@@ -286,7 +286,7 @@ object PeakData {
             sizeBytes = long("sizeBytes"),
             mountainCount = mountainCount.toInt(),
             sourceTimestamp = when {
-                schemaVersion >= 6 -> mainSource(root)?.get("latestTimestamp") as? String ?: ""
+                schemaVersion >= 6 -> latestTimestamp(root)
                 schemaVersion == 5 -> root["sourceTimestamp"] as? String ?: ""
                 else -> string("sourceTimestamp")
             },
@@ -297,18 +297,14 @@ object PeakData {
     }
 
     /**
-     * manifest 版 6 の metadata.sources のうち、元データの出典の名前。データ本体のファイル名(例: osm-peaks.json.gz)の頭(osm-peaks)。
-     * 出典の並びに元データと補足の区別は無いので、名前で見分ける。
+     * manifest 版 6 の、元データの基準日時。metadata.sources の latestTimestamp のうち最も新しいもの(UTC の決まった書式なので、文字列で比べる)。
+     * 出典の並びに元データと補足の区別は無く、出典の名前も版ごとに変わる(2026-10-20 の版から「OpenStreetMap（日本・Geofabrik 配布）」など)ので、
+     * 名前では選ばない。どの出典にも無ければ空文字。
      */
-    internal fun mainSourceName(root: Map<*, *>): String? =
-        (root["fileName"] as? String)?.trim()?.substringBefore('.')?.ifEmpty { null }
-
-    /** manifest 版 6 の、元データの出典([mainSourceName] と同じ name の metadata.sources)。無ければ null。 */
-    private fun mainSource(root: Map<*, *>): Map<*, *>? {
-        val name = mainSourceName(root) ?: return null
-        return ((root["metadata"] as? Map<*, *>)?.get("sources") as? List<*>).orEmpty()
-            .filterIsInstance<Map<*, *>>().firstOrNull { (it["name"] as? String)?.trim() == name }
-    }
+    private fun latestTimestamp(root: Map<*, *>): String =
+        ((root["metadata"] as? Map<*, *>)?.get("sources") as? List<*>).orEmpty()
+            .mapNotNull { ((it as? Map<*, *>)?.get("latestTimestamp") as? String)?.trim()?.ifEmpty { null } }
+            .maxOrNull() ?: ""
 
     /** 受け取ったデータ本体が、manifest のサイズと SHA-256 に合うか確かめる。 */
     fun verify(data: ByteArray, manifest: PeakManifest) {

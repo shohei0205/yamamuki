@@ -28,6 +28,11 @@ class SitePeakDataTest {
             // 読めない形式なら PeakDataException になる。
             val manifest = PeakData.parseManifest(bytes.toString(Charsets.UTF_8))
             assertTrue(manifest.mountainCount > 0, "${pointer.manifestUrl} の件数が 0 です")
+            // 出典の画面に、OpenStreetMap の著作者表示が出るか(AGENTS.md の「© OpenStreetMap contributors の表示を消さない」)。
+            // 出典を読めないとアプリが持つ OSM の表示に戻るが、読めても OSM の出典が抜けていると、表示が消えてしまう。
+            val credits = PeakDataCreditsReader.parse(bytes.toString(Charsets.UTF_8))
+            val attributions = listOfNotNull(credits?.attribution) + credits?.supplements.orEmpty().mapNotNull { it.attribution }
+            assertTrue(attributions.any { "OpenStreetMap" in it }, "${pointer.manifestUrl} の出典に OpenStreetMap の著作者表示がありません")
         }
     }
 }

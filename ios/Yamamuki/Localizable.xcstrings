@@ -485,6 +485,17 @@
         }
       }
     },
+    "credits_section_sources": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出典"
+          }
+        }
+      }
+    },
     "credits_section_supplements": {
       "extractionState": "manual",
       "localizations": {
