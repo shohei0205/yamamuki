@@ -7,8 +7,8 @@
         "manifestSha256": "b88fa2c9f62505c13046c08d6952ac30b068d8b6f5e4e7702a8ab2511afa4cbd"
       },
       "dev": {
-        "manifestUrl": "https://shohei0205.github.io/yamamuki/data/osm-peaks/manifests/osm-peaks-dev-20261018T115955Z-39125410649-1.json",
-        "manifestSha256": "36ce1b256dec5d09d086b57eabf3d0a002fb1db29e5ba4102d101a74dc25a381"
+        "manifestUrl": "https://shohei0205.github.io/yamamuki/data/osm-peaks/manifests/osm-peaks-dev-20261020T014735Z-39355275469-1.json",
+        "manifestSha256": "3cc0b6fdabd74112f48189c0d1aa1b6ca2379725125c1fdc60eb11f484c816bb"
       }
     },
     "gsi-peaks": {
