@@ -52,11 +52,11 @@ final class PeakDataCreditsTests: XCTestCase {
         XCTAssertEqual(PeakDataCreditsReader.parse(Data(#"{"supplementSources": []}"#.utf8))?.supplements, [])
     }
 
-    /// manifest 版 6。出典は metadata.sources に並び、データ本体のファイル名の頭と同じ名前のものが元データ。
+    /// manifest 版 6(2026-10-20 の osm-peaks の正式版と同じ形)。出典は metadata.sources に並び、元データと補足の区別は無い。
     private let manifestV6 = """
     {
       "schemaVersion": 6,
-      "version": "20261018T115955Z-39125410649-1",
+      "version": "20261020T014651Z-39355252426-1",
       "fileName": "osm-peaks.json.gz",
       "metadata": {
         "sources": [
@@ -69,7 +69,7 @@ final class PeakDataCreditsTests: XCTestCase {
           },
           { "name": "国土地理院", "license": "PDL-1.0", "attribution": "出典：国土地理院" },
           {
-            "name": "osm-peaks",
+            "name": "OpenStreetMap（日本・Geofabrik 配布）",
             "source": "https://download.geofabrik.de/asia/japan-261017.osm.pbf",
             "license": "ODbL-1.0",
             "attribution": "© OpenStreetMap contributors",
@@ -78,19 +78,28 @@ final class PeakDataCreditsTests: XCTestCase {
           { "license": "名前の無い出典" },
           "文字列"
         ],
-        "pointCount": 14038
+        "pointCount": 14093
       }
     }
     """
 
-    func testReadsMetadataSourcesOfManifestV6() throws {
+    func testReadsAllMetadataSourcesOfManifestV6() throws {
         let credits = try XCTUnwrap(PeakDataCreditsReader.parse(Data(manifestV6.utf8)))
-        XCTAssertEqual(credits.releaseDate, "2026/10/18")
-        XCTAssertEqual(credits.license, "ODbL-1.0")
-        XCTAssertEqual(credits.attribution, "© OpenStreetMap contributors")
-        XCTAssertEqual(credits.sourceUrl, "https://download.geofabrik.de/asia/japan-261017.osm.pbf")
-        // 元データ以外の出典を、出典名の文字コード順に出す。国(56FD) < 日(65E5)。名前の無いものは飛ばす。
+        XCTAssertEqual(credits.releaseDate, "2026/10/20")
+        XCTAssertTrue(credits.listsAllSources)
+        // 元データを名前で探さないので、トップの項目は出さない。
+        XCTAssertNil(credits.license)
+        XCTAssertNil(credits.attribution)
+        XCTAssertNil(credits.sourceUrl)
+        // 元データも含めたすべての出典を、出典名の文字コード順に出す。O(004F) < 国(56FD) < 日(65E5)。名前の無いものは飛ばす。
         XCTAssertEqual(credits.supplements, [
+            SupplementSource(
+                id: "OpenStreetMap（日本・Geofabrik 配布）",
+                source: "https://download.geofabrik.de/asia/japan-261017.osm.pbf",
+                license: "ODbL-1.0",
+                attribution: "© OpenStreetMap contributors",
+                changes: nil
+            ),
             SupplementSource(id: "国土地理院", source: nil, license: "PDL-1.0", attribution: "出典：国土地理院", changes: nil),
             SupplementSource(
                 id: "日本百名山",
@@ -102,13 +111,22 @@ final class PeakDataCreditsTests: XCTestCase {
         ])
     }
 
-    func testManifestV6WithoutMainSourceIsNil() {
-        // 元データの出典が見つからないときは読めないものとし、画面はアプリが持つ OpenStreetMap の表示に戻す。
-        let otherFile = manifestV6.replacingOccurrences(of: "\"osm-peaks.json.gz\"", with: "\"other.json.gz\"")
-        XCTAssertNil(PeakDataCreditsReader.parse(Data(otherFile.utf8)))
-        let otherName = manifestV6.replacingOccurrences(of: "\"name\": \"osm-peaks\"", with: "\"name\": \"osm\"")
-        XCTAssertNil(PeakDataCreditsReader.parse(Data(otherName.utf8)))
+    func testManifestV6ReadsSourcesWhateverTheFileName() throws {
+        // 出典の名前がファイル名の頭と合わなくても(gsi-peaks など)、すべての出典を出す。
+        let gsi = manifestV6.replacingOccurrences(of: "\"osm-peaks.json.gz\"", with: "\"gsi-peaks.json.gz\"")
+        XCTAssertEqual(try XCTUnwrap(PeakDataCreditsReader.parse(Data(gsi.utf8))).supplements.count, 3)
+        // 2026-10-18 の版のように、ファイル名の頭と同じ名前の出典があっても、ほかと同じに並べる。
+        let oldName = manifestV6.replacingOccurrences(of: "OpenStreetMap（日本・Geofabrik 配布）", with: "osm-peaks")
+        let old = try XCTUnwrap(PeakDataCreditsReader.parse(Data(oldName.utf8)))
+        XCTAssertEqual(old.supplements.map(\.id), ["osm-peaks", "国土地理院", "日本百名山"])
+        XCTAssertNil(old.license)
+    }
+
+    func testManifestV6WithoutNamedSourcesIsNil() {
+        // 名前のある出典が無いときは読めないものとし、画面はアプリが持つ OpenStreetMap の表示に戻す。
         XCTAssertNil(PeakDataCreditsReader.parse(Data(#"{"metadata": {}}"#.utf8)))
+        XCTAssertNil(PeakDataCreditsReader.parse(Data(#"{"metadata": {"sources": []}}"#.utf8)))
+        XCTAssertNil(PeakDataCreditsReader.parse(Data(#"{"metadata": {"sources": [{"license": "ODbL-1.0"}]}}"#.utf8)))
     }
 
     func testUnreadableManifestIsNil() {

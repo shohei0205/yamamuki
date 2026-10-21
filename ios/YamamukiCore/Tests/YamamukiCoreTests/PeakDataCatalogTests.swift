@@ -154,6 +154,9 @@ final class PeakDataCatalogTests: XCTestCase {
                 .appendingPathComponent(pointer.manifestUrl.lastPathComponent))
             XCTAssertEqual(PeakData.sha256Hex(manifest), pointer.manifestSha256)
             XCTAssertGreaterThan(try PeakData.parseManifest(manifest).mountainCount, 0)
+            // 出典の画面に出典が出るか(読めなければ、アプリが持つ OSM の表示に戻ってしまう)。
+            let credits = try XCTUnwrap(PeakDataCreditsReader.parse(manifest), "\(pointer.manifestUrl) の出典を読めません")
+            XCTAssertTrue(credits.license != nil || !credits.supplements.isEmpty, "\(pointer.manifestUrl) の出典を読めません")
         }
     }
 }

@@ -47,7 +47,8 @@ private sealed interface CreditsLoad {
 
 /**
  * 山データの出典とライセンスの画面。設定画面の「データの出典とライセンス」の行から開く。
- * 取り込み済みの山データの manifest([loadCredits])から、OSM の表示と、補足に使った資料をすべて出す。
+ * 取り込み済みの山データの manifest([loadCredits])から、OSM の表示と、補足に使った資料をすべて出す
+ * (manifest 版 6 は、元データも含めたすべての出典を「出典」として出す)。
  * 山データが無いときや出典が読めないときも、OpenStreetMap の著作者表示は出す。
  */
 @Composable
@@ -87,7 +88,10 @@ fun CreditsScreen(
                         R.string.credits_source_url to credits.sourceUrl,
                     ),
                 )
-                SectionTitle(stringResource(R.string.credits_section_supplements))
+                // manifest 版 6 は元データと補足の区別が無いので、すべての出典を「出典」の見出しの下に並べる。
+                SectionTitle(
+                    stringResource(if (credits.listsAllSources) R.string.credits_section_sources else R.string.credits_section_supplements),
+                )
                 if (credits.supplements.isEmpty()) {
                     Note(stringResource(R.string.credits_no_supplements))
                 }

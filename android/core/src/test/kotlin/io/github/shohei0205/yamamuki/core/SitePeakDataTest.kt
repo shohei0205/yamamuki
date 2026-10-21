@@ -28,6 +28,9 @@ class SitePeakDataTest {
             // 読めない形式なら PeakDataException になる。
             val manifest = PeakData.parseManifest(bytes.toString(Charsets.UTF_8))
             assertTrue(manifest.mountainCount > 0, "${pointer.manifestUrl} の件数が 0 です")
+            // 出典の画面に出典が出るか(読めなければ、アプリが持つ OSM の表示に戻ってしまう)。
+            val credits = PeakDataCreditsReader.parse(bytes.toString(Charsets.UTF_8))
+            assertTrue(credits != null && (credits.license != null || credits.supplements.isNotEmpty()), "${pointer.manifestUrl} の出典を読めません")
         }
     }
 }

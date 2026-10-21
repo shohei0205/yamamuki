@@ -5,7 +5,8 @@ import YamamukiCore
 private let osmCopyrightUrl = "https://www.openstreetmap.org/copyright"
 
 /// 山データの出典とライセンスの画面。設定画面の「データの出典とライセンス」の行から開く。
-/// 取り込み済みの山データの manifest から、OSM の表示と、補足に使った資料をすべて出す。
+/// 取り込み済みの山データの manifest から、OSM の表示と、補足に使った資料をすべて出す
+/// (manifest 版 6 は、元データも含めたすべての出典を「出典」として出す)。
 /// 山データが無いときや出典が読めないときも、OpenStreetMap の著作者表示は出す。
 struct CreditsView: View {
     @ObservedObject var model: DialModel
@@ -36,7 +37,7 @@ struct CreditsView: View {
                     Section {
                         Text(Strings.text("credits_no_supplements")).font(.footnote).foregroundStyle(.secondary)
                     } header: {
-                        Text(Strings.text("credits_section_supplements"))
+                        Text(sourcesHeading(credits))
                     }
                 }
                 ForEach(Array(credits.supplements.enumerated()), id: \.element.id) { index, source in
@@ -50,7 +51,7 @@ struct CreditsView: View {
                         ])
                     } header: {
                         // 見出しは最初の出典の上にだけ出す。
-                        if index == 0 { Text(Strings.text("credits_section_supplements")) }
+                        if index == 0 { Text(sourcesHeading(credits)) }
                     }
                 }
             case .loaded(nil):
@@ -71,6 +72,11 @@ struct CreditsView: View {
             load = .loaded(model.peakData == nil ? nil : await model.peakDataCredits())
         }
     }
+}
+
+/// 出典の一覧の見出し。manifest 版 6 は元データと補足の区別が無いので、すべての出典を「出典」の見出しの下に並べる。
+private func sourcesHeading(_ credits: PeakDataCredits) -> String {
+    credits.listsAllSources ? Strings.text("credits_section_sources") : Strings.text("credits_section_supplements")
 }
 
 /// 「ライセンス」などの見出しと値を 1 組ずつ並べる。値の無い項目は出さない。
