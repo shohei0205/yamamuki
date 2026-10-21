@@ -20,7 +20,7 @@ private final class FakeRemote: MountainRemoteSource, @unchecked Sendable {
 
 private final class InMemoryCache: MountainCache, @unchecked Sendable {
     var tiles: [Tile: Date] = [:]
-    var mountains: [Int64: Mountain] = [:]
+    var mountains: [String: Mountain] = [:]
 
     func fetchedAt(_ tiles: [Tile]) async throws -> [Tile: Date] {
         self.tiles.filter { tiles.contains($0.key) }
@@ -33,7 +33,7 @@ private final class InMemoryCache: MountainCache, @unchecked Sendable {
     func replaceTiles(_ tiles: [Tile], mountains: [Mountain], fetchedAt: Date) async throws {
         let targets = Set(tiles)
         self.mountains = self.mountains.filter { !targets.contains(Tile.of($0.value.latitude, $0.value.longitude)) }
-        for m in mountains { self.mountains[m.osmId] = m }
+        for m in mountains { self.mountains[m.id] = m }
         for t in tiles { self.tiles[t] = fetchedAt }
     }
 }
@@ -46,9 +46,9 @@ final class MountainRepositoryTests: XCTestCase {
     // 大月駅付近から富士山(約 34km)と、遠くの山(範囲外)を返すフェイク
     private let lat = 35.61
     private let lon = 138.94
-    private let fuji = Mountain(osmId: 1, name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776)
-    private let near = Mountain(osmId: 2, name: "岩殿山", latitude: 35.62, longitude: 138.96, elevationM: 634)
-    private let far = Mountain(osmId: 3, name: "遠い山", latitude: 36.4, longitude: 138.94, elevationM: 2000)
+    private let fuji = Mountain(id: "osm:1", name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776)
+    private let near = Mountain(id: "osm:2", name: "岩殿山", latitude: 35.62, longitude: 138.96, elevationM: 634)
+    private let far = Mountain(id: "osm:3", name: "遠い山", latitude: 36.4, longitude: 138.94, elevationM: 2000)
     private let clock = Clock()
 
     private func repo(_ remote: FakeRemote, _ cache: MountainCache) -> MountainRepository {
@@ -172,7 +172,7 @@ final class MountainRepositoryTests: XCTestCase {
 
     func testForeignTilesAreNotMissingNearTheBorder() async throws {
         // 全国の山データを取り込んだ状態。対馬の山だけを持ち、朝鮮半島のタイルは取得済みにならない。
-        let tsushima = Mountain(osmId: 4, name: "白嶽", latitude: 34.42, longitude: 129.31, elevationM: 519)
+        let tsushima = Mountain(id: "osm:4", name: "白嶽", latitude: 34.42, longitude: 129.31, elevationM: 519)
         let cache = InMemoryCache()
         try await cache.replaceTiles(PeakData.tiles(of: [tsushima]), mountains: [tsushima], fetchedAt: clock.now)
         let repo = repo(FakeRemote([]), cache)

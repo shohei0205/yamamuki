@@ -27,8 +27,8 @@ private final class StubProtocol: URLProtocol {
 }
 
 final class PeakDataCatalogTests: XCTestCase {
-    private let stableUrl = PeakData.catalogManifestUrlPrefix + "osm-peaks-20261007T071401Z-37585754546-1.json"
-    private let devUrl = PeakData.catalogManifestUrlPrefix + "osm-peaks-dev-20261010T022253Z-38016527834-1.json"
+    private let stableUrl = PeakDataset.osmPeaks.manifestUrlPrefix + "osm-peaks-20261007T071401Z-37585754546-1.json"
+    private let devUrl = PeakDataset.osmPeaks.manifestUrlPrefix + "osm-peaks-dev-20261010T022253Z-38016527834-1.json"
     private let gsiUrl = "https://shohei0205.github.io/yamamuki/data/gsi-peaks/manifests/gsi-peaks-dev-20261018T115950Z-39125416076-1.json"
 
     private func entry(_ url: String, _ sha256: String) -> String { #"{"manifestUrl":"\#(url)","manifestSha256":"\#(sha256)"}"# }
@@ -79,8 +79,8 @@ final class PeakDataCatalogTests: XCTestCase {
             catalog(stable: entry("https://shohei0205.github.io/yamamuki-data/peaks/manifest.json", a64)),
             // gsi-peaks の置き場所の manifest を osm-peaks として読まない。
             catalog(stable: entry(gsiUrl, a64)),
-            catalog(stable: entry(PeakData.catalogManifestUrlPrefix + "sub/x.json", a64)),
-            catalog(stable: entry(PeakData.catalogManifestUrlPrefix + "x.txt", a64)),
+            catalog(stable: entry(PeakDataset.osmPeaks.manifestUrlPrefix + "sub/x.json", a64)),
+            catalog(stable: entry(PeakDataset.osmPeaks.manifestUrlPrefix + "x.txt", a64)),
             catalog(stable: entry(stableUrl, String(repeating: "A", count: 64))),
             catalog(stable: entry(stableUrl, String(repeating: "a", count: 63))),
             Data(#"{"schemaVersion":1,"datasets":{"gsi-peaks":\#(channels(stable: entry(gsiUrl, a64)))}}"#.utf8),
@@ -105,7 +105,7 @@ final class PeakDataCatalogTests: XCTestCase {
             PeakData.catalogUrl: (200, catalog(stable: entry(stableUrl, sha256))),
             URL(string: stableUrl)!: (200, manifest),
         ]
-        let source = PeakData.source(.stable, session: stubSession(), userAgent: "test")
+        let source = PeakData.source(.stable, dataset: .osmPeaks, session: stubSession(), userAgent: "test")
 
         guard case .fetched(let body, let etag) = try await source.fetchManifest(etag: nil) else {
             return XCTFail("manifest が返ってきませんでした")
@@ -116,6 +116,37 @@ final class PeakDataCatalogTests: XCTestCase {
         // 同じ manifest の SHA-256 を覚えているので取り直さない。
         guard case .notModified = try await source.fetchManifest(etag: sha256) else { return XCTFail("取り直しました") }
         XCTAssertEqual(StubProtocol.requests, [PeakData.catalogUrl, URL(string: stableUrl)!, PeakData.catalogUrl])
+    }
+
+    func testPicksGsiPeaks() throws {
+        let gsiStable = PeakDataset.gsiPeaks.manifestUrlPrefix + "gsi-peaks-20261020T014704Z-39355286679-1.json"
+        let c64 = String(repeating: "c", count: 64)
+        let d64 = String(repeating: "d", count: 64)
+        let body = catalog(stable: entry(stableUrl, a64), gsi: channels(stable: entry(gsiStable, d64), dev: entry(gsiUrl, c64)))
+        XCTAssertEqual(try PeakData.parseCatalog(body, useDev: false, dataset: .gsiPeaks),
+                       PeakDataPointer(manifestUrl: URL(string: gsiStable)!, manifestSha256: d64))
+        XCTAssertEqual(try PeakData.parseCatalog(body, useDev: true, dataset: .gsiPeaks),
+                       PeakDataPointer(manifestUrl: URL(string: gsiUrl)!, manifestSha256: c64))
+        // 配布用のビルドは stable しか読まないので、dev しか無い種類は読めない。
+        XCTAssertThrowsError(try PeakData.parseCatalog(catalog(stable: entry(stableUrl, a64)), useDev: false, dataset: .gsiPeaks))
+        XCTAssertEqual(try PeakData.parseCatalog(catalog(stable: entry(stableUrl, a64)), useDev: true, dataset: .gsiPeaks).manifestUrl.absoluteString,
+                       gsiUrl)
+        // osm-peaks の置き場所の manifest を gsi-peaks として読まない。
+        XCTAssertThrowsError(try PeakData.parseCatalog(catalog(stable: entry(stableUrl, a64), gsi: channels(stable: entry(stableUrl, d64))),
+                                                       useDev: false, dataset: .gsiPeaks))
+    }
+
+    func testDataDevChannelReadsCatalogForOtherDatasets() async throws {
+        // 取得先を dev にした開発版でも、yamamuki-data の dev を直接読めるのは osm-peaks だけ。gsi-peaks はカタログの dev を読む。
+        let manifest = Data(#"{"schemaVersion":6}"#.utf8)
+        StubProtocol.responses = [
+            PeakData.catalogUrl: (200, catalog(stable: entry(stableUrl, a64), gsi: channels(stable: nil, dev: entry(gsiUrl, PeakData.sha256Hex(manifest))))),
+            URL(string: gsiUrl)!: (200, manifest),
+        ]
+        let source = PeakData.source(.dataDev, dataset: .gsiPeaks, session: stubSession(), userAgent: "test")
+        guard case .fetched = try await source.fetchManifest(etag: nil) else { return XCTFail("manifest が返ってきませんでした") }
+        XCTAssertEqual(StubProtocol.requests, [PeakData.catalogUrl, URL(string: gsiUrl)!])
+        XCTAssertTrue(PeakData.source(.dataDev, dataset: .osmPeaks, session: stubSession(), userAgent: "test") is HTTPPeakDataSource)
     }
 
     func testSourceRejectsManifestWithWrongSha256() async {
@@ -140,26 +171,30 @@ final class PeakDataCatalogTests: XCTestCase {
         }
     }
 
-    /// yamamuki の Pages に置いたカタログ(site/data/catalog.json)の osm-peaks が指す manifest を、このアプリで読めるか。
-    /// Android の SitePeakDataTest と同じ確認。
+    /// yamamuki の Pages に置いたカタログ(site/data/catalog.json)の、このアプリが読む種類(osm-peaks・gsi-peaks)が指す manifest を、
+    /// このアプリで読めるか。Android の SitePeakDataTest と同じ確認。
     func testSiteCatalogIsReadableByThisApp() throws {
         let site = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("site/data")
         let body = try Data(contentsOf: site.appendingPathComponent("catalog.json"))
-        for useDev in [false, true] {
-            let pointer = try PeakData.parseCatalog(body, useDev: useDev)
-            let manifest = try Data(contentsOf: site.appendingPathComponent(PeakData.dataset).appendingPathComponent("manifests")
-                .appendingPathComponent(pointer.manifestUrl.lastPathComponent))
-            XCTAssertEqual(PeakData.sha256Hex(manifest), pointer.manifestSha256)
-            XCTAssertGreaterThan(try PeakData.parseManifest(manifest).mountainCount, 0)
-            // 出典の画面に、OpenStreetMap の著作者表示が出るか(AGENTS.md の「© OpenStreetMap contributors の表示を消さない」)。
-            // 出典を読めないとアプリが持つ OSM の表示に戻るが、読めても OSM の出典が抜けていると、表示が消えてしまう。
-            let credits = try XCTUnwrap(PeakDataCreditsReader.parse(manifest), "\(pointer.manifestUrl) の出典を読めません")
-            let attributions = [credits.attribution].compactMap { $0 } + credits.supplements.compactMap(\.attribution)
-            XCTAssertTrue(attributions.contains { $0.contains("OpenStreetMap") },
-                          "\(pointer.manifestUrl) の出典に OpenStreetMap の著作者表示がありません")
+        // 種類ごとに、出典の著作者表示に入っているはずの名前。
+        let owners: [PeakDataset: String] = [.osmPeaks: "OpenStreetMap", .gsiPeaks: "国土地理院"]
+        for dataset in PeakDataset.allCases {
+            for useDev in [false, true] {
+                let pointer = try PeakData.parseCatalog(body, useDev: useDev, dataset: dataset)
+                let manifest = try Data(contentsOf: site.appendingPathComponent(dataset.id).appendingPathComponent("manifests")
+                    .appendingPathComponent(pointer.manifestUrl.lastPathComponent))
+                XCTAssertEqual(PeakData.sha256Hex(manifest), pointer.manifestSha256)
+                XCTAssertGreaterThan(try PeakData.parseManifest(manifest, dataset: dataset).mountainCount, 0)
+                // 出典の画面に、元データの著作者表示が出るか(AGENTS.md の「© OpenStreetMap contributors の表示を消さない」)。
+                // 出典を読めないとアプリが持つ表示に戻るが、読めても元データの出典が抜けていると、表示が消えてしまう。
+                let credits = try XCTUnwrap(PeakDataCreditsReader.parse(manifest), "\(pointer.manifestUrl) の出典を読めません")
+                let attributions = [credits.attribution].compactMap { $0 } + credits.supplements.compactMap(\.attribution)
+                let owner = owners[dataset]!
+                XCTAssertTrue(attributions.contains { $0.contains(owner) }, "\(pointer.manifestUrl) の出典に \(owner) の著作者表示がありません")
+            }
         }
     }
 }

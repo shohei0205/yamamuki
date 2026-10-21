@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.StringRes
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.DialGeometry
+import io.github.shohei0205.yamamuki.core.PeakDataset
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +31,8 @@ data class Settings(
     val peakGroups: Set<String> = emptySet(),
     /** アプリを開いたときに、新しい山データがあるかを自動で確かめる(30 日に 1 回、取り込みはしない)。 */
     val autoCheckPeakData: Boolean = false,
+    /** 方位盤・検索・出典に使う山データの種類。設定の「使う山データ」で選ぶ。 */
+    val peakDataset: PeakDataset = PeakDataset.DEFAULT,
 ) {
     companion object {
         val TEXT_SCALES = listOf(0.85f, 1.0f, 1.2f, 1.4f)
@@ -81,6 +84,7 @@ class AppSettings(context: Context) {
             .putBoolean(KEY_PEAK_DATA_ASKED, next.peakDataAsked)
             .putStringSet(KEY_PEAK_GROUPS, next.peakGroups)
             .putBoolean(KEY_AUTO_CHECK_PEAK_DATA, next.autoCheckPeakData)
+            .putString(KEY_PEAK_DATASET, next.peakDataset.id)
             .apply()
     }
 
@@ -100,6 +104,8 @@ class AppSettings(context: Context) {
             // getStringSet が返す集合は書き換えてはいけないので写す。
             peakGroups = prefs.getStringSet(KEY_PEAK_GROUPS, null)?.toSet() ?: d.peakGroups,
             autoCheckPeakData = prefs.getBoolean(KEY_AUTO_CHECK_PEAK_DATA, d.autoCheckPeakData),
+            // 知らない種類(新しい版のアプリで選んだもの)なら、既定に戻す。
+            peakDataset = PeakDataset.of(prefs.getString(KEY_PEAK_DATASET, null)) ?: d.peakDataset,
         )
     }
 
@@ -114,5 +120,6 @@ class AppSettings(context: Context) {
         const val KEY_PEAK_DATA_ASKED = "peak_data_asked"
         const val KEY_PEAK_GROUPS = "peak_groups"
         const val KEY_AUTO_CHECK_PEAK_DATA = "auto_check_peak_data"
+        const val KEY_PEAK_DATASET = "peak_dataset"
     }
 }

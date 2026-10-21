@@ -21,9 +21,9 @@ class OverpassParserTest {
 
         assertEquals(
             listOf(
-                Mountain(1, "富士山", 35.3606, 138.7274, 3776.0),
-                Mountain(2, "エックス山", 35.0, 138.0, 1234.0),
-                Mountain(4, "無標高山", 35.2, 138.2, null),
+                Mountain("osm:1", "富士山", 35.3606, 138.7274, 3776.0),
+                Mountain("osm:2", "エックス山", 35.0, 138.0, 1234.0),
+                Mountain("osm:4", "無標高山", 35.2, 138.2, null),
             ),
             result,
         )
@@ -39,7 +39,7 @@ class OverpassParserTest {
             "6\t35.6\t138.6\t正常山\t\t600",
         ).joinToString("\n")
 
-        assertEquals(listOf(Mountain(6, "正常山", 35.6, 138.6, 600.0)), OverpassParser.parse(body))
+        assertEquals(listOf(Mountain("osm:6", "正常山", 35.6, 138.6, 600.0)), OverpassParser.parse(body))
     }
 
     @Test

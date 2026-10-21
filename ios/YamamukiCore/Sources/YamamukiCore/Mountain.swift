@@ -1,16 +1,16 @@
 import Foundation
 
-/// OSM の山頂ノード1件。
-/// `pointId` から下は、yamamuki-data の地点データ版 5 の項目。版 4 までのデータと Overpass から取った山には無い。
+/// 山頂 1 件。
+/// `nameReading` から下は、yamamuki-data の地点データ版 5 の項目。版 4 までのデータと Overpass から取った山には無い。
 public struct Mountain: Codable, Hashable, Sendable {
-    public let osmId: Int64
+    /// 山データの種類の中で一意な地点の ID。地点データの id のほか、OSM の山頂(osm-peaks・Overpass)では
+    /// ノード番号から作った「osm:<番号>」。
+    public let id: String
     public let name: String
     public let latitude: Double
     public let longitude: Double
     /// 標高(m)。OSM に ele タグが無い、または解釈できない場合は nil。
     public let elevationM: Double?
-    /// データセット内で一意な地点の ID(地点データの id)。OSM 由来の山頂では osmId を文字列にしたもの。
-    public let pointId: String?
     /// 山名の読み仮名。
     public let nameReading: String?
     /// 別名。
@@ -24,16 +24,15 @@ public struct Mountain: Codable, Hashable, Sendable {
     /// 地点ごとの画像。
     public let graphic: PointGraphic?
 
-    public init(osmId: Int64, name: String, latitude: Double, longitude: Double, elevationM: Double?,
-                pointId: String? = nil, nameReading: String? = nil, aliases: [String] = [],
+    public init(id: String, name: String, latitude: Double, longitude: Double, elevationM: Double?,
+                nameReading: String? = nil, aliases: [String] = [],
                 wikipediaUrl: String? = nil, wikidataUrl: String? = nil, tags: [String] = [],
                 graphic: PointGraphic? = nil) {
-        self.osmId = osmId
+        self.id = id
         self.name = name
         self.latitude = latitude
         self.longitude = longitude
         self.elevationM = elevationM
-        self.pointId = pointId
         self.nameReading = nameReading
         self.aliases = aliases
         self.wikipediaUrl = wikipediaUrl
@@ -42,21 +41,46 @@ public struct Mountain: Codable, Hashable, Sendable {
         self.graphic = graphic
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id, name, latitude, longitude, elevationM, nameReading, aliases, wikipediaUrl, wikidataUrl, tags, graphic
+        /// 0.7.0 までのキャッシュのファイルの、OSM のノード番号。今は書かない。
+        case osmId
+    }
+
     /// 版 5 の項目は省略可能にして、項目の無い古いキャッシュのファイルも読めるようにする。
+    /// 0.7.0 までのファイルには id が無いので、osmId から「osm:<番号>」を作る。
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        osmId = try c.decode(Int64.self, forKey: .osmId)
+        if let id = try c.decodeIfPresent(String.self, forKey: .id) {
+            self.id = id
+        } else {
+            id = "\(PeakData.osmIdPrefix)\(try c.decode(Int64.self, forKey: .osmId))"
+        }
         name = try c.decode(String.self, forKey: .name)
         latitude = try c.decode(Double.self, forKey: .latitude)
         longitude = try c.decode(Double.self, forKey: .longitude)
         elevationM = try c.decodeIfPresent(Double.self, forKey: .elevationM)
-        pointId = try c.decodeIfPresent(String.self, forKey: .pointId)
         nameReading = try c.decodeIfPresent(String.self, forKey: .nameReading)
         aliases = try c.decodeIfPresent([String].self, forKey: .aliases) ?? []
         wikipediaUrl = try c.decodeIfPresent(String.self, forKey: .wikipediaUrl)
         wikidataUrl = try c.decodeIfPresent(String.self, forKey: .wikidataUrl)
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         graphic = try c.decodeIfPresent(PointGraphic.self, forKey: .graphic)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(latitude, forKey: .latitude)
+        try c.encode(longitude, forKey: .longitude)
+        try c.encodeIfPresent(elevationM, forKey: .elevationM)
+        try c.encodeIfPresent(nameReading, forKey: .nameReading)
+        try c.encode(aliases, forKey: .aliases)
+        try c.encodeIfPresent(wikipediaUrl, forKey: .wikipediaUrl)
+        try c.encodeIfPresent(wikidataUrl, forKey: .wikidataUrl)
+        try c.encode(tags, forKey: .tags)
+        try c.encodeIfPresent(graphic, forKey: .graphic)
     }
 }
 
@@ -79,7 +103,7 @@ public struct NearbyMountain: Hashable, Sendable, Identifiable {
     public let distanceKm: Double
     public let bearingDeg: Double
 
-    public var id: Int64 { mountain.osmId }
+    public var id: String { mountain.id }
 
     public init(mountain: Mountain, distanceKm: Double, bearingDeg: Double) {
         self.mountain = mountain

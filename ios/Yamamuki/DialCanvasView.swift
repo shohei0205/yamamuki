@@ -406,19 +406,19 @@ struct DialCanvasView: View, Animatable {
         // 画面に入る山すべてを、優先順に並べて山名の候補にする。山名の数は [maxPeaks] までにする。
         // 上端では、描いている山(アイコンだけの山を含む)は山の位置が上端を越えるまで残し、新しく出す山はアイコン全体が入ってから出す。
         // 正面の少し先の山は、向きをわずかに変えるだけで上端を出入りするため(正面に向けたときが最も上に来る)。
-        var positions: [Int64: CGPoint] = [:]
+        var positions: [String: CGPoint] = [:]
         var onScreen: [NearbyMountain] = []
         for m in selection.around {
             let o = DialGeometry.project(distanceKm: m.distanceKm, bearingDeg: m.bearingDeg, headingDeg: headingDeg)
             let p = CGPoint(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
-            let top = selection.shownIds.contains(m.mountain.osmId) ? chartTop : chartTop + PeakIcon.maxHeight
+            let top = selection.shownIds.contains(m.mountain.id) ? chartTop : chartTop + PeakIcon.maxHeight
             guard p.x >= 0, p.x <= size.width, p.y >= top, p.y < chartBottom else { continue }
-            positions[m.mountain.osmId] = p
+            positions[m.mountain.id] = p
             onScreen.append(m)
         }
         let visible: [PlacedPeak] = PeakLayout.priorityOrder(onScreen, observerAltitudeM: altitudeM, keptIds: selection.drawnIds,
             headingDeg: forwardHeading, rangeKm: headingUpRangeKm).map { m in
-            let id = m.mountain.osmId
+            let id = m.mountain.id
             let p = positions[id] ?? .zero
             // 山名の大きさは山ごとに一度だけ測る(画面に入る山が多いと、毎回測ると重い)。
             let measured: (text: MeasuredText, box: ScreenBox)
@@ -445,14 +445,14 @@ struct DialCanvasView: View, Animatable {
             visible,
             limit: maxPeaks,
             box: { $0.box },
-            drawnBefore: { selection.drawnIds.contains($0.mountain.mountain.osmId) },
+            drawnBefore: { selection.drawnIds.contains($0.mountain.mountain.id) },
             neighbors: { PeakLayout.areNeighbors($0.mountain, $1.mountain) },
             elevationM: { $0.mountain.mountain.elevationM },
             margin: newPeakMargin,
             tagCount: { $0.mountain.mountain.tagCount }
         )
-        selection.drawnIds = Set(groups.map { $0.peak.mountain.mountain.osmId })
-        selection.shownIds = selection.drawnIds.union(groups.flatMap { $0.members.map(\.mountain.mountain.osmId) })
+        selection.drawnIds = Set(groups.map { $0.peak.mountain.mountain.id })
+        selection.shownIds = selection.drawnIds.union(groups.flatMap { $0.members.map(\.mountain.mountain.id) })
 
         // 山名は、出すときも外すときも [labelFadeSeconds] かけて濃さを変える。外した山名は、薄くなりきるまでその場に描く。
         let now = CACurrentMediaTime()
@@ -460,7 +460,7 @@ struct DialCanvasView: View, Animatable {
         selection.lastTime = now
         let fadeStep = dt / labelFadeSeconds
         for id in selection.drawnIds { selection.labelAlpha[id] = min(1, (selection.labelAlpha[id] ?? 0) + fadeStep) }
-        let visibleById = Dictionary(visible.map { ($0.mountain.mountain.osmId, $0) }, uniquingKeysWith: { a, _ in a })
+        let visibleById = Dictionary(visible.map { ($0.mountain.mountain.id, $0) }, uniquingKeysWith: { a, _ in a })
         var fadingOut: [(peak: PlacedPeak, alpha: Double)] = []
         for (id, value) in selection.labelAlpha where !selection.drawnIds.contains(id) {
             let alpha = value - fadeStep
@@ -471,7 +471,7 @@ struct DialCanvasView: View, Animatable {
                 selection.labelAlpha[id] = nil
             }
         }
-        let fadingOutIds = Set(fadingOut.map { $0.peak.mountain.mountain.osmId })
+        let fadingOutIds = Set(fadingOut.map { $0.peak.mountain.mountain.id })
 
         // 代表の山の山名と「ほか 3 山」の場所を先に決め、アイコンだけの山はそこを避けて描く。
         let placedBoxes = groups.map(\.peak.box)
@@ -506,14 +506,14 @@ struct DialCanvasView: View, Animatable {
         // 濃さは [iconFadeSeconds] かけて変え、まとめた山でなくなった山や範囲を出た山も、急に消さずにだんだん薄くする。
         let focusCenter = CGPoint(x: size.width / 2, y: (chartTop + chartBottom) / 2)
         let focusRadius = size.width * focusRadiusRatio
-        var owners: [Int64: PeakGroup<PlacedPeak>] = [:]
-        for group in groups { for member in group.members { owners[member.mountain.mountain.osmId] = group } }
+        var owners: [String: PeakGroup<PlacedPeak>] = [:]
+        for group in groups { for member in group.members { owners[member.mountain.mountain.id] = group } }
         let iconStep = dt / iconFadeSeconds
         var iconTargets: [PlacedPeak] = []
         var iconFading = false
         for peak in visible {
             let m = peak.mountain
-            let id = m.mountain.osmId
+            let id = m.mountain.id
             if m.mountain.elevationM == nil { continue }
             if selection.drawnIds.contains(id) || fadingOutIds.contains(id) {
                 // 山名を出している間は山名と一緒に描く。山名を外し終えたら、アイコンだけの濃さから続ける。
@@ -578,7 +578,7 @@ struct DialCanvasView: View, Animatable {
             let peak = group.peak
             let p = peak.position
             let icon = PeakIcon.of(peak.mountain.mountain.elevationClass)
-            let alpha = selection.labelAlpha[peak.mountain.mountain.osmId] ?? 1
+            let alpha = selection.labelAlpha[peak.mountain.mountain.id] ?? 1
             var faded = ctx
             faded.opacity = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha)
             drawPeakIcon(faded, at: p, icon: icon, shadow: alpha >= 1)
@@ -921,9 +921,9 @@ private final class PeakSelection {
     }
 
     var key: Key?
-    var drawnIds: Set<Int64> = []
+    var drawnIds: Set<String> = []
     /// 前回描いた山と、そこにまとめてアイコンだけを描いた山。
-    var shownIds: Set<Int64> = []
+    var shownIds: Set<String> = []
     /// 山を集めた円の中心(現在地からの距離と方角)と半径(km)。
     var centerKm = 0.0
     var centerBearingDeg = 0.0
@@ -931,12 +931,12 @@ private final class PeakSelection {
     /// 円の中にある、すべての山。
     var around: [NearbyMountain] = []
     /// 山ごとの山名と、山の位置を原点にしたアイコンと山名の範囲。文字の大きさが変わったら測り直す。
-    var labels: [Int64: (text: MeasuredText, box: ScreenBox)] = [:]
+    var labels: [String: (text: MeasuredText, box: ScreenBox)] = [:]
     var labelTextScale: Double?
     /// 山名の濃さ(0〜1)。山名を出す山は 1 へ、山名を外した山は 0 へ近づける。0 になったら除く。
-    var labelAlpha: [Int64: Double] = [:]
+    var labelAlpha: [String: Double] = [:]
     /// 山名を出さない山のアイコンの濃さ。画面の外へ出た山は除く。
-    var iconAlpha: [Int64: Double] = [:]
+    var iconAlpha: [String: Double] = [:]
     /// 前回描いた時刻(秒)。山名とアイコンの濃さを時間に合わせて変える。
     var lastTime: CFTimeInterval = 0
     /// 山名かアイコンの濃さを変えている途中か。

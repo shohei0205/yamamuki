@@ -6,9 +6,10 @@ import io.github.shohei0205.yamamuki.core.OverpassClient
 import io.github.shohei0205.yamamuki.core.PeakData
 import io.github.shohei0205.yamamuki.core.PeakDataChannel
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
+import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.data.CacheManager
 import io.github.shohei0205.yamamuki.data.MountainDatabase
-import io.github.shohei0205.yamamuki.data.PeakDataStore
+import io.github.shohei0205.yamamuki.data.PeakDataStores
 import io.github.shohei0205.yamamuki.data.RoomMountainCache
 import io.github.shohei0205.yamamuki.data.SavedAreas
 import io.github.shohei0205.yamamuki.settings.AppSettings
@@ -24,7 +25,7 @@ class YamamukiApp : Application() {
         // 記録も消す。記録が残ると、山データが無いのに「最新です」となり取り直せない。
         MountainDatabase.create(this, onCacheReset = {
             savedAreas.clear()
-            peakDataStore.clear()
+            peakDataStores.clearAll()
         })
     }
 
@@ -37,7 +38,8 @@ class YamamukiApp : Application() {
     /** 方位盤の外(事前ダウンロード)でキャッシュを書き換えたときに流す。方位盤はキャッシュを読み直す。 */
     val cacheChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-    val peakDataStore: PeakDataStore by lazy { PeakDataStore(this) }
+    /** 取り込み済みの山データの記録。山データの種類ごとに持つ。 */
+    val peakDataStores: PeakDataStores by lazy { PeakDataStores(this) }
 
     private val http: HttpClient by lazy {
         HttpClient(OkHttp) {
@@ -51,24 +53,45 @@ class YamamukiApp : Application() {
         }
     }
 
-    /** 保存している山データ。方位盤は [mountainRepository] を通して読み、山の検索だけは全件を直接読む。 */
-    val mountainCache: RoomMountainCache by lazy { RoomMountainCache(database.mountainDao()) }
+    private val overpass: OverpassClient by lazy { OverpassClient(http, userAgent = USER_AGENT) }
 
-    val mountainRepository: MountainRepository by lazy {
-        MountainRepository(remote = OverpassClient(http, userAgent = USER_AGENT), cache = mountainCache)
+    private val mountainCaches: Map<PeakDataset, RoomMountainCache> by lazy {
+        PeakDataset.entries.associateWith { RoomMountainCache(database.mountainDao(), it) }
     }
 
-    /** yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。どこから読むかは [peakDataChannel]。 */
-    val peakDataUpdater: PeakDataUpdater by lazy {
-        PeakDataUpdater(PeakData.source(peakDataChannel, http, userAgent = USER_AGENT), mountainCache, peakDataStore.archive)
+    private val mountainRepositories: Map<PeakDataset, MountainRepository> by lazy {
+        PeakDataset.entries.associateWith { MountainRepository(remote = overpass, cache = mountainCache(it)) }
     }
+
+    private val peakDataUpdaters: Map<PeakDataset, PeakDataUpdater> by lazy {
+        PeakDataset.entries.associateWith {
+            PeakDataUpdater(
+                PeakData.source(peakDataChannel, it, http, userAgent = USER_AGENT),
+                mountainCache(it),
+                peakDataStores.of(it).archive,
+                dataset = it,
+            )
+        }
+    }
+
+    /** 保存している [dataset] の山データ。方位盤は [mountainRepository] を通して読み、山の検索だけは全件を直接読む。 */
+    fun mountainCache(dataset: PeakDataset): RoomMountainCache = mountainCaches.getValue(dataset)
+
+    /**
+     * [dataset] の山データを読む。方位盤は通信しないで読む。Overpass から取るのは、止めている事前ダウンロード
+     * ([Features.AREA_DOWNLOAD]、osm-peaks だけ)のときだけ。
+     */
+    fun mountainRepository(dataset: PeakDataset): MountainRepository = mountainRepositories.getValue(dataset)
+
+    /** yamamuki-data が配る [dataset] の全国の山データを取得して、キャッシュに取り込む。どこから読むかは [peakDataChannel]。 */
+    fun peakDataUpdater(dataset: PeakDataset): PeakDataUpdater = peakDataUpdaters.getValue(dataset)
 
     private companion object {
         const val USER_AGENT = "yamamuki-android/0.1 (+https://github.com/shohei0205/yamamuki)"
 
         /**
-         * 山データの読み先。配布版はカタログの osm-peaks の stable、開発版は既定でカタログの osm-peaks の dev(無ければ stable)、
-         * Gradle のプロパティ peakDataSource=dev で作った開発版は yamamuki-data の開発版を直接読む。
+         * 山データの読み先。配布版はカタログの stable、開発版は既定でカタログの dev(無ければ stable)、
+         * Gradle のプロパティ peakDataSource=dev で作った開発版は、osm-peaks だけ yamamuki-data の開発版を直接読む。
          */
         val peakDataChannel = when {
             BuildConfig.PEAK_DATA_DEV -> PeakDataChannel.DATA_DEV

@@ -3,7 +3,7 @@ import XCTest
 
 final class TagGroupsTests: XCTestCase {
     private func peak(_ id: Int64, _ tags: String...) -> Mountain {
-        Mountain(osmId: id, name: "山\(id)", latitude: 35.0, longitude: 138.0, elevationM: 1000.0, tags: tags)
+        Mountain(id: "osm:\(id)", name: "山\(id)", latitude: 35.0, longitude: 138.0, elevationM: 1000.0, tags: tags)
     }
 
     func testGroupsAreCountedAndSortedByName() {

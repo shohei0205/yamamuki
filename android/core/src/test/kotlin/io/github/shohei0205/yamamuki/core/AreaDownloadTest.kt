@@ -8,9 +8,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class AreaDownloadTest {
-    private val fuji = Mountain(1, "富士山", 35.3606, 138.7274, 3776.0)
-    private val yari = Mountain(2, "槍ヶ岳", 36.3420, 137.6476, 3180.0)
-    private val outside = Mountain(3, "範囲外の山", 40.0, 140.0, 1000.0)
+    private val fuji = Mountain("osm:1", "富士山", 35.3606, 138.7274, 3776.0)
+    private val yari = Mountain("osm:2", "槍ヶ岳", 36.3420, 137.6476, 3180.0)
+    private val outside = Mountain("osm:3", "範囲外の山", 40.0, 140.0, 1000.0)
 
     private class FakeRemote(val peaks: List<Mountain>) : MountainRemoteSource {
         val calls = mutableListOf<BoundingBox>()

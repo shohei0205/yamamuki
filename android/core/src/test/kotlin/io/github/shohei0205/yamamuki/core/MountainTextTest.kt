@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class MountainTextTest {
-    private val fuji = Mountain(1L, "富士山", 35.3605556, 138.7273889, 3776.24)
+    private val fuji = Mountain("osm:1", "富士山", 35.3605556, 138.7273889, 3776.24)
 
     @Test
     fun elevation() {
@@ -48,10 +48,10 @@ class MountainTextTest {
 
     @Test
     fun summitIsNearestWithinRadius() {
-        fun near(id: Long, km: Double) = NearbyMountain(fuji.copy(osmId = id), km, 0.0)
+        fun near(id: Int, km: Double) = NearbyMountain(fuji.copy(id = "osm:$id"), km, 0.0)
         assertEquals(null, summitAt(emptyList()))
         assertEquals(null, summitAt(listOf(near(1, 0.031), near(2, 3.0))))
-        assertEquals(2L, summitAt(listOf(near(1, 0.025), near(2, 0.01), near(3, 5.0)))?.mountain?.osmId)
-        assertEquals(1L, summitAt(listOf(near(1, 0.03)))?.mountain?.osmId)
+        assertEquals("osm:2", summitAt(listOf(near(1, 0.025), near(2, 0.01), near(3, 5.0)))?.mountain?.id)
+        assertEquals("osm:1", summitAt(listOf(near(1, 0.03)))?.mountain?.id)
     }
 }

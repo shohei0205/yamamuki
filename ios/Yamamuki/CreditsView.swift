@@ -1,13 +1,10 @@
 import SwiftUI
 import YamamukiCore
 
-/// OpenStreetMap の著作権とライセンスの説明ページ。山データの出典が読めないときに添える。
-private let osmCopyrightUrl = "https://www.openstreetmap.org/copyright"
-
 /// 山データの出典とライセンスの画面。設定画面の「データの出典とライセンス」の行から開く。
-/// 取り込み済みの山データの manifest から、OSM の表示と、補足に使った資料をすべて出す
+/// 使っている種類の取り込み済みの山データの manifest から、元データの表示と、補足に使った資料をすべて出す
 /// (manifest 版 6 は、元データも含めたすべての出典を「出典」として出す)。
-/// 山データが無いときや出典が読めないときも、OpenStreetMap の著作者表示は出す。
+/// 山データが無いときや出典が読めないときも、その種類の著作者表示は出す。
 struct CreditsView: View {
     @ObservedObject var model: DialModel
 
@@ -26,6 +23,7 @@ struct CreditsView: View {
                 EmptyView()
             case .loaded(let credits?):
                 Section(Strings.text("credits_section_data")) {
+                    Text(model.dataset.label).font(.headline)
                     CreditsItems(items: [
                         CreditsItem(Strings.text("credits_release"), credits.releaseDate),
                         CreditsItem(Strings.text("credits_license"), credits.license),
@@ -55,9 +53,10 @@ struct CreditsView: View {
                     }
                 }
             case .loaded(nil):
-                // 山データが無い・出典が残っていないときも、アプリが持つ OSM の表示は出す。
+                // 山データが無い・出典が残っていないときも、アプリが持つ種類ごとの表示は出す。
                 Section {
-                    CreditsItems(items: [CreditsItem(Strings.text("credits_attribution"), "\(Strings.text("credits_osm_attribution")) \(osmCopyrightUrl)")])
+                    Text(model.dataset.label).font(.headline)
+                    CreditsItems(items: [CreditsItem(Strings.text("credits_attribution"), "\(model.dataset.creditsAttribution) \(model.dataset.copyrightUrl)")])
                 } header: {
                     Text(Strings.text("credits_section_data"))
                 } footer: {

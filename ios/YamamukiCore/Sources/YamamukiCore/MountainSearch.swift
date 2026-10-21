@@ -41,7 +41,7 @@ public struct MountainSearch: Sendable {
 
     /// query を含む山を、先頭が一致した山、途中に含む山の順に、合わせて最大 limit 件返す。
     /// それぞれの中は (latitude, longitude) から近い順。地点が無ければ標高の高い順(標高不明は最後)。
-    /// 並びが同じなら osmId の順。入力が空白だけなら空。
+    /// 並びが同じなら地点の ID の順。入力が空白だけなら空。
     /// 入力が仮名か英数字 1 文字だけのときは、途中に含む山が多すぎて探しにくいので返さない(漢字 1 文字なら返す)。
     /// ただし先頭が一致した山が 1 つも無いときは、何も出ないよりよいので返す。
     public func search(_ query: String, latitude: Double?, longitude: Double?, limit: Int = MountainSearch.maxResults) -> Results {
@@ -60,13 +60,13 @@ public struct MountainSearch: Sendable {
     private func sort(_ hits: [Mountain], _ latitude: Double?, _ longitude: Double?) -> [Mountain] {
         if let latitude, let longitude {
             return hits.map { ($0, GeoMath.distanceKm(latitude, longitude, $0.latitude, $0.longitude)) }
-                .sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.osmId < $1.0.osmId }
+                .sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.id < $1.0.id }
                 .map(\.0)
         }
         return hits.sorted {
             let a = $0.elevationM ?? -.infinity
             let b = $1.elevationM ?? -.infinity
-            return a != b ? a > b : $0.osmId < $1.osmId
+            return a != b ? a > b : $0.id < $1.id
         }
     }
 

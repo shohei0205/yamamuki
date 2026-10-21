@@ -27,7 +27,7 @@ class OverpassClientTest {
 
         val result = client.fetchPeaks(box)
 
-        assertEquals(listOf(Mountain(1, "富士山", 35.36, 138.73, 3776.0)), result)
+        assertEquals(listOf(Mountain("osm:1", "富士山", 35.36, 138.73, 3776.0)), result)
         assertTrue(sentBody.startsWith("data="))
     }
 

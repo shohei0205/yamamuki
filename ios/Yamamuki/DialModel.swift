@@ -23,6 +23,30 @@ struct SearchState {
     var groups: [String] = []
 }
 
+/// 山データの選択画面の状態。
+struct PeakDataListState: Equatable {
+    /// 取得済みの種類と、カタログにある種類。並びは `PeakDataset.allCases` の順。
+    var entries: [PeakDataEntry]
+    /// カタログで、取得できる版を確かめている。
+    var checking = false
+    /// 圏外のため、カタログを確かめられなかった。取得済みの種類だけを出す。
+    var offline = false
+}
+
+/// 山データの選択画面の 1 行。
+struct PeakDataEntry: Equatable {
+    let dataset: PeakDataset
+    /// 取り込み済みの版。まだ取得していなければ nil。
+    var installed: InstalledPeakData?
+    /// カタログで確かめた、取り込める版。確かめていない・取り込み済みが最新・確かめられなかったときは nil。
+    var available: PeakManifest?
+    /// 取り込み済みの版より新しい版がある(自動の確認か、この画面を開いたときの確認で見つかった)。
+    var updateFound = false
+
+    /// 試験版のデータ。取り込み済みならその版の、まだなら取り込める版の印を見る。
+    var experimental: Bool { installed?.experimental ?? available?.experimental ?? false }
+}
+
 /// 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ
 /// (Android 版の DialViewModel に相当)。
 final class DialModel: ObservableObject {
@@ -58,14 +82,21 @@ final class DialModel: ObservableObject {
     @Published private(set) var loading = false
     /// 端末が通信できる状態か。圏外や機内モードでは false になり、山データの取得を試さない。
     @Published private(set) var isConnected = true
-    /// 取り込み済みの全国の山データ。まだ取得していなければ nil。
+    /// 取り込み済みの全国の山データ(設定で選んだ種類の)。まだ取得していなければ nil。
     @Published private(set) var peakData: InstalledPeakData?
     /// 全国の山データを取得している。
     @Published private(set) var peakDataUpdating = false
     /// 新しい山データがあり、ダウンロードするかを聞いているときの、確認した版。聞いていなければ nil。
     @Published private(set) var peakDataOffer: PeakDataOffer?
-    /// ダウンロードすると答えたのに取り込めなかった版。「もう一度取得」では確認を飛ばして、この版を取り直す。
-    private var failedOffer: PeakDataOffer?
+    /// `peakDataOffer` の種類。
+    private var peakDataOfferDataset = PeakDataset.default
+    /// ダウンロードすると答えたのに取り込めなかった版と、その種類。「もう一度取得」では確認を飛ばして、この版を取り直す。
+    private var failedOffer: (dataset: PeakDataset, offer: PeakDataOffer)?
+    /// 山データの選択画面の状態。開いていなければ nil。
+    @Published private(set) var peakDataList: PeakDataListState?
+    /// 山データの選択画面を開いたときに確かめた、種類ごとの取り込める版。
+    private var listOffers: [PeakDataset: PeakDataOffer] = [:]
+    private var listTask: Task<Void, Never>?
     /// 設定画面に出す、山データの取得の結果(「山データは最新です」など)。
     @Published private(set) var peakDataNotice: String?
     /// 自動の確認で新しい山データが見つかり、まだ取り込んでいない。設定で自動の確認をオンにしているときだけ方位盤に出す。
@@ -77,8 +108,6 @@ final class DialModel: ObservableObject {
     /// 範囲内に一度も取得できていない地域がある。
     @Published private(set) var incomplete = false
     @Published private(set) var settings: Settings
-    /// 設定画面に出すキャッシュの状況。読み込むまでは nil。
-    @Published private(set) var cacheInfo: CacheInfo?
     @Published private(set) var authorization: CLAuthorizationStatus = .notDetermined
     /// 山の検索画面の状態。開いていなければ nil。
     @Published private(set) var search: SearchState?
@@ -102,11 +131,17 @@ final class DialModel: ObservableObject {
         settings.autoCheckPeakData && peakDataUpdateFound && !peakDataUpdating && !peakDataRefreshNeeded
     }
 
-    private let cache: FileMountainCache
-    private let repository: MountainRepository
-    /// yamamuki-data が配る全国の山データを取得して、キャッシュに取り込む。
-    private let peakDataUpdater: PeakDataUpdater
-    private let peakDataStore = PeakDataStore()
+    /// 種類ごとの、保存している山データ。
+    private let caches: [PeakDataset: FileMountainCache]
+    private let repositories: [PeakDataset: MountainRepository]
+    /// yamamuki-data が配る種類ごとの全国の山データを取得して、キャッシュに取り込む。
+    private let peakDataUpdaters: [PeakDataset: PeakDataUpdater]
+    private let peakDataStores: [PeakDataset: PeakDataStore]
+    /// 設定で選んだ山データの種類。
+    var dataset: PeakDataset { settings.peakDataset }
+    private var cache: FileMountainCache { caches[dataset]! }
+    private var repository: MountainRepository { repositories[dataset]! }
+    private func store(_ d: PeakDataset? = nil) -> PeakDataStore { peakDataStores[d ?? dataset]! }
     /// 山データの事前ダウンロード。画面を閉じても続くよう、ここで持つ。
     let areaDownload: AreaDownloadModel
     private let settingsStore = SettingsStore()
@@ -128,8 +163,8 @@ final class DialModel: ObservableObject {
     /// これ以上移動したら、保存済みのデータを読み直す。
     private static let refetchDistanceKm = 1.0
 
-    /// 山データの読み先。Release はカタログの osm-peaks の stable、Debug は既定でカタログの osm-peaks の dev(無ければ stable)。
-    /// Debug のビルドで PEAK_DATA_SOURCE を dev にしたときだけ、project.yml で PEAK_DATA_DEV が付き、yamamuki-data の開発版を直接読む。
+    /// 山データの読み先。Release はカタログの stable、Debug は既定でカタログの dev(無ければ stable)。
+    /// Debug のビルドで PEAK_DATA_SOURCE を dev にしたときだけ、project.yml で PEAK_DATA_DEV が付き、osm-peaks だけ yamamuki-data の開発版を直接読む。
     #if PEAK_DATA_DEV
     private static let peakDataChannel = PeakDataChannel.dataDev
     #elseif DEBUG
@@ -139,20 +174,37 @@ final class DialModel: ObservableObject {
     #endif
 
     init() {
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("mountains", isDirectory: true)
-        cache = FileMountainCache(directory: directory)
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let userAgent = "yamamuki-ios/0.1 (+https://github.com/shohei0205/yamamuki)"
-        repository = MountainRepository(remote: OverpassClient(userAgent: userAgent), cache: cache)
-        peakDataUpdater = PeakDataUpdater(
-            source: PeakData.source(Self.peakDataChannel, userAgent: userAgent),
-            cache: cache,
-            archive: peakDataStore.archive
-        )
-        peakData = peakDataStore.load()
-        peakDataUpdateFound = peakDataStore.updateFound
-        areaDownload = AreaDownloadModel(repository: repository, cache: cache)
+        let overpass = OverpassClient(userAgent: userAgent)
+        var caches: [PeakDataset: FileMountainCache] = [:]
+        var repositories: [PeakDataset: MountainRepository] = [:]
+        var updaters: [PeakDataset: PeakDataUpdater] = [:]
+        var stores: [PeakDataset: PeakDataStore] = [:]
+        for d in PeakDataset.allCases {
+            // osm-peaks は 0.7.0 までと同じ置き場所のまま。
+            let directory = support.appendingPathComponent(d == .osmPeaks ? "mountains" : "mountains-\(d.id)", isDirectory: true)
+            let cache = FileMountainCache(directory: directory)
+            let store = PeakDataStore(dataset: d)
+            caches[d] = cache
+            stores[d] = store
+            repositories[d] = MountainRepository(remote: overpass, cache: cache)
+            updaters[d] = PeakDataUpdater(
+                source: PeakData.source(Self.peakDataChannel, dataset: d, userAgent: userAgent),
+                cache: cache,
+                archive: store.archive,
+                dataset: d
+            )
+        }
+        self.caches = caches
+        self.repositories = repositories
+        peakDataUpdaters = updaters
+        peakDataStores = stores
         let saved = SettingsStore().load()
+        peakData = stores[saved.peakDataset]!.load()
+        peakDataUpdateFound = stores[saved.peakDataset]!.updateFound
+        // 事前ダウンロード(止めている)は osm-peaks だけ。
+        areaDownload = AreaDownloadModel(repository: repositories[.osmPeaks]!, cache: caches[.osmPeaks]!)
         settings = saved
         rangeKm = Double(saved.initialRangeKm)
         authorization = locationService.authorization
@@ -443,7 +495,7 @@ final class DialModel: ObservableObject {
     func retryAfterFetchError() {
         fetchErrorMessage = nil
         if let failedOffer {
-            installPeakData(failedOffer)
+            installPeakData(failedOffer.offer, dataset: failedOffer.dataset)
         } else {
             updatePeakData()
         }
@@ -469,50 +521,148 @@ final class DialModel: ObservableObject {
         }
         // 自動の確認をオンにしたら、次にアプリを開くのを待たずに確かめる(前回から 30 日たっていなければ何もしない)。
         if after.autoCheckPeakData && !before.autoCheckPeakData { autoCheckPeakData() }
+        if after.peakDataset != before.peakDataset { onDatasetChanged() }
     }
 
-    func refreshCacheInfo() {
-        Task { @MainActor in
-            cacheInfo = await cache.info()
-        }
+    /// 使う山データを切り替えたら、その種類の山を読み直す。前の種類の山を選んでいた検索位置モード・検索画面はやめ、
+    /// 方位盤の絞り込みのグループも作り直す(種類に無いグループは、選んでいないものとして扱う)。
+    private func onDatasetChanged() {
+        fetchTask?.cancel()
+        closeSearch()
+        peaks = []
+        fetchedCenter = nil
+        viewpoint = nil
+        mountains = []
+        summit = nil
+        peakGroups = nil
+        peakData = store().load()
+        peakDataUpdateFound = store().updateFound
+        peakDataNotice = nil
+        refreshPeakGroups()
+        fetch()
+    }
+
+    /// 設定画面を開いたとき。
+    func refreshPeakData() {
+        peakData = store().load()
         refreshPeakGroups()
     }
 
-    /// 取り込み済みの山データの出典を、端末に残した manifest から読む(通信はしない)。
+    /// 取り込み済みの山データ(使っている種類の)の出典を、端末に残した manifest から読む(通信はしない)。
     func peakDataCredits() async -> PeakDataCredits? {
-        let installed = peakDataStore.load()
-        let manifest = await peakDataStore.archive.readManifest()
-        return PeakDataCreditsReader.read(installed: installed, manifest: manifest)
+        let store = store()
+        let manifest = await store.archive.readManifest()
+        return PeakDataCreditsReader.read(installed: store.load(), manifest: manifest)
     }
 
     /// 保存している山データから山のグループの一覧を作り直し、方位盤の絞り込みにも反映する。
     private func refreshPeakGroups() {
+        let dataset = dataset
+        let cache = cache
         Task { @MainActor [weak self] in
-            guard let self else { return }
             let groups = TagGroups.of(await cache.allMountains().map(\.tags))
+            guard let self, dataset == self.dataset else { return }
             peakGroups = groups
             if let here = observer { updatePeaks(at: here) }
         }
     }
 
-    /// 保存している山データを消して、現在地周辺を読み直す(通信はしない)。事前ダウンロードした地域は残す。
-    /// 全国の山データも消えるので、取り込み済みの記録も消し、設定画面から取り直せるようにする。
-    func clearCache() {
-        fetchTask?.cancel()
+    /// 山データの選択画面を開く。取得済みの種類はすぐ出し、通信できればカタログで取り込める版を確かめて、
+    /// 取得していない種類(カタログにあるもの)と、取得済みの種類の更新を足す。データ本体は取らない。
+    func openPeakDataList() {
+        listTask?.cancel()
+        listOffers = [:]
+        let connected = isConnected
+        peakDataList = PeakDataListState(entries: installedEntries(), checking: connected, offline: !connected)
+        guard connected else { return }
+        listTask = Task { @MainActor [weak self] in
+            for d in PeakDataset.allCases {
+                guard let self, !Task.isCancelled else { return }
+                let store = store(d)
+                let hasMountains = await caches[d]!.info().mountainCount > 0
+                let installed = hasMountains ? store.load() : nil
+                var entry: PeakDataEntry?
+                do {
+                    switch try await peakDataUpdaters[d]!.check(installed: installed) {
+                    case .upToDate(let latest):
+                        store.save(latest)
+                        store.saveUpdateFound(false)
+                        entry = PeakDataEntry(dataset: d, installed: latest)
+                    case .available(let offer):
+                        listOffers[d] = offer
+                        if installed != nil { store.saveUpdateFound(true) }
+                        entry = PeakDataEntry(dataset: d, installed: installed, available: offer.manifest, updateFound: installed != nil)
+                    }
+                } catch {
+                    if Task.isCancelled { return }
+                    // カタログに無い種類(配布版で stable が無いなど)と、通信の失敗。取得済みなら、そのまま使える。
+                    logger.warning("山データ(\(d.id, privacy: .public))の確認に失敗: \(String(describing: error), privacy: .public)")
+                    entry = store.load().map { PeakDataEntry(dataset: d, installed: $0, updateFound: store.updateFound) }
+                }
+                guard !Task.isCancelled else { return }
+                updateListEntry(d, entry)
+                if d == dataset {
+                    peakData = store.load()
+                    peakDataUpdateFound = store.updateFound
+                }
+            }
+            self?.peakDataList?.checking = false
+        }
+    }
+
+    func closePeakDataList() {
+        listTask?.cancel()
+        listOffers = [:]
+        peakDataList = nil
+    }
+
+    /// 取得済みの種類の行。
+    private func installedEntries() -> [PeakDataEntry] {
+        PeakDataset.allCases.compactMap { d in
+            store(d).load().map { PeakDataEntry(dataset: d, installed: $0, updateFound: store(d).updateFound) }
+        }
+    }
+
+    /// 選択画面の `d` の行を `entry` にする。nil なら行を消す。
+    private func updateListEntry(_ d: PeakDataset, _ entry: PeakDataEntry?) {
+        guard var list = peakDataList else { return }
+        list.entries = (list.entries.filter { $0.dataset != d } + [entry].compactMap { $0 })
+            .sorted { PeakDataset.allCases.firstIndex(of: $0.dataset)! < PeakDataset.allCases.firstIndex(of: $1.dataset)! }
+        peakDataList = list
+    }
+
+    /// 選択画面で `d` を選んだ。取得済みならすぐ切り替え、まだなら大きさを見せてダウンロードするかを聞き、
+    /// 取り込めたら切り替える。
+    func choosePeakData(_ d: PeakDataset) {
+        if store(d).load() != nil {
+            updateSettings { $0.peakDataset = d }
+            return
+        }
+        guard let offer = listOffers[d] else { return }
+        failedOffer = nil
+        peakDataOfferDataset = d
+        peakDataOffer = offer
+    }
+
+    /// `d` の山データを消す(記録・端末に残した gz・保存した山)。使っている種類なら、方位盤は「山データ未取得」の状態になる。
+    /// 事前ダウンロードした地域(osm-peaks だけ)は残す。
+    func deletePeakData(_ d: PeakDataset) {
+        if d == dataset { fetchTask?.cancel() }
         autoCheckTask?.cancel()
-        let keep = areaDownload.savedTiles
+        let keep = d == .osmPeaks ? areaDownload.savedTiles : []
         Task { @MainActor in
             // 記録を先に消す。消している途中でアプリが終わっても、記録だけが残って「最新です」となり、
             // 取り直せなくなることがないように。
-            peakDataStore.clear()
-            await cache.clear(keeping: keep)
+            store(d).clear()
+            await caches[d]!.clear(keeping: keep)
+            updateListEntry(d, listOffers[d].map { PeakDataEntry(dataset: d, installed: nil, available: $0.manifest) })
+            guard d == dataset else { return }
             peakData = nil
             peakDataNotice = nil
             peakDataUpdateFound = false
             peaks = []
             mountains = []
             summit = nil
-            cacheInfo = await cache.info()
             refreshPeakGroups()
             fetch()
         }
@@ -574,19 +724,27 @@ final class DialModel: ObservableObject {
     /// アプリの更新で山データの読み込み処理が新しくなっていたら、残した gz から通信せずに保存データを作り直す。
     /// 作り直せなければ何もしない(次に更新を確かめたときに取り直す)。
     private func rebuildPeakData() {
-        guard let installed = peakData, installed.readerVersion < PeakData.readerVersion, !peakDataUpdating else { return }
+        let targets: [(PeakDataset, InstalledPeakData)] = PeakDataset.allCases.compactMap { d in
+            guard let installed = store(d).load(), installed.readerVersion < PeakData.readerVersion else { return nil }
+            return (d, installed)
+        }
+        guard !targets.isEmpty, !peakDataUpdating else { return }
         peakDataUpdating = true
         Task { @MainActor [weak self] in
             guard let self else { return }
             defer { peakDataUpdating = false }
-            do {
-                guard let rebuilt = try await peakDataUpdater.rebuild(installed: installed) else { return }
-                peakDataStore.save(rebuilt)
-                peakData = rebuilt
-                reloadFromCache()
-                refreshCacheInfo()
-            } catch {
-                logger.warning("山データの作り直しに失敗: \(String(describing: error), privacy: .public)")
+            for (d, installed) in targets {
+                do {
+                    guard let rebuilt = try await peakDataUpdaters[d]!.rebuild(installed: installed) else { continue }
+                    store(d).save(rebuilt)
+                    if d == dataset {
+                        peakData = rebuilt
+                        reloadFromCache()
+                        refreshPeakGroups()
+                    }
+                } catch {
+                    logger.warning("山データ(\(d.id, privacy: .public))の作り直しに失敗: \(String(describing: error), privacy: .public)")
+                }
             }
         }
     }
@@ -597,31 +755,42 @@ final class DialModel: ObservableObject {
     /// 利用者が頼んだ通信ではないので、失敗しても知らせず、次の機会に確かめ直す。
     /// まだ山データを取得していないときと、取り直しが要るとき(そのラベルが出ている)は確かめない。
     func autoCheckPeakData() {
-        guard settings.autoCheckPeakData, isConnected, !peakDataUpdating, autoCheckTask == nil,
-              let installed = peakDataStore.load(), installed.readerVersion >= PeakData.readerVersion,
-              PeakData.autoCheckDue(lastCheckedAt: peakDataStore.autoCheckedAt, now: Date())
+        // 取得済みの種類をすべて確かめる(使っていない種類の更新は、選択画面に出す)。
+        let targets: [(PeakDataset, InstalledPeakData)] = PeakDataset.allCases.compactMap { d in
+            guard let installed = store(d).load(), installed.readerVersion >= PeakData.readerVersion else { return nil }
+            return (d, installed)
+        }
+        guard settings.autoCheckPeakData, isConnected, !peakDataUpdating, autoCheckTask == nil, !targets.isEmpty,
+              PeakData.autoCheckDue(lastCheckedAt: PeakDataStore.autoCheckedAt, now: Date())
         else { return }
         autoCheckTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { autoCheckTask = nil }
-            do {
-                let found: Bool
-                let check = try await peakDataUpdater.check(installed: installed)
-                // 利用者が頼んだ取得や消去が始まっていたら、古い記録で上書きしない。
-                guard !Task.isCancelled else { return }
-                switch check {
-                case .upToDate(let latest):
-                    peakDataStore.save(latest)
-                    peakData = latest
-                    found = false
-                case .available:
-                    found = true
+            var checked = false
+            for (d, installed) in targets {
+                do {
+                    let found: Bool
+                    let check = try await peakDataUpdaters[d]!.check(installed: installed)
+                    // 利用者が頼んだ取得や消去が始まっていたら、古い記録で上書きしない。
+                    guard !Task.isCancelled else { return }
+                    switch check {
+                    case .upToDate(let latest):
+                        store(d).save(latest)
+                        if d == dataset { peakData = latest }
+                        found = false
+                    case .available:
+                        found = true
+                    }
+                    store(d).saveUpdateFound(found)
+                    if d == dataset { peakDataUpdateFound = found }
+                    checked = true
+                } catch {
+                    if Task.isCancelled { return }
+                    logger.warning("山データ(\(d.id, privacy: .public))の自動の確認に失敗: \(String(describing: error), privacy: .public)")
                 }
-                peakDataStore.saveCheckResult(updateFound: found, checkedAt: Date())
-                peakDataUpdateFound = found
-            } catch {
-                logger.warning("山データの自動の確認に失敗: \(String(describing: error), privacy: .public)")
             }
+            // どれも確かめられなかったとき(圏外になったなど)は、次の機会に確かめ直す。
+            if checked { PeakDataStore.saveAutoCheckedAt(Date()) }
         }
     }
 
@@ -630,18 +799,20 @@ final class DialModel: ObservableObject {
     /// 圏外と分かっていれば通信を試さずに知らせる。失敗しても、取り込み済みのデータはそのまま残る。
     func updatePeakData() {
         failedOffer = nil
-        let installed = peakData
+        let d = dataset
+        let installed = store(d).load()
         runPeakDataTask { [self] in
             // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
-            let hasMountains = await cache.info().mountainCount > 0
-            switch try await peakDataUpdater.check(installed: hasMountains ? installed : nil) {
+            let hasMountains = await caches[d]!.info().mountainCount > 0
+            switch try await peakDataUpdaters[d]!.check(installed: hasMountains ? installed : nil) {
             case .upToDate(let latest):
-                peakDataStore.save(latest)
-                peakDataStore.saveCheckResult(updateFound: false)
+                store(d).save(latest)
+                store(d).saveUpdateFound(false)
                 peakData = latest
                 peakDataNotice = Strings.text("peak_data_up_to_date")
                 peakDataUpdateFound = false
             case .available(let offer):
+                peakDataOfferDataset = d
                 peakDataOffer = offer
             }
         }
@@ -651,22 +822,29 @@ final class DialModel: ObservableObject {
     func answerPeakDataOffer(download: Bool) {
         guard let offer = peakDataOffer else { return }
         peakDataOffer = nil
-        if download { installPeakData(offer) }
+        if download { installPeakData(offer, dataset: peakDataOfferDataset) }
     }
 
     /// 確認した版のデータ本体を取得して取り込む。取り込めなければ、「もう一度取得」で取り直せるように残す。
-    private func installPeakData(_ offer: PeakDataOffer) {
-        failedOffer = offer
+    /// 使っていない種類(選択画面で選んだもの)なら、取り込めたらその種類に切り替える。
+    private func installPeakData(_ offer: PeakDataOffer, dataset d: PeakDataset) {
+        failedOffer = (d, offer)
         runPeakDataTask { [self] in
-            let installed = try await peakDataUpdater.install(offer)
+            let installed = try await peakDataUpdaters[d]!.install(offer)
             failedOffer = nil
-            peakDataStore.save(installed)
-            peakDataStore.saveCheckResult(updateFound: false)
-            peakData = installed
-            peakDataUpdateFound = false
+            store(d).save(installed)
+            store(d).saveUpdateFound(false)
+            listOffers[d] = nil
+            updateListEntry(d, PeakDataEntry(dataset: d, installed: installed))
+            if d != dataset {
+                updateSettings { $0.peakDataset = d }
+            } else {
+                peakData = installed
+                peakDataUpdateFound = false
+                reloadFromCache()
+                refreshPeakGroups()
+            }
             peakDataNotice = Strings.text("peak_data_updated")
-            reloadFromCache()
-            refreshCacheInfo()
         }
     }
 
@@ -730,7 +908,7 @@ final class DialModel: ObservableObject {
         let minElevation = settings.minElevationM
         let groups = TagGroups.effective(selected: settings.peakGroups, groups: peakGroups)
         mountains = all.filter {
-            $0.mountain.osmId != top?.mountain.osmId
+            $0.mountain.id != top?.mountain.id
                 && $0.mountain.meetsMinElevation(minElevation)
                 && $0.mountain.inTagGroups(groups)
         }

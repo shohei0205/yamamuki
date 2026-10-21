@@ -6,7 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TagGroupsTest {
-    private fun peak(id: Long, vararg tags: String) = Mountain(id, "山$id", 35.0, 138.0, 1000.0, tags = tags.toList())
+    private fun peak(id: Long, vararg tags: String) = Mountain("osm:$id", "山$id", 35.0, 138.0, 1000.0, tags = tags.toList())
 
     @Test
     fun groupsAreCountedAndSortedByName() {

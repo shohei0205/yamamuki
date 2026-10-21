@@ -31,21 +31,23 @@ extension PeakDataArchive {
     }
 }
 
-/// `directory` に manifest.json と osm-peaks.json.gz を残す。書くときは一時ファイルに書いてから置き換え(`.atomic`)、
+/// `directory` に manifest.json とデータ本体(`dataset` の fileName。osm-peaks なら osm-peaks.json.gz)を残す。書くときは一時ファイルに書いてから置き換え(`.atomic`)、
 /// 書きかけのファイルを残さない。2 つの置き換えの間で止まったときは組が食い違うが、
 /// 取り込み済みの記録の SHA-256 と合わなくなるので、作り直しには使われない。
 public struct FilePeakDataArchive: PeakDataArchive {
     public static let manifestName = "manifest.json"
-    public static let dataName = "osm-peaks.json.gz"
 
     private let directory: URL
+    /// データ本体のファイル名。
+    public let dataName: String
 
-    public init(directory: URL) {
+    public init(directory: URL, dataset: PeakDataset = .osmPeaks) {
         self.directory = directory
+        dataName = dataset.fileName
     }
 
     private var manifestUrl: URL { directory.appendingPathComponent(Self.manifestName) }
-    private var dataUrl: URL { directory.appendingPathComponent(Self.dataName) }
+    private var dataUrl: URL { directory.appendingPathComponent(dataName) }
 
     public func read() async -> ArchivedPeakData? {
         guard let manifest = try? Data(contentsOf: manifestUrl), let data = try? Data(contentsOf: dataUrl) else { return nil }

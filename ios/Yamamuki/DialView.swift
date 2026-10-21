@@ -9,12 +9,12 @@ struct DialView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     /// 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
-    @State private var selectedId: Int64?
+    @State private var selectedId: String?
     @State private var showSettings = false
     @State private var showDownload = false
     @State private var showObserver = false
     /// 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
-    @State private var groupIds: [Int64]?
+    @State private var groupIds: [String]?
     /// 検索ボタンや山を押したときの方位盤の高さ。検索や山の詳細から山頂へ移るときに、山頂を中央に置くのに使う
     /// (検索画面のキーボードやシートの影響を受けないよう、開く前に覚える)。
     @State private var viewpointCanvasHeight = 0.0
@@ -54,11 +54,11 @@ struct DialView: View {
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
                     onMountainTap: {
                         viewpointCanvasHeight = Double(geometry.size.height)
-                        selectedId = $0.mountain.osmId
+                        selectedId = $0.mountain.id
                     },
                     onGroupTap: {
                         viewpointCanvasHeight = Double(geometry.size.height)
-                        groupIds = $0.map(\.mountain.osmId)
+                        groupIds = $0.map(\.mountain.id)
                     },
                     // 現在地を取れる前は出す値がないので開かない。
                     onObserverTap: { if model.gpsLocation != nil { showObserver = true } }
@@ -184,7 +184,7 @@ struct DialView: View {
                                 : model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
                             .padding(.trailing, 8)
 
-                            Text(Strings.text("osm_attribution"))
+                            Text(model.dataset.attribution)
                                 .font(.caption2)
                                 .foregroundStyle(.black)
                         }
@@ -306,8 +306,8 @@ struct DialView: View {
         Binding(
             get: {
                 guard let id = selectedId else { return nil }
-                return model.mountains.first { $0.mountain.osmId == id }
-                    ?? model.summit.flatMap { $0.mountain.osmId == id ? $0 : nil }
+                return model.mountains.first { $0.mountain.id == id }
+                    ?? model.summit.flatMap { $0.mountain.id == id ? $0 : nil }
             },
             set: { if $0 == nil { selectedId = nil } }
         )
@@ -315,7 +315,7 @@ struct DialView: View {
 
     /// まとめた山のうち、今の一覧にある山。取り直しで消えた山は除く。
     private var group: [NearbyMountain] {
-        (groupIds ?? []).compactMap { id in model.mountains.first { $0.mountain.osmId == id } }
+        (groupIds ?? []).compactMap { id in model.mountains.first { $0.mountain.id == id } }
     }
 
     /// 取り直しで一覧の山がすべて消えたら、一覧のシートを閉じる。
@@ -544,14 +544,14 @@ private struct MountainDetailView: View {
             DetailRow(label: Strings.text("detail_coordinate"), value: coordinateLabel(latitude: m.latitude, longitude: m.longitude))
             if let viewpoint {
                 // 選んだ山頂そのものは、山頂からの距離が 0 なので出さない。
-                if viewpoint.osmId != m.osmId {
+                if viewpoint.id != m.id {
                     DetailRow(label: Strings.text("detail_distance_from_summit"), value: distanceText(nearby.distanceKm))
                 }
             } else {
                 DetailRow(label: Strings.text("detail_distance"), value: distanceText(nearby.distanceKm))
             }
             // 選んだ山頂にいるときは、移る先が今の場所と同じなので出さない。
-            if viewpoint?.osmId != m.osmId {
+            if viewpoint?.id != m.id {
                 Button(Strings.text("detail_go_to_summit"), action: onGoToSummit)
             }
             Spacer()
