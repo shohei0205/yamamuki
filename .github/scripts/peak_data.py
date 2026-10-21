@@ -45,8 +45,8 @@ CATALOG_SCHEMA_VERSION = 1
 POINTER_SCHEMA_VERSION = 1
 CHANNELS = ("stable", "dev")
 
-# カタログに入れるデータの種類。アプリが読むのは osm-peaks だけで、stable は必ず置く。
-# gsi-peaks はあとでアプリが読めるようにするための下準備で、stable も dev も省略できる。
+# カタログに入れるデータの種類。アプリの設定「使う山データ」で選ぶ(0.8.0 から)。osm-peaks は既定の種類で、stable は必ず置く。
+# gsi-peaks は stable も dev も省略できる(stable が無ければ、配布用のアプリの選択画面に出ない)。
 DATASETS = ("osm-peaks", "gsi-peaks")
 APP_DATASET = "osm-peaks"
 DATASET_LABELS = {"osm-peaks": "山データ", "gsi-peaks": "国土地理院の山データ（gsi-peaks）"}
@@ -457,7 +457,7 @@ def swap(root, dataset, target, tag, remove_dev):
     else:
         title = f"feat: カタログの{label}の {target} を {tag} にする"
         lines.append(f"- カタログの {dataset} の `{target}` を {since}`{tag}`（{new_count:,} 件）にする。"
-                     "アプリはまだ読まない（あとで読めるようにするための下準備）。")
+                     "0.8.0 以降のアプリで、設定の「使う山データ」から選べる。")
     if old_count is not None:
         diff = new_count - old_count
         lines.append(f"- 件数の差: {diff:+,} 件（{old_count:,} → {new_count:,}）。")

@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       dataset:
-        description: データの種類（アプリが読むのは osm-peaks だけ。gsi-peaks はカタログに入れておくだけ）
+        description: データの種類（アプリの設定「使う山データ」で選ぶもの）
         type: choice
         options:
           - osm-peaks
