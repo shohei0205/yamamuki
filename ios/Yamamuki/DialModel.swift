@@ -678,18 +678,25 @@ final class DialModel: ObservableObject {
             // 取り直せなくなることがないように。
             store(d).clear()
             await caches[d]!.clear(keeping: keep)
-            var offer = listOffers[d]
-            if offer == nil { offer = await recheckForList(d) }
-            updateListEntry(d, offer.map { PeakDataEntry(dataset: d, installed: nil, available: $0.manifest) })
-            guard d == dataset else { return }
-            peakData = nil
-            peakDataNotice = nil
-            peakDataUpdateFound = false
-            peaks = []
-            mountains = []
-            summit = nil
-            refreshPeakGroups()
-            fetch()
+            // 行は「未取得」にしておき、取り込める版が分かったら選べるようにする。
+            updateListEntry(d, PeakDataEntry(dataset: d, installed: nil, available: listOffers[d]?.manifest))
+            if d == dataset {
+                peakData = nil
+                peakDataNotice = nil
+                peakDataUpdateFound = false
+                peaks = []
+                mountains = []
+                summit = nil
+                refreshPeakGroups()
+                fetch()
+            }
+            // 確かめ直しの通信は、方位盤を更新したあとで行う(通信が遅くても方位盤を待たせない)。
+            guard listOffers[d] == nil else { return }
+            let offer = await recheckForList(d)
+            // 確かめている間に取り込み直していたら、行はそのまま。
+            if store(d).load() == nil {
+                updateListEntry(d, offer.map { PeakDataEntry(dataset: d, installed: nil, available: $0.manifest) })
+            }
         }
     }
 

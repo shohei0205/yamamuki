@@ -685,15 +685,21 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             // 取り直せなくなることがないように。
             store(d).clear()
             cacheManager.clear(d, keep = if (d == PeakDataset.OSM_PEAKS) app.savedAreas.tiles() else emptySet())
-            val offer = listOffers[d] ?: recheckForList(d)
-            updateListEntry(d, offer?.let { PeakDataEntry(d, null, it.manifest) })
-            if (d != dataset) return@launch
-            peaks = emptyList()
-            _state.update {
-                it.copy(mountains = emptyList(), summit = null, peakData = null, peakDataNotice = null, peakDataUpdateFound = false)
+            // 行は「未取得」にしておき、取り込める版が分かったら選べるようにする。
+            updateListEntry(d, PeakDataEntry(d, null, listOffers[d]?.manifest))
+            if (d == dataset) {
+                peaks = emptyList()
+                _state.update {
+                    it.copy(mountains = emptyList(), summit = null, peakData = null, peakDataNotice = null, peakDataUpdateFound = false)
+                }
+                refreshPeakGroups()
+                fetch()
             }
-            refreshPeakGroups()
-            fetch()
+            // 確かめ直しの通信は、方位盤を更新したあとで行う(通信が遅くても方位盤を待たせない)。
+            if (listOffers[d] != null) return@launch
+            val offer = recheckForList(d)
+            // 確かめている間に取り込み直していたら、行はそのまま。
+            if (store(d).load() == null) updateListEntry(d, offer?.let { PeakDataEntry(d, null, it.manifest) })
         }
     }
 
