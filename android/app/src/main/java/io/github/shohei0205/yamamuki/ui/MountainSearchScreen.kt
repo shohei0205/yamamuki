@@ -108,7 +108,7 @@ fun MountainSearchScreen(
                     for ((title, mountains) in sections) {
                         if (mountains.isEmpty()) continue
                         item(key = "section-$title") { SearchSectionHeader(stringResource(title)) }
-                        items(mountains, key = { it.osmId }) { mountain ->
+                        items(mountains, key = { it.id }) { mountain ->
                             SearchResultRow(mountain, from, onClick = { onSelect(mountain) })
                             HorizontalDivider()
                         }

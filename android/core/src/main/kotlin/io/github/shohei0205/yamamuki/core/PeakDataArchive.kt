@@ -31,13 +31,16 @@ interface PeakDataArchive {
 }
 
 /**
- * [directory] に manifest.json と osm-peaks.json.gz を残す。書くときは一時ファイルに書いてから名前を変え、
+ * [directory] に manifest.json とデータ本体([dataset] の fileName。osm-peaks なら osm-peaks.json.gz)を残す。書くときは一時ファイルに書いてから名前を変え、
  * 書きかけのファイルを残さない。2 つの置き換えの間で止まったときは組が食い違うが、
  * 取り込み済みの記録の SHA-256 と合わなくなるので、作り直しには使われない。
  */
-class FilePeakDataArchive(private val directory: File) : PeakDataArchive {
+class FilePeakDataArchive(
+    private val directory: File,
+    dataset: PeakDataset = PeakDataset.OSM_PEAKS,
+) : PeakDataArchive {
     private val manifestFile = File(directory, MANIFEST_NAME)
-    private val dataFile = File(directory, DATA_NAME)
+    private val dataFile = File(directory, dataset.fileName)
 
     override suspend fun read(): ArchivedPeakData? = withContext(Dispatchers.IO) {
         try {
@@ -82,6 +85,5 @@ class FilePeakDataArchive(private val directory: File) : PeakDataArchive {
 
     companion object {
         const val MANIFEST_NAME = "manifest.json"
-        const val DATA_NAME = "osm-peaks.json.gz"
     }
 }

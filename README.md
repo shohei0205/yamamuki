@@ -125,7 +125,7 @@ open Yamamuki.xcodeproj
 | 方位 | 回転ベクトルセンサーから計算し、偏角を足して真北に直す | Core Location の heading。iOS が偏角を補正した真方位を返す |
 | 方位の精度の判定 | 地磁気センサー（無い端末は回転ベクトル）が知らせる精度の段階（「低い」「当てにならない」で低いとする） | heading の誤差の見積もり（30° を超えるか無効なら低いとする） |
 | 現在地の標高 | GPS の楕円体高を Android 14 以降のジオイドモデルで海抜に直す | Core Location の altitude（海抜）をそのまま使う |
-| キャッシュ | Room（SQLite） | タイルごとの JSON ファイル（アプリの Application Support 内） |
+| キャッシュ | Room（SQLite）。山データの種類は同じテーブルの種類の列で分ける | タイルごとの JSON ファイル（アプリの Application Support 内）。山データの種類ごとにフォルダを分ける |
 | キャッシュの自動バックアップ | 含めない（古い版の DB が戻って起動できなくなるのを防ぐ） | iOS の既定のまま（版を持つ DB ではないので戻っても読める） |
 | 位置と方位の精度 | 位置の更新を頼む間隔（省電力 30 秒・標準 10 秒・高精度 5 秒）と方位センサーの値を受け取る間隔（100・60・20 ミリ秒）を変える | 位置の精度（100m・10m・最高）と、方位が届く変化の大きさ（2°・1°・1°）を変える |
 | 設定の保存 | SharedPreferences | UserDefaults |
@@ -171,18 +171,18 @@ open Yamamuki.xcodeproj
   - 山データをまだ取得していないとき、「山データの更新が必要です」のラベルが出ているときは確かめない。利用者が頼んだ通信ではないので、失敗しても知らせず、次の機会に確かめ直す。
   - 確かめる時期の判定(`PeakData.autoCheckDue`)は core にある。
 - ダウンロードに失敗したときの「もう一度取得」は、確認を聞き直さずに同じ版を取り直す。確認の段階で失敗したときは、確認からやり直す。
-- 読む manifest は、yamamuki の Pages に置いたカタログ `catalog.json`（https://shohei0205.github.io/yamamuki/data/catalog.json ）の `osm-peaks` で決める（0.8.0 から。0.7.0 までは `osm-peaks/current.json` を読んでいた）。URL は core の `PeakData` にある。
-  - アプリが読むデータの種類はコードで `osm-peaks` に固定していて、カタログのほかの種類(`gsi-peaks`)は読まない。manifest の版 5 以降では、`fileName` が `osm-peaks.json.gz` でない manifest も読まない。ほかの種類の地点は ID の形が違い、取り違えると 0 件になって保存済みの山が消えるため。
-  - 配布用のビルド(Android の release、iOS の Release)は、カタログの `osm-peaks` の `stable` が指す manifest を読む。
-  - 開発用のビルド(Android の debug、iOS の Debug)は、既定ではカタログの `osm-peaks` の `dev` が指す manifest を読む(`dev` が無ければ `stable`)。配布版の `stable` を変えずに、新しい版のデータを試せる。
-  - 開発用のビルドで取得先を `dev` にすると、yamamuki-data の dev が公開する最新の開発版 `https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json` を直接読む。画面からは切り替えられず、ビルドのときに選ぶ。
+- 読む manifest は、yamamuki の Pages に置いたカタログ `catalog.json`（https://shohei0205.github.io/yamamuki/data/catalog.json ）の、設定の「山データ」で選んだ種類（`osm-peaks` か `gsi-peaks`）で決める（0.8.0 から。0.7.0 までは `osm-peaks/current.json` を読んでいた）。URL は core の `PeakData` にある。
+  - アプリが知っているデータの種類は、core の `PeakDataset`（`osm-peaks`・`gsi-peaks`）だけ。カタログにほかの種類があっても読まない。manifest の版 5 以降では、`fileName` が種類と合わない（`osm-peaks` なら `osm-peaks.json.gz`、`gsi-peaks` なら `gsi-peaks.json.gz` でない）manifest は読まない。種類を取り違えて、保存済みの山を別の種類で置き換えないため。`gsi-peaks` は manifest の版 6 以降だけを読む。
+  - 配布用のビルド(Android の release、iOS の Release)は、カタログのその種類の `stable` が指す manifest を読む。
+  - 開発用のビルド(Android の debug、iOS の Debug)は、既定ではカタログのその種類の `dev` が指す manifest を読む(`dev` が無ければ `stable`)。配布版の `stable` を変えずに、新しい版のデータを試せる。
+  - 開発用のビルドで取得先を `dev` にすると、`osm-peaks` は yamamuki-data の dev が公開する最新の開発版 `https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json` を直接読む（`gsi-peaks` はカタログの `dev` を読む）。画面からは切り替えられず、ビルドのときに選ぶ。
     - Android: Gradle のプロパティ `peakDataSource=dev` を付ける(例: `./gradlew :app:installDebug -PpeakDataSource=dev`。`~/.gradle/gradle.properties` に書いてもよい。既定は `current`)。`android/app/build.gradle.kts` で `BuildConfig.PEAK_DATA_DEV` になる。
     - iOS: ビルド設定 `PEAK_DATA_SOURCE` を `dev` にする(例: `xcodebuild ... PEAK_DATA_SOURCE=dev`。Xcode ではターゲットの Build Settings の User-Defined で変える。`xcodegen generate` で既定の `current` に戻る)。`ios/project.yml` で `PEAK_DATA_DEV` の条件が付く。
   - 読み先を切り替えたビルドは、前の読み先の版と違えば取り直し、保存している山データを入れ替える。
-- カタログは毎回取り直す(1 KB ほど)。指す manifest の SHA-256 が前回と同じなら、manifest は取り直さない。違えば manifest を取り、SHA-256 がカタログと合うかを確かめる。カタログが yamamuki の `osm-peaks/manifests/` 以外を指しているときは読まない。0.7.0 の `current.json` と同じく manifest の SHA-256 で比べるので、同じ manifest を指している間は、0.7.0 から上げても取り直さない。yamamuki-data の開発版を直接読むときは、manifest に前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。
+- カタログは確かめるたびに取り直す(1 KB ほど)。ただし、選択画面を開いたときのように種類ごとに続けて確かめるときは、1 分以内に取ったカタログを使い回す。指す manifest の SHA-256 が前回と同じなら、manifest は取り直さない。違えば manifest を取り、SHA-256 がカタログと合うかを確かめる。カタログが yamamuki の `<データの種類>/manifests/` 以外を指しているときは読まない。0.7.0 の `current.json` と同じく manifest の SHA-256 で比べるので、同じ manifest を指している間は、0.7.0 から上げても取り直さない。yamamuki-data の開発版を直接読むときは、manifest に前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。
 - 版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「もう一度取得」で取り直せる)。
 - カタログと参照先ファイルは `site/data/` にある。
-  - `catalog.json`(カタログ): データの種類(`datasets` の `osm-peaks`・`gsi-peaks`)ごとに、`stable` と `dev` が指す manifest の URL と SHA-256 を書く。`osm-peaks` の `stable` は必須で、ほかは省略できる。アプリが読むのは `osm-peaks` だけで、`gsi-peaks`(国土地理院の山頂データ)は、あとでアプリが読めるようにするための下準備として入れておく。
+  - `catalog.json`(カタログ): データの種類(`datasets` の `osm-peaks`・`gsi-peaks`)ごとに、`stable` と `dev` が指す manifest の URL と SHA-256 を書く。`osm-peaks` の `stable` は必須で、ほかは省略できる。アプリは、`stable`(開発用のビルドは `dev` も)のある種類を選択画面に出す。
   - `osm-peaks/current.json`(参照先ファイル): 0.6.0・0.7.0 が読む。`stable` だけを書き、カタログの `osm-peaks` の `stable` と同じ manifest を指す。0.9.0 で廃止する予定。
   - `<データの種類>/manifests/<タグ>.json`: yamamuki-data の Release の `manifest.json` を書き換えずにコピーしたもの。差し替えるたびに 1 つ増やし、一度置いたファイルは上書きも削除もしない（前の版に戻すとき、そのまま使えるようにするため）。データ本体は yamamuki-data の Release のものを使う。
 - カタログと参照先ファイルは手で書き換えず、Actions の「山データの差し替え PR を作る」を main で手動で動かして、差し替えの PR を作る（実行できるのは書き込み権限のある人だけ）。
@@ -192,23 +192,35 @@ open Yamamuki.xcodeproj
   - 「同じ山データに戻す」操作では、`dev` の指定だけを外し、既存の `stable` を使う。Release のタグは使わない。`dev` の指定がなければ PR は作らない。
   - 配布用の山データを選ぶときに「開発用アプリも配布用と同じ山データに戻す」にチェックすると、配布用の更新と同時に `dev` の指定も外す。
   - PR は GitHub App のトークンで作る（標準のトークンで作った PR では CI が動かないため）。App の ID と鍵は、main だけが使える環境 `data-swap` の変数 `APP_ID` とシークレット `APP_PRIVATE_KEY` に置いている。
-  - PR の CI「山データの確認」が、カタログと `current.json` の形、`current.json` の `stable` がカタログの `osm-peaks` の `stable` と同じか、コピーが Release と同じか、`manifests/` が追加だけか、`osm-peaks` のデータ本体の大きさと SHA-256、`osm-peaks` の `stable` の件数が 5% より多く減っていないかを確かめる。`gsi-peaks` は manifest までを確かめ、データ本体は取らない（アプリが読む対象ではないため）。件数が減るのを確かめたうえで通すときは、PR にラベル「山データの件数減を確認済み」を付ける。
-  - core の単体テスト（`SitePeakDataTest`）が、カタログの `osm-peaks` の指す manifest をアプリの読み込み処理で読めるかを確かめる。
+  - PR の CI「山データの確認」が、カタログと `current.json` の形、`current.json` の `stable` がカタログの `osm-peaks` の `stable` と同じか、コピーが Release と同じか、`manifests/` が追加だけか、`osm-peaks` のデータ本体の大きさと SHA-256、`osm-peaks` の `stable` の件数が 5% より多く減っていないかを確かめる。`gsi-peaks` は manifest までを確かめ、データ本体は取らない。件数が減るのを確かめたうえで通すときは、PR にラベル「山データの件数減を確認済み」を付ける。
+  - core の単体テスト（`SitePeakDataTest`）が、カタログの `osm-peaks`・`gsi-peaks` の指す manifest をアプリの読み込み処理で読めるかを確かめる。
   - マージ後は Pages の公開のあとに、公開中のカタログ・`current.json`・manifest が git と同じかを確かめる。公開中のカタログから manifest とデータ本体(`gsi-peaks` は manifest まで)をたどれるかと、公開中の `current.json` がカタログと合っているかは、「山データの見張り」で毎日確かめ、失敗したら Issue で知らせる。
   - 確認の処理は `.github/scripts/peak_data.py` にある。
 - 対応する manifest の形式は schemaVersion 4・5・6。版 5 以降では、データ本体の版(`dataSchemaVersion`)が 5 か 6 のときだけ取り込む。知らない版や、データ本体の版が書かれていないときは取り込まず、アプリの更新を促す。
   - 版 6 では件数を `metadata.pointCount` から読み、形式の名前(`schemaFormat` が `yamamuki-manifest`、`dataSchemaFormat` が `yamamuki-points`)が違う manifest は読まない。
 - 版 5 のデータ本体(地点データ)は、山ごとの項目が版 4 までと同じなので、同じ読み方で読む。山頂以外の種別(`type`)の地点と、`osmId` の無い地点は飛ばす。
-- 版 6 のデータ本体は、地点の配列が文書の `points` に入る。`osmId` の代わりに `id` の `osm:<ノード番号>` をノード番号として読み、`osm:` 以外の ID(国土地理院の地点など)は飛ばす。別名は `{name, nameReading}` の配列から `name` を、読み仮名は配列なら最初の空でないものを読む。保存データの形は版 5 と同じ。
+- 版 6 のデータ本体は、地点の配列が文書の `points` に入る。`osm-peaks` は `osmId` の代わりに `id` の `osm:<ノード番号>` をノード番号として読み、`osm:` 以外の ID は飛ばす。`gsi-peaks` は `id`（国土地理院の地点の ID）をそのまま地点の ID にする。別名は `{name, nameReading}` の配列から `name` を、読み仮名は配列なら最初の空でないものを読む。保存データの形は版 5 と同じ。
   - 山名・座標・標高のほかに、地点の ID(`id`)・読み仮名・別名・Wikipedia と Wikidata の URL(https だけ)・タグ(`tags`、「日本百名山」など)・画像(`graphic` の SVG と倍率)も読んで保存データに残す。今は画面には出していない。形の合わない値は無いものとして扱う。
   - 保存先は、Android が DB の `mountains` の列(DB の版 2 で追加。別名とタグは JSON の配列の文字列)、iOS がタイルごとの JSON(項目は省略可能で、項目の無い古いファイルも読める)。
-- 取り込んだ manifest とデータ本体(gz)は、保存データに取り込み終えてから端末に 1 組だけ残す。新しい版を取り込むと置き換えるので溜まらない(今は約 0.5 MB)。取り込みに失敗したときは、前の組をそのまま残す。アプリが読まない項目(地点の画像など)も、ここには残る。
+  - 地点の ID はアプリの中では文字列で持つ（`osm-peaks` は `osm:<ノード番号>`）。Android は DB の版 3 で、`mountains` と `fetched_tiles` に種類の列（`dataset`）を足して種類ごとに分け、OSM のノード番号の列を地点の ID の列（`pointId`）にまとめた。版 2 までの山データは `osm-peaks` として移す。iOS は種類ごとにフォルダを分け（`osm-peaks` は今までの `mountains/`、ほかは `mountains-<種類>/`）、ノード番号だけの古いファイルも `osm:<番号>` として読む。
+- 取り込んだ manifest とデータ本体(gz)は、保存データに取り込み終えてから、種類ごとに端末に 1 組だけ残す。新しい版を取り込むと置き換えるので溜まらない(今は約 0.5 MB)。取り込みに失敗したときは、前の組をそのまま残す。アプリが読まない項目(地点の画像など)も、ここには残る。
   - 取り込み済みの記録には、保存データを作った読み込み処理の版(`PeakData.READER_VERSION` / `PeakData.readerVersion`)と、manifest と gz の SHA-256 も書く。読む項目を増やしたら、この版を上げる。
   - アプリの更新で読み込み処理の版が上がっていたら、起動時に残した manifest と gz から通信せずに保存データを作り直す。どちらかが無いか SHA-256 が合わないときは、次に更新を確かめたときに、データの版が同じでも取り直す。読み込み処理の版が変わらないうちは、残したファイルが消えても取り直さない。gz を残す前の版のアプリから更新したときも、最初の確認で一度だけ取り直す。
   - 作り直せずに読み込み処理の版が古いままのときは、方位盤の上部に「山データの更新が必要です」のラベルを出す。タップすると設定の「更新を確認」と同じ処理を行い、作った日と大きさを見せてダウンロードするかを聞く。自動では取り直さず、圏外ならタップしても通信せずに圏外の知らせを出す。
-  - 置き場所は、Android がアプリの `noBackupFilesDir/peak-data/`、iOS が Application Support の `peak-data/`(バックアップから除外)。設定の「キャッシュを消去」では記録と一緒に消す(Android は、古い版のアプリでキャッシュを作り直したときも消す)。
+  - 置き場所は、Android がアプリの `noBackupFilesDir/peak-data/`、iOS が Application Support の `peak-data/`(バックアップから除外)。`osm-peaks` は今までと同じ場所、ほかの種類はその下の `<種類>/`。取り込み済みの記録も種類ごとに持つ（`osm-peaks` は今までと同じ名前）。山データの選択画面で削除すると記録と一緒に消す(Android は、古い版のアプリでキャッシュを作り直したときも、すべての種類を消す)。
 - 取り込みと取り込み済みの版の記録は `android/core/.../PeakData.kt` と `ios/YamamukiCore/.../PeakData.swift`、gz の保存は `PeakDataArchive.kt` / `PeakDataArchive.swift` にある。
 - OpenStreetMap の Overpass API から取得していたころに分かったことは [docs/peak-data-notes.md](docs/peak-data-notes.md) にまとめた。
+
+### 山データの選択
+
+設定の「山データ」の先頭の行（選んでいる山データの名前を出す）から、方位盤・山の検索・出典の画面に使う山データの種類を選ぶ（Android・iOS）。既定は OpenStreetMap（`osm-peaks`）で、0.7.0 から上げても見え方は変わらない。
+
+- 選択画面には、取得済みの種類をすぐに出し、通信できればカタログで取得できる種類と更新があるかを確かめて足す（カタログと、変わったときの manifest だけを取り、データ本体は取らない）。圏外のときは取得済みの種類だけを出す。
+- 各行には、名前（「OpenStreetMap」「国土地理院」）、manifest の `experimental` が true のときの「試験版」、使っている種類の「使用中」、新しい版があるときの「更新あり」の印と、取得済みなら件数・リリース日・取得日、まだならダウンロードする件数・リリース日・大きさを出す。
+- 取得済みの種類を選ぶとすぐ切り替える。取得していない種類を選ぶと、初回と同じように作った日と大きさを見せてダウンロードするかを聞き、取り込めたら切り替える。切り替えると、検索位置モードと検索画面はやめ、フィルターの一覧はその種類のタグで作り直す（チェックは残し、その種類に無いグループでは絞り込まない）。
+- 取得済みの種類は「削除」で端末から消せる（記録・残した manifest と gz・保存した山）。使っている種類を消すと、取り直すまで方位盤に山が出ない。`osm-peaks` を消しても、事前ダウンロードした地域は残す。以前の設定の「キャッシュ」（件数・容量の確認と消去）は、この削除に置き換えた。
+- 設定の「取得した山データ」「更新を確認」は、使っている種類について行う。「更新を自動で確認」は取得済みの種類をすべて確かめ、方位盤のラベルは使っている種類に新しい版があるときだけ出す。
+- 種類ごとに別々に保存するので、切り替えても取り直さない。2 つの種類を重ねては表示しない。
 
 以前の都道府県単位の事前ダウンロード(Overpass から取得)は、`Features.AREA_DOWNLOAD`(Android、`android/app/.../Features.kt`)と `Features.areaDownload`(iOS、`ios/Yamamuki/Features.swift`)を false にして隠している。コードは残してある。
 
@@ -224,10 +236,10 @@ open Yamamuki.xcodeproj
 | 起動時の表示距離 | 5〜50km | 15km |
 | 画面を常に点灯 | 方位盤の表示中は画面を消さない | オフ |
 | 位置と方位の精度 | 省電力・標準・高精度の 3 段階。精度を下げるとバッテリー消費を抑えられるが、現在地や方位の更新頻度も下がる | 標準 |
-| 山データ | 取得した山データの件数・リリース日（データを作った日）・取得日の確認と、取得・最新版の確認 | — |
+| 山データの選択 | 選んでいる山データの名前を出す行。押すと、方位盤・検索・出典に使う山データの種類を選ぶ画面（上の「山データの選択」）。取得していない種類のダウンロードと、取得済みの種類の削除もここで行う | OpenStreetMap |
+| 山データ | 使っている山データの件数・リリース日（データを作った日）・取得日の確認と、取得・最新版の確認 | — |
 | 更新を自動で確認 | アプリを開いたときに 30 日に 1 回、新しい山データがあるかを確かめ、あれば方位盤に「新しい山データあり」と出す（ダウンロードは確認してから） | オフ |
-| キャッシュ | 保存している山の件数・容量の確認と消去(消すと山データも消える) | — |
-| データの出典とライセンス | 取り込み済みの山データの出典を見る画面（下の「データの出典とライセンスの画面」） | — |
+| データの出典とライセンス | 使っている山データの出典を見る画面（下の「データの出典とライセンスの画面」） | — |
 | 著作権と開発者 | 「このアプリについて」のバージョンの下に、著作権表示（© 2026 The yamamuki Authors）と開発者の名前（Developers: Shohei.S, Hiroyuki.H）を出す。名前は [AUTHORS.md](AUTHORS.md) と合わせる | — |
 
 設定は端末内（Android は SharedPreferences、iOS は UserDefaults）に保存する。
@@ -255,20 +267,23 @@ Android 版では、山データのキャッシュと、事前ダウンロード
 
 アプリ名「山むき」とアプリアイコン（`android/app/src/main/res/drawable/ic_launcher_*.xml`、`ios/Yamamuki/Assets.xcassets/AppIcon.appiconset/`、`docs/images/app-icon.png`）は MIT License の対象外とする。コードを使って別のアプリを配布するときは、別の名前とアイコンを使う。利用者が公式のアプリと取り違えないようにするため。
 
-アプリが表示する山データは OpenStreetMap のもので、コードとは別に [ODbL](https://opendatacommons.org/licenses/odbl/) の条件で利用している。
+アプリが表示する山データは、OpenStreetMap のもの（既定）と国土地理院のものから選ぶ。コードとは別に、OpenStreetMap のものは [ODbL](https://opendatacommons.org/licenses/odbl/)、国土地理院のものは [公共データ利用規約（PDL 1.0）](https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html) の条件で利用している。方位盤の右下には、使っている種類の短い表示（「© OpenStreetMap contributors」か「出典：国土地理院」）を出す。
 
 山データ © OpenStreetMap contributors (ODbL)
+
+山データ 出典：国土地理院 (PDL 1.0)
 
 ### データの出典とライセンスの画面
 
 設定の「このアプリについて」の「データの出典とライセンス」から開く（Android・iOS）。
 
+- 使っている種類（設定の「山データ」で選んだもの）の山データだけを出す。カードの見出しに種類の名前を出す。
 - 取り込んだときに端末へ残した manifest から読むので、オフラインでも見られ、地点データと別の版の出典が混ざらない。残した manifest が取り込み済みの記録の SHA-256 と合わないときは読まない。
 - 「山データ」には、manifest のトップレベルの `license`・`attribution`・`sourceUrl` と、リリース日（データを作った日）を出す。
 - manifest 版 6 では、出典が `metadata.sources` の配列にまとまっていて、元データと補足を見分ける項目が無い（出典の名前も版ごとに変わり、2026-10-20 の版から「OpenStreetMap（日本・Geofabrik 配布）」など）。そのため「山データ」にはリリース日だけを出し、元データも含めたすべての出典を「出典」の見出しの下に、下の「補足に使った資料」と同じ形で出す。名前（`name`）のある出典が 1 つも無いときは、manifest が読めないときと同じ表示にして、OpenStreetMap のライセンスの表示を消さない。
 - 「補足に使った資料」（版 6 は「出典」）には、manifest の `supplementSources`（版 6 は上のとおり `metadata.sources`。タグ・よみがななどの補足に使った Wikipedia などの資料）を 1 件ずつ出す。版 5 は出典 ID の名前順（文字コード順）、版 6 は yamamuki-data が決めた manifest の並び順のまま（並べ替えない）。項目は資料（`source`）・ライセンス（`license`）・著作者（`attribution`）・加工（`changes`）で、空の項目は出さない。値は省略せずに出し、文中の http(s) の URL はタップでブラウザに開けるリンクにする。
 - 補足に使った資料の無いデータでは「補足資料なし」と出す。
-- 山データをまだ取得していないとき、端末に残した manifest が無いか読めないとき（出典を残す前の版のアプリで取り込んだときなど）は、アプリが持つ「山データ © OpenStreetMap contributors (ODbL)」と OpenStreetMap の著作権のページを出す。未取得なら「山データ未取得」、manifest が読めなければ「出典情報の取得に失敗」と添える。行は山データが無くてもいつでも押せる。
+- 山データをまだ取得していないとき、端末に残した manifest が無いか読めないとき（出典を残す前の版のアプリで取り込んだときなど）は、アプリが持つ種類ごとの表示（「山データ © OpenStreetMap contributors (ODbL)」と OpenStreetMap の著作権のページ、または「山データ 出典：国土地理院 (PDL 1.0)」と公共データ利用規約のページ）を出す。未取得なら「山データ未取得」、manifest が読めなければ「出典情報の取得に失敗」と添える。行は山データが無くてもいつでも押せる。
 - 読み込みは `android/core/.../PeakDataCredits.kt` と `ios/YamamukiCore/.../PeakDataCredits.swift`、画面は `CreditsScreen.kt` / `CreditsView.swift` にある。
 
 ## 方位盤のモードと手動操作（Android・iOS）

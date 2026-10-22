@@ -75,7 +75,7 @@ struct MountainSearchView: View {
     private func section(_ title: String, _ mountains: [Mountain]) -> some View {
         if !mountains.isEmpty {
             Section {
-                ForEach(mountains, id: \.osmId) { mountain in
+                ForEach(mountains, id: \.id) { mountain in
                     Button { onSelect(mountain) } label: { row(mountain) }
                         .buttonStyle(.plain)
                 }

@@ -23,7 +23,7 @@ private final class FakeRemote: MountainRemoteSource, @unchecked Sendable {
 
 private final class InMemoryCache: MountainCache, @unchecked Sendable {
     var tiles: [Tile: Date] = [:]
-    var mountains: [Int64: Mountain] = [:]
+    var mountains: [String: Mountain] = [:]
 
     func fetchedAt(_ tiles: [Tile]) async throws -> [Tile: Date] {
         self.tiles.filter { tiles.contains($0.key) }
@@ -36,7 +36,7 @@ private final class InMemoryCache: MountainCache, @unchecked Sendable {
     func replaceTiles(_ tiles: [Tile], mountains: [Mountain], fetchedAt: Date) async throws {
         let targets = Set(tiles)
         self.mountains = self.mountains.filter { !targets.contains(Tile.of($0.value.latitude, $0.value.longitude)) }
-        for m in mountains { self.mountains[m.osmId] = m }
+        for m in mountains { self.mountains[m.id] = m }
         for t in tiles { self.tiles[t] = fetchedAt }
     }
 }
@@ -46,9 +46,9 @@ private final class ProgressLog: @unchecked Sendable {
 }
 
 final class AreaDownloadTests: XCTestCase {
-    private let fuji = Mountain(osmId: 1, name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776)
-    private let yari = Mountain(osmId: 2, name: "槍ヶ岳", latitude: 36.3420, longitude: 137.6476, elevationM: 3180)
-    private let outside = Mountain(osmId: 3, name: "範囲外の山", latitude: 40.0, longitude: 140.0, elevationM: 1000)
+    private let fuji = Mountain(id: "osm:1", name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776)
+    private let yari = Mountain(id: "osm:2", name: "槍ヶ岳", latitude: 36.3420, longitude: 137.6476, elevationM: 3180)
+    private let outside = Mountain(id: "osm:3", name: "範囲外の山", latitude: 40.0, longitude: 140.0, elevationM: 1000)
     private let nagano = Prefecture.byCode(20)!
 
     private func repo(_ remote: FakeRemote, _ cache: MountainCache) -> MountainRepository {
@@ -207,18 +207,18 @@ final class AreaDownloadTests: XCTestCase {
     func testFileCacheKeepsPointDataV5Fields() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let full = Mountain(osmId: 1, name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776.0,
-                            pointId: "1", nameReading: "ふじさん", aliases: ["不二山", "芙蓉峰"],
+        let full = Mountain(id: "osm:1", name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776.0,
+                            nameReading: "ふじさん", aliases: ["不二山", "芙蓉峰"],
                             wikipediaUrl: "https://ja.wikipedia.org/wiki/%E5%AF%8C%E5%A3%AB%E5%B1%B1",
                             wikidataUrl: "https://www.wikidata.org/wiki/Q39231", tags: ["日本百名山"],
                             graphic: PointGraphic(svg: #"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>"#, scale: 1.5))
-        let plain = Mountain(osmId: 2, name: "名無し", latitude: 35.4, longitude: 138.8, elevationM: nil)
+        let plain = Mountain(id: "osm:2", name: "名無し", latitude: 35.4, longitude: 138.8, elevationM: nil)
         let tile = Tile.of(full.latitude, full.longitude)
         try await FileMountainCache(directory: dir).replaceTiles([tile], mountains: [full, plain], fetchedAt: Date())
 
         let box = BoundingBox(south: 35.0, west: 138.5, north: 35.5, east: 139.0)
         let read = try await FileMountainCache(directory: dir).mountains(in: box)
-        XCTAssertEqual(read.sorted { $0.osmId < $1.osmId }, [full, plain])
+        XCTAssertEqual(read.sorted { $0.id < $1.id }, [full, plain])
     }
 
     func testFileCacheReadsFilesWithoutPointDataV5Fields() async throws {
@@ -231,6 +231,6 @@ final class AreaDownloadTests: XCTestCase {
             .write(to: dir.appendingPathComponent("tile_\(tile.latIndex)_\(tile.lonIndex).json"))
 
         let read = try await FileMountainCache(directory: dir).mountains(in: tile.bounds)
-        XCTAssertEqual(read, [Mountain(osmId: 1, name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776.0)])
+        XCTAssertEqual(read, [Mountain(id: "osm:1", name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776.0)])
     }
 }

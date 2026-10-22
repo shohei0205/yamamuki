@@ -7,12 +7,12 @@
     <string name="common_close">閉じる</string>
     <string name="common_cancel">キャンセル</string>
     <string name="common_delete">削除</string>
-    <string name="common_loading">読み込み中…</string>
     <string name="common_unknown">不明</string>
     <string name="common_back">戻る</string>
     <string name="elevation_unknown">標高不明</string>
     <string name="settings_title">設定</string>
     <string name="osm_attribution" translatable="false">© OpenStreetMap contributors</string>
+    <string name="gsi_attribution">出典：国土地理院</string>
 
     <!-- 方位盤 -->
     <string name="dial_heading_accuracy_low">方位が不安定です。8の字に動かしてください</string>
@@ -81,6 +81,7 @@
     <string name="peak_data_update_found">新しい山データあり</string>
     <string name="peak_data_offer_title">山データのダウンロード</string>
     <string name="peak_data_offer_message">新しい山データが入手できます。\n%1$s\n今すぐダウンロードしますか？</string>
+    <string name="peak_data_offer_message_first">「%1$s」の山データをダウンロードできます。\n%2$s\n今すぐダウンロードしますか？</string>
     <string name="peak_data_offer_detail">リリース：%1$s、約 %2$s</string>
     <string name="peak_data_offer_size">約 %1$s</string>
     <string name="peak_data_offer_download">ダウンロード</string>
@@ -140,14 +141,21 @@
     <string name="settings_peak_data_check">更新を確認</string>
     <string name="settings_peak_data_auto_check">更新を自動で確認</string>
     <string name="settings_peak_data_auto_check_description">30 日に 1 度、アプリ起動時に新しい山データの確認を行います。</string>
-    <string name="settings_cache_title">保存データ</string>
-    <string name="settings_cache_summary">山 %1$,d 件（取得済みの区画 %2$d 個）・容量 %3$s</string>
-    <string name="settings_cache_description">消去すると取得済みの山データも消えます。必要に応じて再取得できます。</string>
-    <string name="settings_cache_clear">キャッシュを消去</string>
-    <string name="settings_cache_clear_title">キャッシュを消去しますか？</string>
-    <string name="settings_cache_clear_message_keep_areas">保存済みの山データを消去します。事前ダウンロードした地域は残ります。</string>
-    <string name="settings_cache_clear_message">保存済みの山データをすべて消去します。必要に応じて再取得できます。</string>
-    <string name="settings_cache_clear_confirm">消去</string>
+    <string name="peak_dataset_osm_peaks">OpenStreetMap</string>
+    <string name="peak_dataset_gsi_peaks">国土地理院</string>
+    <string name="peak_data_list_title">山データの選択</string>
+    <string name="peak_data_list_description">利用する山データを選択します。端末に保存していない山データはダウンロードします。</string>
+    <string name="peak_data_list_experimental">試験版</string>
+    <string name="peak_data_list_in_use">使用中</string>
+    <string name="peak_data_list_update_found">更新あり</string>
+    <string name="peak_data_list_available">山 %1$,d 件・リリース：%2$s・約 %3$s</string>
+    <string name="peak_data_list_available_no_release">山 %1$,d 件・約 %2$s</string>
+    <string name="peak_data_list_checking">取得できる山データを確認中…</string>
+    <string name="peak_data_list_offline">インターネットに接続されていないため、端末に保存済みの山データを表示しています。</string>
+    <string name="peak_data_list_delete">削除</string>
+    <string name="peak_data_delete_title">「%1$s」の山データを削除しますか？</string>
+    <string name="peak_data_delete_message">端末に保存した山データを削除します。必要に応じて再取得できます。</string>
+    <string name="peak_data_delete_message_in_use">使用中の山データです。削除すると、再取得するまで方位盤に山が表示されません。</string>
     <string name="settings_section_about">このアプリについて</string>
     <string name="settings_version">バージョン %1$s</string>
     <string name="settings_copyright">© 2026 The yamamuki Authors</string>
@@ -166,10 +174,11 @@
     <string name="credits_missing">出典情報の取得に失敗</string>
     <string name="credits_no_supplements">補足資料なし</string>
     <string name="credits_osm_attribution">山データ © OpenStreetMap contributors (ODbL)</string>
+    <string name="credits_gsi_attribution">山データ 出典：国土地理院 (PDL 1.0)</string>
 
     <!-- 事前ダウンロード -->
     <string name="area_title">事前ダウンロード</string>
-    <string name="area_description">電波が届く場所で、目的地周辺の山データを事前に保存できます。\n事前に保存した山データは、キャッシュを消去しても残ります。</string>
+    <string name="area_description">電波が届く場所で、目的地周辺の山データを事前に保存できます。\n事前に保存した山データは、設定で山データを削除しても残ります。</string>
     <string name="area_offline">圏外のためダウンロードできません。通信可能な場所でお試しください。</string>
     <string name="area_section_saved">ダウンロード済みの地域</string>
     <string name="area_section_choose">地域を選択</string>

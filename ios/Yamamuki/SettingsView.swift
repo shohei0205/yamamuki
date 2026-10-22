@@ -88,6 +88,12 @@ struct SettingsView: View {
                 }
 
                 Section(Strings.text("settings_section_peak_data")) {
+                    // 見出しが「山データ」なので、行には選んでいる山データの名前だけを出す。
+                    NavigationLink {
+                        PeakDataListView(model: model)
+                    } label: {
+                        Text(settings.peakDataset.label)
+                    }
                     PeakDataSection(
                         data: model.peakData,
                         updating: model.peakDataUpdating,
@@ -99,7 +105,6 @@ struct SettingsView: View {
                         description: Strings.text("settings_peak_data_auto_check_description"),
                         isOn: settings.autoCheckPeakData
                     ) { v in model.updateSettings { $0.autoCheckPeakData = v } }
-                    CacheSection(info: model.cacheInfo, onClear: model.clearCache)
                 }
 
                 Section(Strings.text("settings_section_about")) {
@@ -126,7 +131,7 @@ struct SettingsView: View {
         }
         // iOS 15 でも使えるよう NavigationView にする。1 画面だけなので分割表示にはしない。
         .navigationViewStyle(.stack)
-        .onAppear { model.refreshCacheInfo() }
+        .onAppear { model.refreshPeakData() }
     }
 
     /// project.yml の MARKETING_VERSION / CURRENT_PROJECT_VERSION。
@@ -274,32 +279,5 @@ private struct PeakDataSection: View {
         formatter.locale = Locale(identifier: "ja_JP")
         formatter.dateFormat = "yyyy/MM/dd"
         return formatter.string(from: date)
-    }
-}
-
-private struct CacheSection: View {
-    let info: CacheInfo?
-    let onClear: () -> Void
-    @State private var confirming = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(Strings.text("settings_cache_title"))
-            if let info {
-                Text(Strings.format("settings_cache_summary", groupedInteger(info.mountainCount), info.tileCount, byteSizeText(info.sizeBytes)))
-                    .font(.subheadline)
-            } else {
-                Text(Strings.text("common_loading")).font(.subheadline)
-            }
-            Text(Strings.text("settings_cache_description")).font(.footnote).foregroundStyle(.secondary)
-        }
-        Button(Strings.text("settings_cache_clear"), role: .destructive) { confirming = true }
-            .disabled(info == nil || info?.tileCount == 0)
-            .alert(Strings.text("settings_cache_clear_title"), isPresented: $confirming) {
-                Button(Strings.text("settings_cache_clear_confirm"), role: .destructive, action: onClear)
-                Button(Strings.text("common_cancel"), role: .cancel) {}
-            } message: {
-                Text(Strings.text(Features.areaDownload ? "settings_cache_clear_message_keep_areas" : "settings_cache_clear_message"))
-            }
     }
 }

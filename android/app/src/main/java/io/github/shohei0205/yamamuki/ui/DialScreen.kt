@@ -102,6 +102,7 @@ import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
+import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.core.PeakManifest
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.core.degreeText
@@ -209,16 +210,16 @@ fun DialScreen(
     val viewFanAlpha by animateFloatAsState(if (state.exploring) 0f else 1f, tween(MODE_ANIMATION_MS), label = "viewFan")
 
     // 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
-    var selectedId by remember { mutableStateOf<Long?>(null) }
+    var selectedId by remember { mutableStateOf<String?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showDownload by rememberSaveable { mutableStateOf(false) }
     val showSearch = state.search != null
     var showObserver by remember { mutableStateOf(false) }
     // 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
-    var groupIds by remember { mutableStateOf<List<Long>?>(null) }
-    val group = groupIds?.mapNotNull { id -> state.mountains.firstOrNull { it.mountain.osmId == id } }?.takeIf { it.isNotEmpty() }
-    val selected = state.mountains.firstOrNull { it.mountain.osmId == selectedId }
-        ?: state.summit?.takeIf { it.mountain.osmId == selectedId }
+    var groupIds by remember { mutableStateOf<List<String>?>(null) }
+    val group = groupIds?.mapNotNull { id -> state.mountains.firstOrNull { it.mountain.id == id } }?.takeIf { it.isNotEmpty() }
+    val selected = state.mountains.firstOrNull { it.mountain.id == selectedId }
+        ?: state.summit?.takeIf { it.mountain.id == selectedId }
     // 取り直しで一覧から消えたら選択も解く。残しておくと、その山が一覧に戻ったときにダイアログが勝手に開く。
     val selectionLost = selectedId != null && selected == null
     LaunchedEffect(selectionLost) {
@@ -294,8 +295,8 @@ fun DialScreen(
             mountains = state.mountains,
             rangeKm = state.rangeKm,
             modifier = Modifier.fillMaxSize(),
-            onMountainTap = { selectedId = it.mountain.osmId },
-            onGroupTap = { peaks -> groupIds = peaks.map { it.mountain.osmId } },
+            onMountainTap = { selectedId = it.mountain.id },
+            onGroupTap = { peaks -> groupIds = peaks.map { it.mountain.id } },
             onObserverTap = { showObserver = true },
             summit = state.summit,
             summitLabel = state.viewpoint == null,
@@ -309,7 +310,7 @@ fun DialScreen(
             viewportLongitude = state.location?.longitude,
         )
         Text(
-            stringResource(R.string.osm_attribution),
+            stringResource(state.settings.peakDataset.attribution),
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
         )
@@ -442,17 +443,23 @@ fun DialScreen(
         if (showSettings) {
             SettingsScreen(
                 settings = state.settings,
-                cacheInfo = state.cacheInfo,
                 onSettingsChange = viewModel::updateSettings,
                 peakData = state.peakData,
                 peakDataUpdating = state.peakDataUpdating,
                 peakDataNotice = state.peakDataNotice,
                 onUpdatePeakData = viewModel::updatePeakData,
-                onOpen = viewModel::refreshCacheInfo,
-                onClearCache = viewModel::clearCache,
-                onClose = { showSettings = false },
+                onOpen = viewModel::refreshPeakData,
+                onClose = {
+                    viewModel.closePeakDataList()
+                    showSettings = false
+                },
                 peakGroups = state.peakGroups,
                 loadCredits = viewModel::peakDataCredits,
+                peakDataList = state.peakDataList,
+                onOpenPeakDataList = viewModel::openPeakDataList,
+                onClosePeakDataList = viewModel::closePeakDataList,
+                onChoosePeakData = viewModel::choosePeakData,
+                onDeletePeakData = viewModel::deletePeakData,
             )
         }
 
@@ -492,7 +499,7 @@ fun DialScreen(
 
     // 新しい山データの大きさを見せて、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
     state.peakDataOffer?.let { manifest ->
-        PeakDataOfferDialog(manifest = manifest, onAnswer = viewModel::answerPeakDataOffer)
+        PeakDataOfferDialog(manifest = manifest, first = state.peakDataOfferFirst, onAnswer = viewModel::answerPeakDataOffer)
     }
 
     // 通信の失敗は、方位を待つ表示などに隠れて気づけないことがないよう、画面中央で知らせる。
@@ -520,7 +527,7 @@ fun DialScreen(
             group,
             onSelect = {
                 groupIds = null
-                selectedId = it.mountain.osmId
+                selectedId = it.mountain.id
             },
             onDismiss = { groupIds = null },
         )
@@ -545,9 +552,12 @@ private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
     )
 }
 
-/** 新しい山データを作った日と大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。 */
+/**
+ * 新しい山データを作った日と大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。
+ * まだ取得していない種類を初めて取得するとき([first])は、更新のように読めないよう、種類の名前を出して聞く。
+ */
 @Composable
-private fun PeakDataOfferDialog(manifest: PeakManifest, onAnswer: (Boolean) -> Unit) {
+private fun PeakDataOfferDialog(manifest: PeakManifest, first: PeakDataset?, onAnswer: (Boolean) -> Unit) {
     val size = byteSizeText(manifest.sizeBytes)
     // データを作った日が版の文字列から読めなければ、大きさだけを出す。
     val date = manifest.releaseDate
@@ -560,7 +570,15 @@ private fun PeakDataOfferDialog(manifest: PeakManifest, onAnswer: (Boolean) -> U
         onDismissRequest = {},
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.peak_data_offer_title)) },
-        text = { Text(stringResource(R.string.peak_data_offer_message, detail)) },
+        text = {
+            Text(
+                if (first == null) {
+                    stringResource(R.string.peak_data_offer_message, detail)
+                } else {
+                    stringResource(R.string.peak_data_offer_message_first, stringResource(first.label), detail)
+                },
+            )
+        },
         confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_offer_download)) } },
         dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_offer_later)) } },
     )
@@ -601,11 +619,11 @@ private fun MountainDetailDialog(
                 when {
                     viewpoint == null -> DetailRow(stringResource(R.string.detail_distance), distanceText(nearby.distanceKm))
                     // 選んだ山頂そのものは、山頂からの距離が 0 なので出さない。
-                    viewpoint.osmId != m.osmId ->
+                    viewpoint.id != m.id ->
                         DetailRow(stringResource(R.string.detail_distance_from_summit), distanceText(nearby.distanceKm))
                 }
                 // 選んだ山頂にいるときは、移る先が今の場所と同じなので出さない。
-                if (viewpoint?.osmId != m.osmId) {
+                if (viewpoint?.id != m.id) {
                     TextButton(onClick = onGoToSummit, contentPadding = PaddingValues(0.dp)) {
                         Text(stringResource(R.string.detail_go_to_summit))
                     }

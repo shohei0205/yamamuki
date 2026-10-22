@@ -13,9 +13,9 @@ final class OverpassParserTests: XCTestCase {
         ].joined(separator: "\n") + "\n"
 
         XCTAssertEqual(try OverpassParser.parse(body), [
-            Mountain(osmId: 1, name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776),
-            Mountain(osmId: 2, name: "エックス山", latitude: 35.0, longitude: 138.0, elevationM: 1234),
-            Mountain(osmId: 4, name: "無標高山", latitude: 35.2, longitude: 138.2, elevationM: nil),
+            Mountain(id: "osm:1", name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776),
+            Mountain(id: "osm:2", name: "エックス山", latitude: 35.0, longitude: 138.0, elevationM: 1234),
+            Mountain(id: "osm:4", name: "無標高山", latitude: 35.2, longitude: 138.2, elevationM: nil),
         ])
     }
 
@@ -28,7 +28,7 @@ final class OverpassParserTests: XCTestCase {
             "6\t35.6\t138.6\t正常山\t\t600",
         ].joined(separator: "\r\n")
 
-        XCTAssertEqual(try OverpassParser.parse(body), [Mountain(osmId: 6, name: "正常山", latitude: 35.6, longitude: 138.6, elevationM: 600)])
+        XCTAssertEqual(try OverpassParser.parse(body), [Mountain(id: "osm:6", name: "正常山", latitude: 35.6, longitude: 138.6, elevationM: 600)])
     }
 
     func testParsesEmptyResult() throws {

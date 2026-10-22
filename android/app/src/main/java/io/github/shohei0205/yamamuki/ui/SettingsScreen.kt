@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.Icons
@@ -22,7 +21,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -46,14 +44,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.InstalledPeakData
 import io.github.shohei0205.yamamuki.core.PeakDataCredits
+import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.core.TagGroup
 import io.github.shohei0205.yamamuki.core.TagGroups
-import io.github.shohei0205.yamamuki.core.byteSizeText
-import io.github.shohei0205.yamamuki.data.CacheInfo
 import io.github.shohei0205.yamamuki.settings.GridStyle
 import io.github.shohei0205.yamamuki.settings.SensorPrecision
 import io.github.shohei0205.yamamuki.settings.Settings
@@ -72,27 +68,31 @@ private const val MAX_PEAKS_STEP = 5
 @Composable
 fun SettingsScreen(
     settings: Settings,
-    cacheInfo: CacheInfo?,
     onSettingsChange: ((Settings) -> Settings) -> Unit,
     peakData: InstalledPeakData?,
     peakDataUpdating: Boolean,
     peakDataNotice: String?,
     onUpdatePeakData: () -> Unit,
     onOpen: () -> Unit,
-    onClearCache: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     /** 保存している山データにある山のグループ。読み込み中は null、データにタグが無ければ空で、どちらも行を押せなくする。 */
     peakGroups: List<TagGroup>? = null,
     /** 取り込み済みの山データの出典を、端末に残した manifest から読む。 */
     loadCredits: suspend () -> PeakDataCredits? = { null },
+    /** 山データの選択画面の状態。開いていなければ null。 */
+    peakDataList: PeakDataListUiState? = null,
+    onOpenPeakDataList: () -> Unit = {},
+    onClosePeakDataList: () -> Unit = {},
+    onChoosePeakData: (PeakDataset) -> Unit = {},
+    onDeletePeakData: (PeakDataset) -> Unit = {},
 ) {
     BackHandler(onBack = onClose)
     LaunchedEffect(Unit) { onOpen() }
     var showPeakGroups by rememberSaveable { mutableStateOf(false) }
     var showCredits by rememberSaveable { mutableStateOf(false) }
 
-    // グループの選択画面と出典の画面は、設定画面の上に重ねて出す。
+    // グループの選択画面、山データの選択画面と出典の画面は、設定画面の上に重ねて出す。
     Box(modifier.fillMaxSize()) {
     Surface(Modifier.fillMaxSize()) {
         Column(
@@ -180,6 +180,8 @@ fun SettingsScreen(
 
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_peak_data))
+            // 見出しが「山データ」なので、行には選んでいる山データの名前だけを出す。
+            NavigationRow(title = stringResource(settings.peakDataset.label), onClick = onOpenPeakDataList)
             PeakDataSection(peakData, peakDataUpdating, peakDataNotice, onUpdatePeakData)
             SwitchRow(
                 title = stringResource(R.string.settings_peak_data_auto_check),
@@ -187,7 +189,6 @@ fun SettingsScreen(
                 checked = settings.autoCheckPeakData,
                 onChange = { v -> onSettingsChange { it.copy(autoCheckPeakData = v) } },
             )
-            CacheSection(cacheInfo, onClearCache)
 
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_about))
@@ -210,15 +211,26 @@ fun SettingsScreen(
         )
     }
 
+    peakDataList?.let { list ->
+        PeakDataListScreen(
+            list = list,
+            selected = settings.peakDataset,
+            updating = peakDataUpdating,
+            onChoose = onChoosePeakData,
+            onDelete = onDeletePeakData,
+            onBack = onClosePeakDataList,
+        )
+    }
+
     if (showCredits) {
-        CreditsScreen(peakData = peakData, loadCredits = loadCredits, onBack = { showCredits = false })
+        CreditsScreen(dataset = settings.peakDataset, peakData = peakData, loadCredits = loadCredits, onBack = { showCredits = false })
     }
     }
 }
 
-/** 次の画面へ進む行。右に今の値を出す。[enabled] が false のときは灰色にして押せなくする。 */
+/** 次の画面へ進む行。[value] があれば右に今の値を出す。[enabled] が false のときは灰色にして押せなくする。 */
 @Composable
-private fun NavigationRow(title: String, value: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun NavigationRow(title: String, value: String? = null, enabled: Boolean = true, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -229,7 +241,7 @@ private fun NavigationRow(title: String, value: String, enabled: Boolean = true,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+        if (value != null) Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1)
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
     }
 }
@@ -373,57 +385,5 @@ private fun PeakDataSection(data: InstalledPeakData?, updating: Boolean, notice:
                 Text(stringResource(if (data == null) R.string.settings_peak_data_fetch else R.string.settings_peak_data_check))
             }
         }
-    }
-}
-
-@Composable
-private fun CacheSection(info: CacheInfo?, onClear: () -> Unit) {
-    var confirming by remember { mutableStateOf(false) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(stringResource(R.string.settings_cache_title), style = MaterialTheme.typography.bodyLarge)
-        if (info == null) {
-            Text(stringResource(R.string.common_loading), style = MaterialTheme.typography.bodyMedium)
-        } else {
-            Text(
-                stringResource(R.string.settings_cache_summary, info.mountainCount, info.tileCount, byteSizeText(info.sizeBytes)),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        Text(
-            stringResource(R.string.settings_cache_description),
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Spacer(Modifier.padding(top = 4.dp))
-        OutlinedButton(
-            onClick = { confirming = true },
-            enabled = info != null && info.tileCount > 0,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(R.string.settings_cache_clear)) }
-    }
-
-    if (confirming) {
-        AlertDialog(
-            onDismissRequest = { confirming = false },
-            title = { Text(stringResource(R.string.settings_cache_clear_title)) },
-            text = {
-                Text(
-                    stringResource(
-                        if (Features.AREA_DOWNLOAD) {
-                            R.string.settings_cache_clear_message_keep_areas
-                        } else {
-                            R.string.settings_cache_clear_message
-                        },
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirming = false
-                    onClear()
-                }) { Text(stringResource(R.string.settings_cache_clear_confirm)) }
-            },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.common_cancel)) } },
-        )
     }
 }

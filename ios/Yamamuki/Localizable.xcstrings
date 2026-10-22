@@ -73,7 +73,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "電波が届く場所で、目的地周辺の山データを事前に保存できます。\n事前に保存した山データは、キャッシュを消去しても残ります。"
+            "value": "電波が届く場所で、目的地周辺の山データを事前に保存できます。\n事前に保存した山データは、設定で山データを削除しても残ります。"
           }
         }
       }
@@ -320,17 +320,6 @@
         }
       }
     },
-    "common_loading": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "読み込み中…"
-          }
-        }
-      }
-    },
     "common_unknown": {
       "extractionState": "manual",
       "localizations": {
@@ -404,6 +393,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "加工"
+          }
+        }
+      }
+    },
+    "credits_gsi_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データ 出典：国土地理院 (PDL 1.0)"
           }
         }
       }
@@ -1035,6 +1035,17 @@
         }
       }
     },
+    "gsi_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出典：国土地理院"
+          }
+        }
+      }
+    },
     "map_mode_heading_up": {
       "extractionState": "manual",
       "localizations": {
@@ -1102,6 +1113,39 @@
       },
       "shouldTranslate": false
     },
+    "peak_data_delete_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端末に保存した山データを削除します。必要に応じて再取得できます。"
+          }
+        }
+      }
+    },
+    "peak_data_delete_message_in_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用中の山データです。削除すると、再取得するまで方位盤に山が表示されません。"
+          }
+        }
+      }
+    },
+    "peak_data_delete_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」の山データを削除しますか？"
+          }
+        }
+      }
+    },
     "peak_data_error_invalid": {
       "extractionState": "manual",
       "localizations": {
@@ -1168,6 +1212,116 @@
         }
       }
     },
+    "peak_data_list_available": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山 %1$@ 件・リリース：%2$@・約 %3$@"
+          }
+        }
+      }
+    },
+    "peak_data_list_available_no_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山 %1$@ 件・約 %2$@"
+          }
+        }
+      }
+    },
+    "peak_data_list_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取得できる山データを確認中…"
+          }
+        }
+      }
+    },
+    "peak_data_list_delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        }
+      }
+    },
+    "peak_data_list_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用する山データを選択します。端末に保存していない山データはダウンロードします。"
+          }
+        }
+      }
+    },
+    "peak_data_list_experimental": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "試験版"
+          }
+        }
+      }
+    },
+    "peak_data_list_in_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用中"
+          }
+        }
+      }
+    },
+    "peak_data_list_offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インターネットに接続されていないため、端末に保存済みの山データを表示しています。"
+          }
+        }
+      }
+    },
+    "peak_data_list_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データの選択"
+          }
+        }
+      }
+    },
+    "peak_data_list_update_found": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新あり"
+          }
+        }
+      }
+    },
     "peak_data_offer_detail": {
       "extractionState": "manual",
       "localizations": {
@@ -1208,6 +1362,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "新しい山データが入手できます。\n%1$@\n今すぐダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "peak_data_offer_message_first": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」の山データをダウンロードできます。\n%2$@\n今すぐダウンロードしますか？"
           }
         }
       }
@@ -1318,6 +1483,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "山データを更新しました"
+          }
+        }
+      }
+    },
+    "peak_dataset_gsi_peaks": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "国土地理院"
+          }
+        }
+      }
+    },
+    "peak_dataset_osm_peaks": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenStreetMap"
           }
         }
       }
@@ -1450,94 +1637,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "山の検索"
-          }
-        }
-      }
-    },
-    "settings_cache_clear": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "キャッシュを消去"
-          }
-        }
-      }
-    },
-    "settings_cache_clear_confirm": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "消去"
-          }
-        }
-      }
-    },
-    "settings_cache_clear_message": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存済みの山データをすべて消去します。必要に応じて再取得できます。"
-          }
-        }
-      }
-    },
-    "settings_cache_clear_message_keep_areas": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存済みの山データを消去します。事前ダウンロードした地域は残ります。"
-          }
-        }
-      }
-    },
-    "settings_cache_clear_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "キャッシュを消去しますか？"
-          }
-        }
-      }
-    },
-    "settings_cache_description": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "消去すると取得済みの山データも消えます。必要に応じて再取得できます。"
-          }
-        }
-      }
-    },
-    "settings_cache_summary": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "山 %1$@ 件（取得済みの区画 %2$ld 個）・容量 %3$@"
-          }
-        }
-      }
-    },
-    "settings_cache_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存データ"
           }
         }
       }

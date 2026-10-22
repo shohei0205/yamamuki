@@ -35,9 +35,14 @@ import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.InstalledPeakData
 import io.github.shohei0205.yamamuki.core.LinkText
 import io.github.shohei0205.yamamuki.core.PeakDataCredits
+import io.github.shohei0205.yamamuki.core.PeakDataset
 
-/** OpenStreetMap の著作権とライセンスの説明ページ。山データの出典が読めないときに添える。 */
-private const val OSM_COPYRIGHT_URL = "https://www.openstreetmap.org/copyright"
+/** 山データの出典が読めないときに添える、種類ごとの著作権とライセンスの説明ページ。 */
+private val PeakDataset.copyrightUrl: String
+    get() = when (this) {
+        PeakDataset.OSM_PEAKS -> "https://www.openstreetmap.org/copyright"
+        PeakDataset.GSI_PEAKS -> "https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html"
+    }
 
 /** manifest を読み終えるまでの状態。 */
 private sealed interface CreditsLoad {
@@ -47,12 +52,13 @@ private sealed interface CreditsLoad {
 
 /**
  * 山データの出典とライセンスの画面。設定画面の「データの出典とライセンス」の行から開く。
- * 取り込み済みの山データの manifest([loadCredits])から、OSM の表示と、補足に使った資料をすべて出す
- * (manifest 版 6 は、元データも含めたすべての出典を「出典」として出す)。
- * 山データが無いときや出典が読めないときも、OpenStreetMap の著作者表示は出す。
+ * 使っている種類([dataset])の取り込み済みの山データの manifest([loadCredits])から、元データの表示と、
+ * 補足に使った資料をすべて出す(manifest 版 6 は、元データも含めたすべての出典を「出典」として出す)。
+ * 山データが無いときや出典が読めないときも、その種類の著作者表示は出す。
  */
 @Composable
 fun CreditsScreen(
+    dataset: PeakDataset,
     peakData: InstalledPeakData?,
     loadCredits: suspend () -> PeakDataCredits?,
     onBack: () -> Unit,
@@ -60,7 +66,7 @@ fun CreditsScreen(
 ) {
     BackHandler(onBack = onBack)
     // 山データを取り直したら読み直す。
-    val load by produceState<CreditsLoad>(CreditsLoad.Loading, peakData) {
+    val load by produceState<CreditsLoad>(CreditsLoad.Loading, dataset, peakData) {
         value = CreditsLoad.Loaded(if (peakData == null) null else loadCredits())
     }
     Surface(modifier.fillMaxSize()) {
@@ -80,7 +86,7 @@ fun CreditsScreen(
             SectionTitle(stringResource(R.string.credits_section_data))
             if (credits != null) {
                 CreditsCard(
-                    title = null,
+                    title = stringResource(dataset.label),
                     items = listOf(
                         R.string.credits_release to credits.releaseDate,
                         R.string.credits_license to credits.license,
@@ -107,10 +113,10 @@ fun CreditsScreen(
                     )
                 }
             } else if (load is CreditsLoad.Loaded) {
-                // 山データが無い・出典が残っていないときも、アプリが持つ OSM の表示は出す。
+                // 山データが無い・出典が残っていないときも、アプリが持つ種類ごとの表示は出す。
                 CreditsCard(
-                    title = null,
-                    items = listOf(R.string.credits_attribution to "${stringResource(R.string.credits_osm_attribution)} $OSM_COPYRIGHT_URL"),
+                    title = stringResource(dataset.label),
+                    items = listOf(R.string.credits_attribution to "${stringResource(dataset.creditsAttribution)} ${dataset.copyrightUrl}"),
                 )
                 Note(stringResource(if (peakData == null) R.string.credits_not_installed else R.string.credits_missing))
             }
