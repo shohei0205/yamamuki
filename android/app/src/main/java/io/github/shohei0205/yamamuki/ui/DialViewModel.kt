@@ -624,6 +624,23 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(peakDataList = null) }
     }
 
+    /**
+     * 選択画面で消した [d] の取り込める版を確かめ直す。開いたときの確認で最新だった種類は版を覚えていないので、
+     * そのままでは行が消えてダウンロードし直せない。カタログは使い回すので、取り直すのは manifest だけ。
+     * 選択画面を閉じているときと圏外のとき、確かめられなかったときは null。
+     */
+    private suspend fun recheckForList(d: PeakDataset): PeakDataOffer? {
+        if (_state.value.peakDataList == null || !_state.value.connected) return null
+        return try {
+            (app.peakDataUpdater(d).check(null) as? PeakDataUpdater.Check.Available)?.offer?.also { listOffers[d] = it }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "山データ(${d.id})の確認に失敗\n${e.stackTraceToString()}")
+            null
+        }
+    }
+
     /** 取得済みの種類の行。 */
     private fun installedEntries(): List<PeakDataEntry> = PeakDataset.entries.mapNotNull { d ->
         store(d).load()?.let { PeakDataEntry(d, it, updateFound = store(d).updateFound()) }
@@ -668,7 +685,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             // 取り直せなくなることがないように。
             store(d).clear()
             cacheManager.clear(d, keep = if (d == PeakDataset.OSM_PEAKS) app.savedAreas.tiles() else emptySet())
-            updateListEntry(d, listOffers[d]?.let { PeakDataEntry(d, null, it.manifest) })
+            val offer = listOffers[d] ?: recheckForList(d)
+            updateListEntry(d, offer?.let { PeakDataEntry(d, null, it.manifest) })
             if (d != dataset) return@launch
             peaks = emptyList()
             _state.update {

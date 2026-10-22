@@ -620,6 +620,21 @@ final class DialModel: ObservableObject {
         peakDataList = nil
     }
 
+    /// 選択画面で消した `d` の取り込める版を確かめ直す。開いたときの確認で最新だった種類は版を覚えていないので、
+    /// そのままでは行が消えてダウンロードし直せない。カタログは使い回すので、取り直すのは manifest だけ。
+    /// 選択画面を閉じているときと圏外のとき、確かめられなかったときは nil。
+    @MainActor private func recheckForList(_ d: PeakDataset) async -> PeakDataOffer? {
+        guard peakDataList != nil, isConnected else { return nil }
+        do {
+            guard case .available(let offer) = try await peakDataUpdaters[d]!.check(installed: nil) else { return nil }
+            listOffers[d] = offer
+            return offer
+        } catch {
+            logger.warning("山データ(\(d.id, privacy: .public))の確認に失敗: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
     /// 取得済みの種類の行。
     private func installedEntries() -> [PeakDataEntry] {
         PeakDataset.allCases.compactMap { d in
@@ -663,7 +678,9 @@ final class DialModel: ObservableObject {
             // 取り直せなくなることがないように。
             store(d).clear()
             await caches[d]!.clear(keeping: keep)
-            updateListEntry(d, listOffers[d].map { PeakDataEntry(dataset: d, installed: nil, available: $0.manifest) })
+            var offer = listOffers[d]
+            if offer == nil { offer = await recheckForList(d) }
+            updateListEntry(d, offer.map { PeakDataEntry(dataset: d, installed: nil, available: $0.manifest) })
             guard d == dataset else { return }
             peakData = nil
             peakDataNotice = nil
