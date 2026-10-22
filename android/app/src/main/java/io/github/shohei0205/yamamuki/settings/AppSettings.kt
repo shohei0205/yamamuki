@@ -31,7 +31,7 @@ data class Settings(
     val peakGroups: Set<String> = emptySet(),
     /** アプリを開いたときに、新しい山データがあるかを自動で確かめる(30 日に 1 回、取り込みはしない)。 */
     val autoCheckPeakData: Boolean = false,
-    /** 方位盤・検索・出典に使う山データの種類。設定の「使う山データ」で選ぶ。 */
+    /** 方位盤・検索・出典に使う山データの種類。設定の「山データ」で選ぶ。 */
     val peakDataset: PeakDataset = PeakDataset.DEFAULT,
 ) {
     companion object {

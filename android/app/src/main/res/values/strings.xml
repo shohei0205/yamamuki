@@ -131,7 +131,6 @@
     <string name="settings_sensor_precision_standard">標準</string>
     <string name="settings_sensor_precision_precise">高精度</string>
     <string name="settings_section_peak_data">山データ</string>
-    <string name="settings_peak_dataset">使う山データ</string>
     <string name="settings_peak_data_title">取得した山データ</string>
     <string name="settings_peak_data_none">未取得</string>
     <string name="settings_peak_data_summary">山 %1$,d 件・リリース：%2$s・取得日 %3$s</string>
@@ -145,14 +144,14 @@
     <string name="peak_dataset_osm_peaks">OpenStreetMap</string>
     <string name="peak_dataset_gsi_peaks">国土地理院</string>
     <string name="peak_data_list_title">山データの選択</string>
-    <string name="peak_data_list_description">方位盤と山の検索に使う山データを選びます。取得していない山データは、選ぶとダウンロードします。</string>
+    <string name="peak_data_list_description">利用する山データを選択します。端末に保存していない山データはダウンロードします。</string>
     <string name="peak_data_list_experimental">試験版</string>
     <string name="peak_data_list_in_use">使用中</string>
     <string name="peak_data_list_update_found">更新あり</string>
     <string name="peak_data_list_available">山 %1$,d 件・リリース：%2$s・約 %3$s</string>
     <string name="peak_data_list_available_no_release">山 %1$,d 件・約 %2$s</string>
     <string name="peak_data_list_checking">取得できる山データを確認中…</string>
-    <string name="peak_data_list_offline">インターネットに接続されていないため、取得済みの山データだけを表示しています。</string>
+    <string name="peak_data_list_offline">インターネットに接続されていないため、端末に保存済みの山データを表示しています。</string>
     <string name="peak_data_list_delete">削除</string>
     <string name="peak_data_delete_title">「%1$s」の山データを削除しますか？</string>
     <string name="peak_data_delete_message">端末に保存した山データを削除します。必要に応じて再取得できます。</string>

@@ -88,14 +88,11 @@ struct SettingsView: View {
                 }
 
                 Section(Strings.text("settings_section_peak_data")) {
+                    // 見出しが「山データ」なので、行には選んでいる山データの名前だけを出す。
                     NavigationLink {
                         PeakDataListView(model: model)
                     } label: {
-                        HStack {
-                            Text(Strings.text("settings_peak_dataset"))
-                            Spacer()
-                            Text(settings.peakDataset.label).foregroundStyle(.secondary).lineLimit(1)
-                        }
+                        Text(settings.peakDataset.label)
                     }
                     PeakDataSection(
                         data: model.peakData,

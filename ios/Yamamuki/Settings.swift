@@ -23,7 +23,7 @@ struct Settings: Codable, Equatable {
     var peakGroups: Set<String> = []
     /// アプリを開いたときに、新しい山データがあるかを自動で確かめる(30 日に 1 回、取り込みはしない)。
     var autoCheckPeakData = false
-    /// 方位盤・検索・出典に使う山データの種類。設定の「使う山データ」で選ぶ。
+    /// 方位盤・検索・出典に使う山データの種類。設定の「山データ」で選ぶ。
     var peakDataset = PeakDataset.default
 
     static let textScales = [0.85, 1.0, 1.2, 1.4]

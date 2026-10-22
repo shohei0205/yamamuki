@@ -180,11 +180,8 @@ fun SettingsScreen(
 
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_peak_data))
-            NavigationRow(
-                title = stringResource(R.string.settings_peak_dataset),
-                value = stringResource(settings.peakDataset.label),
-                onClick = onOpenPeakDataList,
-            )
+            // 見出しが「山データ」なので、行には選んでいる山データの名前だけを出す。
+            NavigationRow(title = stringResource(settings.peakDataset.label), onClick = onOpenPeakDataList)
             PeakDataSection(peakData, peakDataUpdating, peakDataNotice, onUpdatePeakData)
             SwitchRow(
                 title = stringResource(R.string.settings_peak_data_auto_check),
@@ -231,9 +228,9 @@ fun SettingsScreen(
     }
 }
 
-/** 次の画面へ進む行。右に今の値を出す。[enabled] が false のときは灰色にして押せなくする。 */
+/** 次の画面へ進む行。[value] があれば右に今の値を出す。[enabled] が false のときは灰色にして押せなくする。 */
 @Composable
-private fun NavigationRow(title: String, value: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun NavigationRow(title: String, value: String? = null, enabled: Boolean = true, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -244,7 +241,7 @@ private fun NavigationRow(title: String, value: String, enabled: Boolean = true,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+        if (value != null) Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1)
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
     }
 }

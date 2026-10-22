@@ -255,7 +255,7 @@ class SwapGsiTest(SiteTestCase):
         self.assertEqual({"osm-peaks": {"stable": STABLE_OLD}, "gsi-peaks": {"dev": GSI_DEV}}, self.tags())
         self.assertEqual(self.releases[GSI_DEV][0], (self.root / pd.manifests_dir("gsi-peaks") / f"{GSI_DEV}.json").read_bytes())
         self.assertEqual(before, pd.pointer_path(self.root).read_bytes())
-        self.assertIn("設定の「使う山データ」から選べる", "\n".join(result["body"]))
+        self.assertIn("設定の「山データ」から選べる", "\n".join(result["body"]))
 
     def test_stable_does_not_touch_pointer(self):
         before = pd.pointer_path(self.root).read_bytes()

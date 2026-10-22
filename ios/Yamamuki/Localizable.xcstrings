@@ -1262,7 +1262,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位盤と山の検索に使う山データを選びます。取得していない山データは、選ぶとダウンロードします。"
+            "value": "利用する山データを選択します。端末に保存していない山データはダウンロードします。"
           }
         }
       }
@@ -1295,7 +1295,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "インターネットに接続されていないため、取得済みの山データだけを表示しています。"
+            "value": "インターネットに接続されていないため、端末に保存済みの山データを表示しています。"
           }
         }
       }
@@ -1945,17 +1945,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "取得した山データ"
-          }
-        }
-      }
-    },
-    "settings_peak_dataset": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使う山データ"
           }
         }
       }
