@@ -1141,7 +1141,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ の山データを削除しますか？"
+            "value": "「%1$@」の山データを削除しますか？"
           }
         }
       }
@@ -1362,6 +1362,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "新しい山データが入手できます。\n%1$@\n今すぐダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "peak_data_offer_message_first": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」の山データをダウンロードできます。\n%2$@\n今すぐダウンロードしますか？"
           }
         }
       }

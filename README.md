@@ -179,7 +179,7 @@ open Yamamuki.xcodeproj
     - Android: Gradle のプロパティ `peakDataSource=dev` を付ける(例: `./gradlew :app:installDebug -PpeakDataSource=dev`。`~/.gradle/gradle.properties` に書いてもよい。既定は `current`)。`android/app/build.gradle.kts` で `BuildConfig.PEAK_DATA_DEV` になる。
     - iOS: ビルド設定 `PEAK_DATA_SOURCE` を `dev` にする(例: `xcodebuild ... PEAK_DATA_SOURCE=dev`。Xcode ではターゲットの Build Settings の User-Defined で変える。`xcodegen generate` で既定の `current` に戻る)。`ios/project.yml` で `PEAK_DATA_DEV` の条件が付く。
   - 読み先を切り替えたビルドは、前の読み先の版と違えば取り直し、保存している山データを入れ替える。
-- カタログは毎回取り直す(1 KB ほど)。指す manifest の SHA-256 が前回と同じなら、manifest は取り直さない。違えば manifest を取り、SHA-256 がカタログと合うかを確かめる。カタログが yamamuki の `<データの種類>/manifests/` 以外を指しているときは読まない。0.7.0 の `current.json` と同じく manifest の SHA-256 で比べるので、同じ manifest を指している間は、0.7.0 から上げても取り直さない。yamamuki-data の開発版を直接読むときは、manifest に前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。
+- カタログは確かめるたびに取り直す(1 KB ほど)。ただし、選択画面を開いたときのように種類ごとに続けて確かめるときは、1 分以内に取ったカタログを使い回す。指す manifest の SHA-256 が前回と同じなら、manifest は取り直さない。違えば manifest を取り、SHA-256 がカタログと合うかを確かめる。カタログが yamamuki の `<データの種類>/manifests/` 以外を指しているときは読まない。0.7.0 の `current.json` と同じく manifest の SHA-256 で比べるので、同じ manifest を指している間は、0.7.0 から上げても取り直さない。yamamuki-data の開発版を直接読むときは、manifest に前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。
 - 版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「もう一度取得」で取り直せる)。
 - カタログと参照先ファイルは `site/data/` にある。
   - `catalog.json`(カタログ): データの種類(`datasets` の `osm-peaks`・`gsi-peaks`)ごとに、`stable` と `dev` が指す manifest の URL と SHA-256 を書く。`osm-peaks` の `stable` は必須で、ほかは省略できる。アプリは、`stable`(開発用のビルドは `dev` も)のある種類を選択画面に出す。

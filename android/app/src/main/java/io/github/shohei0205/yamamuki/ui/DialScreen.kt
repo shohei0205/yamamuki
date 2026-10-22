@@ -102,6 +102,7 @@ import io.github.shohei0205.yamamuki.core.PlanOffset
 import io.github.shohei0205.yamamuki.core.HeadingFilter
 import io.github.shohei0205.yamamuki.core.Mountain
 import io.github.shohei0205.yamamuki.core.NearbyMountain
+import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.core.PeakManifest
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import io.github.shohei0205.yamamuki.core.degreeText
@@ -498,7 +499,7 @@ fun DialScreen(
 
     // 新しい山データの大きさを見せて、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
     state.peakDataOffer?.let { manifest ->
-        PeakDataOfferDialog(manifest = manifest, onAnswer = viewModel::answerPeakDataOffer)
+        PeakDataOfferDialog(manifest = manifest, first = state.peakDataOfferFirst, onAnswer = viewModel::answerPeakDataOffer)
     }
 
     // 通信の失敗は、方位を待つ表示などに隠れて気づけないことがないよう、画面中央で知らせる。
@@ -551,9 +552,12 @@ private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
     )
 }
 
-/** 新しい山データを作った日と大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。 */
+/**
+ * 新しい山データを作った日と大きさを知らせ、ダウンロードするかを聞く。どちらかを選ぶまで閉じない。
+ * まだ取得していない種類を初めて取得するとき([first])は、更新のように読めないよう、種類の名前を出して聞く。
+ */
 @Composable
-private fun PeakDataOfferDialog(manifest: PeakManifest, onAnswer: (Boolean) -> Unit) {
+private fun PeakDataOfferDialog(manifest: PeakManifest, first: PeakDataset?, onAnswer: (Boolean) -> Unit) {
     val size = byteSizeText(manifest.sizeBytes)
     // データを作った日が版の文字列から読めなければ、大きさだけを出す。
     val date = manifest.releaseDate
@@ -566,7 +570,15 @@ private fun PeakDataOfferDialog(manifest: PeakManifest, onAnswer: (Boolean) -> U
         onDismissRequest = {},
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.peak_data_offer_title)) },
-        text = { Text(stringResource(R.string.peak_data_offer_message, detail)) },
+        text = {
+            Text(
+                if (first == null) {
+                    stringResource(R.string.peak_data_offer_message, detail)
+                } else {
+                    stringResource(R.string.peak_data_offer_message_first, stringResource(first.label), detail)
+                },
+            )
+        },
         confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_offer_download)) } },
         dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_offer_later)) } },
     )

@@ -3,6 +3,7 @@ package io.github.shohei0205.yamamuki
 import android.app.Application
 import io.github.shohei0205.yamamuki.core.MountainRepository
 import io.github.shohei0205.yamamuki.core.OverpassClient
+import io.github.shohei0205.yamamuki.core.PeakCatalogCache
 import io.github.shohei0205.yamamuki.core.PeakData
 import io.github.shohei0205.yamamuki.core.PeakDataChannel
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
@@ -63,10 +64,13 @@ class YamamukiApp : Application() {
         PeakDataset.entries.associateWith { MountainRepository(remote = overpass, cache = mountainCache(it)) }
     }
 
+    /** 種類ごとの取得元で、取ったカタログを使い回す(選択画面で種類の数だけ取り直さないように)。 */
+    private val catalogCache = PeakCatalogCache()
+
     private val peakDataUpdaters: Map<PeakDataset, PeakDataUpdater> by lazy {
         PeakDataset.entries.associateWith {
             PeakDataUpdater(
-                PeakData.source(peakDataChannel, it, http, userAgent = USER_AGENT),
+                PeakData.source(peakDataChannel, it, http, userAgent = USER_AGENT, catalogCache = catalogCache),
                 mountainCache(it),
                 peakDataStores.of(it).archive,
                 dataset = it,

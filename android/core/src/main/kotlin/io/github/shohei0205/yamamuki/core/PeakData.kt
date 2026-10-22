@@ -9,6 +9,8 @@ import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.ByteArrayInputStream
 import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
@@ -168,12 +170,19 @@ object PeakData {
     const val DEV_MANIFEST_URL = "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json"
 
     /** [channel] から [dataset] の山データを読む取得元。 */
-    fun source(channel: PeakDataChannel, dataset: PeakDataset, httpClient: HttpClient, userAgent: String): PeakDataSource =
+    fun source(
+        channel: PeakDataChannel,
+        dataset: PeakDataset,
+        httpClient: HttpClient,
+        userAgent: String,
+        catalogCache: PeakCatalogCache? = null,
+    ): PeakDataSource =
         when {
-            channel == PeakDataChannel.STABLE -> CatalogPeakDataSource(httpClient, dataset, useDev = false, userAgent = userAgent)
+            channel == PeakDataChannel.STABLE ->
+                CatalogPeakDataSource(httpClient, dataset, useDev = false, userAgent = userAgent, catalogCache = catalogCache)
             channel == PeakDataChannel.DATA_DEV && dataset == PeakDataset.OSM_PEAKS ->
                 HttpPeakDataSource(httpClient, DEV_MANIFEST_URL, userAgent = userAgent)
-            else -> CatalogPeakDataSource(httpClient, dataset, useDev = true, userAgent = userAgent)
+            else -> CatalogPeakDataSource(httpClient, dataset, useDev = true, userAgent = userAgent, catalogCache = catalogCache)
         }
 
     /**
@@ -605,9 +614,12 @@ class CatalogPeakDataSource(
     private val useDev: Boolean,
     private val catalogUrl: String = PeakData.CATALOG_URL,
     private val userAgent: String = "yamamuki-android",
+    /** ほかの種類の [CatalogPeakDataSource] と、取ったカタログを使い回す。null なら毎回取る。 */
+    private val catalogCache: PeakCatalogCache? = null,
 ) : PeakDataSource {
     override suspend fun fetchManifest(etag: String?): ManifestResponse {
-        val pointer = PeakData.parseCatalog(get(catalogUrl).bodyAsText(), useDev, dataset)
+        val body = catalogCache?.get(catalogUrl) { get(catalogUrl).bodyAsText() } ?: get(catalogUrl).bodyAsText()
+        val pointer = PeakData.parseCatalog(body, useDev, dataset)
         if (pointer.manifestSha256 == etag) return ManifestResponse.NotModified
         val manifest = get(pointer.manifestUrl).readRawBytes()
         if (PeakData.sha256Hex(manifest) != pointer.manifestSha256) {
@@ -624,6 +636,30 @@ class CatalogPeakDataSource(
             throw PeakDataException("サーバーが HTTP ${response.status.value} を返しました(${url.substringAfterLast('/')})。")
         }
         return response
+    }
+}
+
+/**
+ * 取ったカタログの本文を少しの間だけ覚え、種類ごとの [CatalogPeakDataSource] で使い回す。山データの選択画面や自動の確認で、
+ * 種類の数だけカタログを取り直さないように。[maxAgeMillis] を過ぎたら取り直す。取得に失敗したときは何も覚えない。
+ */
+class PeakCatalogCache(
+    private val maxAgeMillis: Long = DEFAULT_MAX_AGE_MILLIS,
+    private val clock: () -> Long = System::currentTimeMillis,
+) {
+    private val mutex = Mutex()
+    private val entries = mutableMapOf<String, Pair<Long, String>>()
+
+    /** [url] のカタログの本文。覚えていなければ [fetch] で取る。同時に呼ばれても、取るのは 1 回にする。 */
+    suspend fun get(url: String, fetch: suspend () -> String): String = mutex.withLock {
+        val now = clock()
+        entries[url]?.takeIf { (at, _) -> now - at in 0 until maxAgeMillis }?.second
+            ?: fetch().also { entries[url] = now to it }
+    }
+
+    companion object {
+        /** 選択画面で種類ごとに確かめる間だけ使い回せればよいので、短くする。 */
+        const val DEFAULT_MAX_AGE_MILLIS = 60_000L
     }
 }
 

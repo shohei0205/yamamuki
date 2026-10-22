@@ -90,6 +90,8 @@ final class DialModel: ObservableObject {
     @Published private(set) var peakDataOffer: PeakDataOffer?
     /// `peakDataOffer` の種類。
     private var peakDataOfferDataset = PeakDataset.default
+    /// `peakDataOffer` が、まだ取得していない種類を初めて取得するものなら、その種類。更新なら nil。
+    @Published private(set) var peakDataOfferFirst: PeakDataset?
     /// ダウンロードすると答えたのに取り込めなかった版と、その種類。「もう一度取得」では確認を飛ばして、この版を取り直す。
     private var failedOffer: (dataset: PeakDataset, offer: PeakDataOffer)?
     /// 山データの選択画面の状態。開いていなければ nil。
@@ -177,6 +179,8 @@ final class DialModel: ObservableObject {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let userAgent = "yamamuki-ios/0.1 (+https://github.com/shohei0205/yamamuki)"
         let overpass = OverpassClient(userAgent: userAgent)
+        // 種類ごとの取得元で、取ったカタログを使い回す(選択画面で種類の数だけ取り直さないように)。
+        let catalogCache = PeakCatalogCache()
         var caches: [PeakDataset: FileMountainCache] = [:]
         var repositories: [PeakDataset: MountainRepository] = [:]
         var updaters: [PeakDataset: PeakDataUpdater] = [:]
@@ -190,7 +194,7 @@ final class DialModel: ObservableObject {
             stores[d] = store
             repositories[d] = MountainRepository(remote: overpass, cache: cache)
             updaters[d] = PeakDataUpdater(
-                source: PeakData.source(Self.peakDataChannel, dataset: d, userAgent: userAgent),
+                source: PeakData.source(Self.peakDataChannel, dataset: d, userAgent: userAgent, catalogCache: catalogCache),
                 cache: cache,
                 archive: store.archive,
                 dataset: d
@@ -632,16 +636,20 @@ final class DialModel: ObservableObject {
     }
 
     /// 選択画面で `d` を選んだ。取得済みならすぐ切り替え、まだなら大きさを見せてダウンロードするかを聞き、
-    /// 取り込めたら切り替える。
+    /// 取り込めたら切り替える。記録があっても保存している山が 0 件なら(削除の途中でアプリが終わったときなど)、
+    /// 空のデータに切り替えず、まだ取得していないものとして扱う。
     func choosePeakData(_ d: PeakDataset) {
-        if store(d).load() != nil {
-            updateSettings { $0.peakDataset = d }
-            return
+        Task { @MainActor in
+            if store(d).load() != nil, await caches[d]!.info().mountainCount > 0 {
+                updateSettings { $0.peakDataset = d }
+                return
+            }
+            guard let offer = listOffers[d] else { return }
+            failedOffer = nil
+            peakDataOfferDataset = d
+            peakDataOfferFirst = d
+            peakDataOffer = offer
         }
-        guard let offer = listOffers[d] else { return }
-        failedOffer = nil
-        peakDataOfferDataset = d
-        peakDataOffer = offer
     }
 
     /// `d` の山データを消す(記録・端末に残した gz・保存した山)。使っている種類なら、方位盤は「山データ未取得」の状態になる。
@@ -813,6 +821,7 @@ final class DialModel: ObservableObject {
                 peakDataUpdateFound = false
             case .available(let offer):
                 peakDataOfferDataset = d
+                peakDataOfferFirst = hasMountains && installed != nil ? nil : d
                 peakDataOffer = offer
             }
         }
@@ -822,6 +831,7 @@ final class DialModel: ObservableObject {
     func answerPeakDataOffer(download: Bool) {
         guard let offer = peakDataOffer else { return }
         peakDataOffer = nil
+        peakDataOfferFirst = nil
         if download { installPeakData(offer, dataset: peakDataOfferDataset) }
     }
 

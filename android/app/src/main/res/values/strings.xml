@@ -81,6 +81,7 @@
     <string name="peak_data_update_found">新しい山データあり</string>
     <string name="peak_data_offer_title">山データのダウンロード</string>
     <string name="peak_data_offer_message">新しい山データが入手できます。\n%1$s\n今すぐダウンロードしますか？</string>
+    <string name="peak_data_offer_message_first">「%1$s」の山データをダウンロードできます。\n%2$s\n今すぐダウンロードしますか？</string>
     <string name="peak_data_offer_detail">リリース：%1$s、約 %2$s</string>
     <string name="peak_data_offer_size">約 %1$s</string>
     <string name="peak_data_offer_download">ダウンロード</string>
@@ -153,7 +154,7 @@
     <string name="peak_data_list_checking">取得できる山データを確認中…</string>
     <string name="peak_data_list_offline">インターネットに接続されていないため、取得済みの山データだけを表示しています。</string>
     <string name="peak_data_list_delete">削除</string>
-    <string name="peak_data_delete_title">%1$s の山データを削除しますか？</string>
+    <string name="peak_data_delete_title">「%1$s」の山データを削除しますか？</string>
     <string name="peak_data_delete_message">端末に保存した山データを削除します。必要に応じて再取得できます。</string>
     <string name="peak_data_delete_message_in_use">使用中の山データです。削除すると、再取得するまで方位盤に山が表示されません。</string>
     <string name="settings_section_about">このアプリについて</string>

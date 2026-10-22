@@ -90,6 +90,8 @@ data class DialUiState(
     val peakDataUpdating: Boolean = false,
     /** 新しい山データがあり、ダウンロードするかを聞いているときの、その版の manifest(作った日と大きさを出す)。聞いていなければ null。 */
     val peakDataOffer: PeakManifest? = null,
+    /** [peakDataOffer] が、まだ取得していない種類を初めて取得するものなら、その種類。更新なら null。 */
+    val peakDataOfferFirst: PeakDataset? = null,
     /** 設定画面に出す、山データの取得の結果(「山データは最新です」など)。 */
     val peakDataNotice: String? = null,
     /** 自動の確認で新しい山データが見つかり、まだ取り込んでいない。設定で自動の確認をオンにしているときだけ方位盤に出す。 */
@@ -638,17 +640,20 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * 選択画面で [d] を選んだ。取得済みならすぐ切り替え、まだなら大きさを見せてダウンロードするかを聞き、
-     * 取り込めたら切り替える。
+     * 取り込めたら切り替える。記録があっても保存している山が 0 件なら(削除の途中でアプリが終わったときなど)、
+     * 空のデータに切り替えず、まだ取得していないものとして扱う。
      */
     fun choosePeakData(d: PeakDataset) {
-        if (store(d).load() != null) {
-            updateSettings { it.copy(peakDataset = d) }
-            return
+        viewModelScope.launch {
+            if (store(d).load() != null && app.mountainCache(d).count() > 0) {
+                updateSettings { it.copy(peakDataset = d) }
+                return@launch
+            }
+            val offer = listOffers[d] ?: return@launch
+            failedOffer = null
+            peakDataOffer = PendingOffer(d, offer)
+            _state.update { it.copy(peakDataOffer = offer.manifest, peakDataOfferFirst = d) }
         }
-        val offer = listOffers[d] ?: return
-        failedOffer = null
-        peakDataOffer = PendingOffer(d, offer)
-        _state.update { it.copy(peakDataOffer = offer.manifest) }
     }
 
     /**
@@ -781,7 +786,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 is PeakDataUpdater.Check.Available -> {
                     peakDataOffer = PendingOffer(d, check.offer)
-                    _state.update { it.copy(peakDataOffer = check.offer.manifest) }
+                    _state.update { it.copy(peakDataOffer = check.offer.manifest, peakDataOfferFirst = d.takeIf { installed == null }) }
                 }
             }
         }
@@ -791,7 +796,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun answerPeakDataOffer(download: Boolean) {
         val offer = peakDataOffer ?: return
         peakDataOffer = null
-        _state.update { it.copy(peakDataOffer = null) }
+        _state.update { it.copy(peakDataOffer = null, peakDataOfferFirst = null) }
         if (download) installPeakData(offer)
     }
 

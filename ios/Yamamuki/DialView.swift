@@ -378,7 +378,11 @@ private struct PeakDataOfferAlert: ViewModifier {
             Button(Strings.text("peak_data_offer_later"), role: .cancel) { model.answerPeakDataOffer(download: false) }
             Button(Strings.text("peak_data_offer_download")) { model.answerPeakDataOffer(download: true) }
         } message: {
-            Text(Strings.format("peak_data_offer_message", detail))
+            if let first = model.peakDataOfferFirst {
+                Text(Strings.format("peak_data_offer_message_first", first.label, detail))
+            } else {
+                Text(Strings.format("peak_data_offer_message", detail))
+            }
         }
     }
 }

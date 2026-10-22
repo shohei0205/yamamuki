@@ -149,6 +149,40 @@ final class PeakDataCatalogTests: XCTestCase {
         XCTAssertTrue(PeakData.source(.dataDev, dataset: .osmPeaks, session: stubSession(), userAgent: "test") is HTTPPeakDataSource)
     }
 
+    func testCatalogCacheSharesCatalogBetweenDatasets() async throws {
+        // 種類ごとの取得元で同じカタログを使い回し、選択画面を開くたびに種類の数だけ取り直さない。
+        let osm = Data(#"{"schemaVersion":6,"o":1}"#.utf8)
+        let gsi = Data(#"{"schemaVersion":6,"g":1}"#.utf8)
+        let gsiStable = PeakDataset.gsiPeaks.manifestUrlPrefix + "gsi-peaks-20261020T014704Z-39355286679-1.json"
+        let body = catalog(
+            stable: entry(stableUrl, PeakData.sha256Hex(osm)),
+            gsi: channels(stable: entry(gsiStable, PeakData.sha256Hex(gsi)))
+        )
+        // 失敗した取得は覚えず、次は取り直す。
+        StubProtocol.responses = [PeakData.catalogUrl: (500, Data())]
+        let now = Clock()
+        let cache = PeakCatalogCache(maxAge: 1, clock: { now.date })
+        let osmSource = PeakData.source(.stable, dataset: .osmPeaks, session: stubSession(), userAgent: "test", catalogCache: cache)
+        let gsiSource = PeakData.source(.stable, dataset: .gsiPeaks, session: stubSession(), userAgent: "test", catalogCache: cache)
+        do {
+            _ = try await osmSource.fetchManifest(etag: nil)
+            XCTFail("HTTP 500 のカタログを読みました")
+        } catch {}
+        StubProtocol.responses = [
+            PeakData.catalogUrl: (200, body),
+            URL(string: stableUrl)!: (200, osm),
+            URL(string: gsiStable)!: (200, gsi),
+        ]
+        guard case .fetched = try await osmSource.fetchManifest(etag: nil) else { return XCTFail("manifest が返ってきませんでした") }
+        guard case .fetched = try await gsiSource.fetchManifest(etag: nil) else { return XCTFail("manifest が返ってきませんでした") }
+        XCTAssertEqual(StubProtocol.requests, [PeakData.catalogUrl, PeakData.catalogUrl, URL(string: stableUrl)!, URL(string: gsiStable)!])
+        // 覚えておく時間を過ぎたら取り直す。
+        now.date = Date(timeIntervalSince1970: 1)
+        StubProtocol.requests = []
+        guard case .fetched = try await gsiSource.fetchManifest(etag: nil) else { return XCTFail("manifest が返ってきませんでした") }
+        XCTAssertEqual(StubProtocol.requests, [PeakData.catalogUrl, URL(string: gsiStable)!])
+    }
+
     func testSourceRejectsManifestWithWrongSha256() async {
         StubProtocol.responses = [
             PeakData.catalogUrl: (200, catalog(stable: entry(stableUrl, a64))),
@@ -197,4 +231,9 @@ final class PeakDataCatalogTests: XCTestCase {
             }
         }
     }
+}
+
+/// テストで進める時計。
+private final class Clock: @unchecked Sendable {
+    var date = Date(timeIntervalSince1970: 0)
 }

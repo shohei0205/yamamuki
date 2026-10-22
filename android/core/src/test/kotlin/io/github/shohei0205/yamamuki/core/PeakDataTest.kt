@@ -576,7 +576,7 @@ class PeakDataTest {
     private fun channels(stable: String?, dev: String?) =
         listOfNotNull(stable?.let { "\"stable\":$it" }, dev?.let { "\"dev\":$it" }).joinToString(",", "{", "}")
 
-    /** カタログ。osm-peaks のほかに、アプリが読まない gsi-peaks も入れておく。 */
+    /** カタログ。osm-peaks のほかに、gsi-peaks の開発版も入れておく。 */
     private fun catalog(
         stable: String? = entry(stableUrl, "a".repeat(64)),
         dev: String? = null,
@@ -766,6 +766,52 @@ class PeakDataTest {
         assertIs<ManifestResponse.Fetched>(source.fetchManifest(null))
         assertEquals(listOf(PeakData.CATALOG_URL, gsiUrl), requests)
         assertIs<HttpPeakDataSource>(PeakData.source(PeakDataChannel.DATA_DEV, PeakDataset.OSM_PEAKS, HttpClient(engine), "test"))
+    }
+
+    @Test
+    fun catalogCacheSharesCatalogBetweenDatasets() = runTest {
+        // 種類ごとの取得元で同じカタログを使い回し、選択画面を開くたびに種類の数だけ取り直さない。
+        val osm = manifest()
+        val gsi = manifestV6(fileName = "gsi-peaks.json.gz")
+        val gsiStable = PeakDataset.GSI_PEAKS.manifestUrlPrefix + "gsi-peaks-20261020T014704Z-39355286679-1.json"
+        val requests = mutableListOf<String>()
+        var failCatalog = true
+        val engine = MockEngine { request ->
+            val url = request.url.toString()
+            requests += url
+            when (url) {
+                PeakData.CATALOG_URL ->
+                    if (failCatalog) {
+                        respond("", HttpStatusCode.InternalServerError)
+                    } else {
+                        respond(
+                            catalog(
+                                stable = entry(stableUrl, sha256(osm.toByteArray())),
+                                gsi = channels(stable = entry(gsiStable, sha256(gsi.toByteArray())), dev = null),
+                            ),
+                        )
+                    }
+                stableUrl -> respond(osm)
+                gsiStable -> respond(gsi)
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        var now = 0L
+        val cache = PeakCatalogCache(maxAgeMillis = 1_000, clock = { now })
+        val client = HttpClient(engine)
+        val osmSource = PeakData.source(PeakDataChannel.STABLE, PeakDataset.OSM_PEAKS, client, "test", cache)
+        val gsiSource = PeakData.source(PeakDataChannel.STABLE, PeakDataset.GSI_PEAKS, client, "test", cache)
+        // 失敗した取得は覚えず、次は取り直す。
+        assertFailsWith<PeakDataException> { osmSource.fetchManifest(null) }
+        failCatalog = false
+        assertIs<ManifestResponse.Fetched>(osmSource.fetchManifest(null))
+        assertIs<ManifestResponse.Fetched>(gsiSource.fetchManifest(null))
+        assertEquals(listOf(PeakData.CATALOG_URL, PeakData.CATALOG_URL, stableUrl, gsiStable), requests)
+        // 覚えておく時間を過ぎたら取り直す。
+        now = 1_000
+        requests.clear()
+        assertIs<ManifestResponse.Fetched>(gsiSource.fetchManifest(null))
+        assertEquals(listOf(PeakData.CATALOG_URL, gsiStable), requests)
     }
 
     @Test

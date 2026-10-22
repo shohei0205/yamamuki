@@ -180,12 +180,14 @@ public enum PeakData {
 
     /// `channel` から `dataset` の山データを読む取得元。
     public static func source(_ channel: PeakDataChannel, dataset: PeakDataset, session: URLSession = .shared,
-                              userAgent: String) -> PeakDataSource {
+                              userAgent: String, catalogCache: PeakCatalogCache? = nil) -> PeakDataSource {
         switch channel {
-        case .stable: return CatalogPeakDataSource(session: session, dataset: dataset, useDev: false, userAgent: userAgent)
+        case .stable:
+            return CatalogPeakDataSource(session: session, dataset: dataset, useDev: false, userAgent: userAgent, catalogCache: catalogCache)
         case .dataDev where dataset == .osmPeaks:
             return HTTPPeakDataSource(session: session, manifestUrl: devManifestUrl, userAgent: userAgent)
-        case .dev, .dataDev: return CatalogPeakDataSource(session: session, dataset: dataset, useDev: true, userAgent: userAgent)
+        case .dev, .dataDev:
+            return CatalogPeakDataSource(session: session, dataset: dataset, useDev: true, userAgent: userAgent, catalogCache: catalogCache)
         }
     }
 
@@ -659,18 +661,27 @@ public struct CatalogPeakDataSource: PeakDataSource {
     private let useDev: Bool
     private let catalogUrl: URL
     private let userAgent: String
+    /// ほかの種類の `CatalogPeakDataSource` と、取ったカタログを使い回す。nil なら毎回取る。
+    private let catalogCache: PeakCatalogCache?
 
     public init(session: URLSession = .shared, dataset: PeakDataset = .osmPeaks, useDev: Bool, catalogUrl: URL = PeakData.catalogUrl,
-                userAgent: String = "yamamuki-ios") {
+                userAgent: String = "yamamuki-ios", catalogCache: PeakCatalogCache? = nil) {
         self.session = session
         self.dataset = dataset
         self.useDev = useDev
         self.catalogUrl = catalogUrl
         self.userAgent = userAgent
+        self.catalogCache = catalogCache
     }
 
     public func fetchManifest(etag: String?) async throws -> ManifestResponse {
-        let pointer = try PeakData.parseCatalog(try await get(catalogUrl), useDev: useDev, dataset: dataset)
+        let body: Data
+        if let catalogCache {
+            body = try await catalogCache.get(catalogUrl) { try await get(catalogUrl) }
+        } else {
+            body = try await get(catalogUrl)
+        }
+        let pointer = try PeakData.parseCatalog(body, useDev: useDev, dataset: dataset)
         if pointer.manifestSha256 == etag { return .notModified }
         let manifest = try await get(pointer.manifestUrl)
         guard PeakData.sha256Hex(manifest) == pointer.manifestSha256 else {
@@ -692,6 +703,39 @@ public struct CatalogPeakDataSource: PeakDataSource {
             throw PeakDataError("サーバーが HTTP \(http.map { "\($0.statusCode)" } ?? "-") を返しました(\(url.lastPathComponent))。")
         }
         return data
+    }
+}
+
+/// 取ったカタログの本文を少しの間だけ覚え、種類ごとの `CatalogPeakDataSource` で使い回す。山データの選択画面や自動の確認で、
+/// 種類の数だけカタログを取り直さないように。`maxAge` を過ぎたら取り直す。取得に失敗したときは何も覚えない。
+public actor PeakCatalogCache {
+    /// 選択画面で種類ごとに確かめる間だけ使い回せればよいので、短くする。
+    public static let defaultMaxAge: TimeInterval = 60
+
+    private let maxAge: TimeInterval
+    private let clock: @Sendable () -> Date
+    private var entries: [URL: (at: Date, body: Data)] = [:]
+    /// 取っている途中のカタログ。同時に呼ばれても、取るのは 1 回にする。
+    private var pending: [URL: Task<Data, Error>] = [:]
+
+    public init(maxAge: TimeInterval = PeakCatalogCache.defaultMaxAge, clock: @escaping @Sendable () -> Date = { Date() }) {
+        self.maxAge = maxAge
+        self.clock = clock
+    }
+
+    /// `url` のカタログの本文。覚えていなければ `fetch` で取る。
+    public func get(_ url: URL, fetch: @escaping @Sendable () async throws -> Data) async throws -> Data {
+        let now = clock()
+        if let entry = entries[url], now.timeIntervalSince(entry.at) >= 0, now.timeIntervalSince(entry.at) < maxAge {
+            return entry.body
+        }
+        if let task = pending[url] { return try await task.value }
+        let task = Task { try await fetch() }
+        pending[url] = task
+        defer { pending[url] = nil }
+        let body = try await task.value
+        entries[url] = (now, body)
+        return body
     }
 }
 
