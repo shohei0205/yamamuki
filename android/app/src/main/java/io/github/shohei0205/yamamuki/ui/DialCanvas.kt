@@ -1215,7 +1215,7 @@ internal fun rememberDialTexts(): DialTexts {
 @Composable
 private fun DialCanvasPreview() {
     fun peak(name: String, ele: Double, km: Double, bearing: Double) =
-        NearbyMountain(Mountain(name.hashCode().toLong(), name, 0.0, 0.0, ele), km, bearing)
+        NearbyMountain(Mountain(name, name, 0.0, 0.0, ele), km, bearing)
     DialCanvas(
         headingDeg = 0.0,
         mountains = listOf(
