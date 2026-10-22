@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -159,11 +160,23 @@ private fun PeakDataRow(entry: PeakDataEntry, selected: Boolean, enabled: Boolea
     ) {
         RadioButton(selected = selected, onClick = null, enabled = choosable || selected)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // 印が名前の横に入りきらないときは、印をまとめて次の行に送る(印の文字を縦に折り返さないように)。
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(stringResource(entry.dataset.label), style = MaterialTheme.typography.bodyLarge)
-                if (entry.experimental) Badge(stringResource(R.string.peak_data_list_experimental))
-                if (selected && installed != null) Badge(stringResource(R.string.peak_data_list_in_use))
-                if (entry.updateFound) Badge(stringResource(R.string.peak_data_list_update_found))
+                val badges = listOfNotNull(
+                    R.string.peak_data_list_experimental.takeIf { entry.experimental },
+                    R.string.peak_data_list_in_use.takeIf { selected && installed != null },
+                    R.string.peak_data_list_update_found.takeIf { entry.updateFound },
+                )
+                if (badges.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        badges.forEach { Badge(stringResource(it)) }
+                    }
+                }
             }
             val summary = when {
                 installed != null -> {
@@ -190,7 +203,7 @@ private fun PeakDataRow(entry: PeakDataEntry, selected: Boolean, enabled: Boolea
 @Composable
 private fun Badge(text: String) {
     Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
-        Text(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+        Text(text, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
 

@@ -107,13 +107,7 @@ private struct PeakDataRow: View {
                         .foregroundStyle(selected ? Color.accentColor : Color.secondary)
                         .font(.title3)
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            // ボタンの中は文字が強調色になるので、黒とグレーを指定する。
-                            Text(entry.dataset.label).foregroundStyle(Color.primary)
-                            if entry.experimental { Badge(text: Strings.text("peak_data_list_experimental")) }
-                            if selected && entry.installed != nil { Badge(text: Strings.text("peak_data_list_in_use")) }
-                            if entry.updateFound { Badge(text: Strings.text("peak_data_list_update_found")) }
-                        }
+                        title
                         Text(summary).font(.subheadline).foregroundStyle(Color.secondary)
                     }
                     Spacer()
@@ -130,6 +124,38 @@ private struct PeakDataRow: View {
                     .disabled(!enabled)
             }
         }
+    }
+
+    /// 名前と印。印が名前の横に入りきらないときは、印をまとめて次の行に送る(印の文字を縦に折り返さないように)。
+    /// iOS 15 は入りきるかを測れないので、印があれば常に次の行に出す。
+    @ViewBuilder private var title: some View {
+        // ボタンの中は文字が強調色になるので、黒を指定する。
+        let name = Text(entry.dataset.label).foregroundStyle(Color.primary)
+        if badges.isEmpty {
+            name
+        } else if #available(iOS 16, *) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) { name; badgeRow }
+                VStack(alignment: .leading, spacing: 4) { name; badgeRow }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 4) { name; badgeRow }
+        }
+    }
+
+    private var badgeRow: some View {
+        HStack(spacing: 6) {
+            ForEach(badges, id: \.self) { Badge(text: $0) }
+        }
+    }
+
+    /// 名前の横に出す印(試験版・使用中・更新あり)。
+    private var badges: [String] {
+        var texts: [String] = []
+        if entry.experimental { texts.append(Strings.text("peak_data_list_experimental")) }
+        if selected && entry.installed != nil { texts.append(Strings.text("peak_data_list_in_use")) }
+        if entry.updateFound { texts.append(Strings.text("peak_data_list_update_found")) }
+        return texts
     }
 
     private var summary: String {
@@ -161,6 +187,8 @@ private struct Badge: View {
     var body: some View {
         Text(text)
             .font(.caption2)
+            .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
