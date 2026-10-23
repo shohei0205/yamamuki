@@ -258,10 +258,13 @@ private fun AboutSection() {
         "${info.versionName} (${PackageInfoCompat.getLongVersionCode(info)})"
     }
     // 山データの著作者表示は方位盤と「データの出典とライセンス」の画面に出すので、ここには出さない。
-    Text(stringResource(R.string.settings_version, version), style = MaterialTheme.typography.bodyLarge)
-    // 名前は AUTHORS.md と合わせる。
-    Text(stringResource(R.string.settings_copyright), style = MaterialTheme.typography.bodyMedium)
-    Text(stringResource(R.string.settings_developers), style = MaterialTheme.typography.bodyMedium)
+    // 版・コピーライト・開発者は 1 つのまとまりに見えるよう、設定全体より行間を詰める。
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(stringResource(R.string.settings_version, version), style = MaterialTheme.typography.bodyLarge)
+        // 名前は AUTHORS.md と合わせる。
+        Text(stringResource(R.string.settings_copyright), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.settings_developers), style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 @Composable
