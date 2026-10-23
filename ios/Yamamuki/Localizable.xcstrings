@@ -1696,17 +1696,6 @@
         }
       }
     },
-    "settings_grid_style_description": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "方位線は 45° ごとの線と向いている方向の線、目盛りは円に 10° ごとの刻みを足します。"
-          }
-        }
-      }
-    },
     "settings_grid_style_none": {
       "extractionState": "manual",
       "localizations": {
@@ -1747,17 +1736,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "起動時の表示距離（km）"
-          }
-        }
-      }
-    },
-    "settings_initial_range_description": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "現在地から画面上端までの距離です。起動後もピンチ操作で変更できます。"
           }
         }
       }
@@ -1988,7 +1966,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "チェックしたグループのどれかに入る山だけを方位盤に表示します。チェックが無いときは、すべての山を表示します。"
+            "value": "選択したグループに属する山を方位盤に表示します。未選択時はすべての山を表示します。"
           }
         }
       }
