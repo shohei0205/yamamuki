@@ -109,7 +109,7 @@ struct SettingsView: View {
 
                 Section(Strings.text("settings_section_about")) {
                     // 山データの著作者表示は方位盤と「データの出典とライセンス」の画面に出すので、ここには出さない。
-                    // 版・コピーライト・開発者は 1 つのまとまりに見えるよう、罫線で区切らず 1 行にまとめる。
+                    // 版・コピーライト・開発者は 1 つのまとまりに見えるよう、罫線で区切らず 1 つのセルにまとめる。
                     VStack(alignment: .leading, spacing: 2) {
                         Text(Strings.format("settings_version", appVersion))
                         // 名前は AUTHORS.md と合わせる。
