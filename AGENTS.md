@@ -128,9 +128,10 @@ Android 版の山データの DB（Room）は、配布したあとも端末に�
 コミットの前に、変えた部分に応じて次を通す。CI（`.github/workflows/`）でも同じものを動かしている。
 
 ```bash
-# すべて: 改行コードと BOM の確認、画面の文言が文字列リソースにまとまっているかの確認
+# すべて: 改行コードと BOM の確認、画面の文言が文字列リソースにまとまっているかの確認、ソースコードの先頭の著作権とライセンスの表示の確認
 .github/scripts/check-text-format.sh
 .github/scripts/check-ui-strings.py
+.github/scripts/check-license-headers.sh
 
 # Android: core の単体テスト、アプリのビルドと単体テスト、DB のスキーマの確認（Gradle は android/ で動かす）
 (cd android && ./gradlew -p core test)
@@ -152,7 +153,7 @@ git fetch origin main && .github/scripts/peak_data.py check --base origin/main
 
 - iOS の画面を変えたら、手元で UI テストも動かす（手順は README の「iOS 版」）。CI では UI テストのビルドだけを確かめ、実行はしない。
 - CI の「Build」（Android）は、アプリの単体テストと DB のスキーマの確認（スキーマのコミット漏れと、既にある版のスキーマの書き換え）も行う。
-- CI の「Text format」は、画面の文言の確認（コードに直接書いた日本語、iOS のキーの過不足、両 OS のキーと文言のずれ）も行う。
+- CI の「Text format」は、画面の文言の確認（コードに直接書いた日本語、iOS のキーの過不足、両 OS のキーと文言のずれ）と、ソースコードの先頭の著作権とライセンスの表示の確認も行う。
 - CI の「山データの確認」は、カタログ・参照先ファイルと manifest のコピーが yamamuki-data の Release と合っているか（参照先ファイルがカタログの osm-peaks の stable と同じか、コピーが Release と同じか、`manifests/` が追加だけか、osm-peaks のデータ本体の大きさと SHA-256、`stable` の件数の減り方）を確かめる。参照先の manifest をアプリの読み込み処理で読めるかは、core の単体テスト（`SitePeakDataTest`）で確かめる。
 - CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで、「山データの確認」は `site/data/` か山データのスクリプト・ワークフローを変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
@@ -226,6 +227,20 @@ AI ツールが起こしやすい失敗を防ぐための指示。人の作業�
 - 例外として、スキルの `SKILL.md` には BOM を付けない。先頭の `---` からスキルの設定を読むため、BOM があると読めなくなるおそれがある。
 - この決まりは `.gitattributes` と `.editorconfig` に書いてある。指定のない新規ファイルは、同じディレクトリにある同じ種類のファイルに合わせる。
 - ルールどおりかは CI の「Text format」で確かめている。手元では `.github/scripts/check-text-format.sh` で確かめられる。
+
+## 著作権とライセンスの表示
+
+- Kotlin（`.kt`・`.kts`）、Swift、Python、シェルスクリプトのファイルの先頭に、次の 2 行を入れる（Python とシェルスクリプトは `//` の代わりに `#`）。新しいファイルを作るときも入れる。
+
+  ```kotlin
+  // SPDX-FileCopyrightText: 2026 The yamamuki Authors
+  // SPDX-License-Identifier: MIT
+  ```
+
+- 1 行目が `#!` か `// swift-tools-version` のファイルは、その次の行に入れる。表示のあとは空行を 1 行あける。
+- 年は最初に公開した年（2026）のまま変えない。著作権者は LICENSE と同じ「The yamamuki Authors」にする（[AUTHORS.md](AUTHORS.md) の開発者を指す）。
+- JSON などコメントを書けないファイルと、`.agents/` のスキル（それぞれのライセンスに従う）には入れない。
+- 入っているかは CI の「Text format」で確かめている。手元では `.github/scripts/check-license-headers.sh` で確かめられる。
 
 ## やってはいけないこと
 

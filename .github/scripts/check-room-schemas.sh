@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The yamamuki Authors
+# SPDX-License-Identifier: MIT
+
 # Room が書き出した DB のスキーマ(android/app/schemas/)を確かめる。:app をビルドしたあとに動かす。
 #   1. ビルドで書き出したスキーマがコミット済みのものと同じか(テーブルを変えたのにスキーマを入れ忘れていないか)
 #   2. 比べる元(引数。PR の向き先のブランチ)から、既にある版のスキーマを書き換えたり消したりしていないか

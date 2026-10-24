@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The yamamuki Authors
+# SPDX-License-Identifier: MIT
+
 """山データのカタログ（site/data/catalog.json）と参照先ファイル（site/data/osm-peaks/current.json）を差し替え・確認する。
 
 アプリ（0.8.0 から）は yamamuki の Pages の catalog.json を読み、そこに書いた osm-peaks の manifest のコピー

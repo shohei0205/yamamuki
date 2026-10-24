@@ -18,3 +18,5 @@ jobs:
         run: .github/scripts/check-text-format.sh
       - name: 画面の文言が文字列リソースにまとまっているかの確認
         run: .github/scripts/check-ui-strings.py
+      - name: 著作権とライセンスの表示の確認
+        run: .github/scripts/check-license-headers.sh

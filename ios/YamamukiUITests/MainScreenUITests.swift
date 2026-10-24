@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import XCTest
 
 /// 方位盤の画面を実際に起動して操作する UI テスト。実機でもシミュレータでも動く。

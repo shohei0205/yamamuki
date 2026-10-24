@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The yamamuki Authors
+# SPDX-License-Identifier: MIT
+
 """peak_data.py の単体テスト。通信はせず、Release の取得は差し替える。
 
 python3 -m unittest discover -s .github/scripts/tests（リポジトリの直下で実行）

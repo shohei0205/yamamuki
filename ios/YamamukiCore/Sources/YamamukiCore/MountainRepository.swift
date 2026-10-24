@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Foundation
 
 /// 山データのローカルキャッシュ。アプリでは [FileMountainCache] を使う。
