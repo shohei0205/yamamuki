@@ -630,13 +630,8 @@ class CatalogPeakDataSource(
 
     override suspend fun fetchData(url: String): ByteArray = get(url).readRawBytes()
 
-    private suspend fun get(url: String): HttpResponse {
-        val response = httpClient.get(url) { header(HttpHeaders.UserAgent, userAgent) }
-        if (!response.status.isSuccess()) {
-            throw PeakDataException("サーバーが HTTP ${response.status.value} を返しました(${url.substringAfterLast('/')})。")
-        }
-        return response
-    }
+    private suspend fun get(url: String): HttpResponse =
+        httpClient.get(url) { header(HttpHeaders.UserAgent, userAgent) }.requireSuccess(url)
 }
 
 /**
@@ -675,19 +670,18 @@ class HttpPeakDataSource(
             if (etag != null) header(HttpHeaders.IfNoneMatch, etag)
         }
         if (response.status == HttpStatusCode.NotModified) return ManifestResponse.NotModified
-        checkStatus(response, manifestUrl)
+        response.requireSuccess(manifestUrl)
         return ManifestResponse.Fetched(response.bodyAsText(), response.headers[HttpHeaders.ETag])
     }
 
-    override suspend fun fetchData(url: String): ByteArray {
-        val response = httpClient.get(url) { header(HttpHeaders.UserAgent, userAgent) }
-        checkStatus(response, url)
-        return response.readRawBytes()
-    }
+    override suspend fun fetchData(url: String): ByteArray =
+        httpClient.get(url) { header(HttpHeaders.UserAgent, userAgent) }.requireSuccess(url).readRawBytes()
+}
 
-    private fun checkStatus(response: HttpResponse, url: String) {
-        if (!response.status.isSuccess()) {
-            throw PeakDataException("サーバーが HTTP ${response.status.value} を返しました(${url.substringAfterLast('/')})。")
-        }
+/** 成功(2xx)の応答ならそのまま返す。それ以外は、[url] のファイル名を添えて [PeakDataException] にする。 */
+private fun HttpResponse.requireSuccess(url: String): HttpResponse {
+    if (!status.isSuccess()) {
+        throw PeakDataException("サーバーが HTTP ${status.value} を返しました(${url.substringAfterLast('/')})。")
     }
+    return this
 }

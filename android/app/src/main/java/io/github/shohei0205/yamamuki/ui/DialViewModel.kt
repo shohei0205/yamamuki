@@ -277,12 +277,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             if (it.viewpoint != null) next else next.withPeaksAt(point)
         }
         if (_state.value.exploring) return
-        val center = fetchedCenter
-        if (center == null ||
-            GeoMath.distanceKm(center.latitude, center.longitude, point.latitude, point.longitude) > REFETCH_DISTANCE_KM
-        ) {
-            fetch()
-        }
+        if (movedFromFetched(point)) fetch()
     }
 
     fun onZoom(zoom: Float) {
@@ -326,9 +321,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(returning = true) }
         northUpJob = viewModelScope.launch {
             try {
-                val started = System.nanoTime()
-                do {
-                    val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+                animateTurn { t ->
                     val fraction = t * t * (3 - 2 * t)
                     val target = state.value.gpsLocation ?: return@launch
                     val heading = turn.headingAt(compassHeading(), t)
@@ -337,9 +330,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                         location = target.copy(latitude = viewport.latitude, longitude = viewport.longitude),
                         exploring = t < 1.0, lockedHeading = if (t < 1.0) heading else null,
                     ) }
-                    if (t >= 1.0) break
-                    delay(16)
-                } while (true)
+                }
             } finally {
                 if (generation == returnGeneration) _state.update { it.copy(returning = false) }
             }
@@ -459,9 +450,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         )
         val turn = HeadingTurn(startHeading, target())
         northUpJob = viewModelScope.launch {
-            val started = System.nanoTime()
-            do {
-                val progress = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+            animateTurn { progress ->
                 val heading = turn.headingAt(target(), progress)
                 val next = PanGeometry.rotateViewport(
                     MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
@@ -473,11 +462,20 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                     exploring = true,
                     lockedHeading = heading,
                 ) }
-                if (progress >= 1.0) break
-                delay(16)
-            } while (true)
+            }
             fetchForViewport()
         }
+    }
+
+    /** 地図を動かす約0.5秒の間、約16ミリ秒ごとに [step] へ進み具合(0〜1)を渡す。最後は必ず 1 を渡す。 */
+    private suspend inline fun animateTurn(step: (Double) -> Unit) {
+        val started = System.nanoTime()
+        do {
+            val progress = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+            step(progress)
+            if (progress >= 1.0) break
+            delay(16)
+        } while (true)
     }
 
     fun onTransform(zoom: Float, rotationDeg: Float, previousMidpoint: PlanOffset,
@@ -501,11 +499,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun fetchForViewport() {
         val here = _state.value.location ?: return
-        val center = fetchedCenter
-        if (center == null ||
-            GeoMath.distanceKm(center.latitude, center.longitude, here.latitude, here.longitude) > REFETCH_DISTANCE_KM ||
-            DialGeometry.fetchRadiusKm(_state.value.rangeKm) > fetchedRadiusKm
-        ) fetch()
+        if (movedFromFetched(here) || DialGeometry.fetchRadiusKm(_state.value.rangeKm) > fetchedRadiusKm) fetch()
+    }
+
+    /** まだ読み込んでいないか、前回読み込んだ地点から [REFETCH_DISTANCE_KM] より離れた。 */
+    private fun movedFromFetched(p: GeoPoint): Boolean {
+        val center = fetchedCenter ?: return true
+        return GeoMath.distanceKm(center.latitude, center.longitude, p.latitude, p.longitude) > REFETCH_DISTANCE_KM
     }
 
     /** 通信エラーの知らせを閉じる。 */
@@ -590,7 +590,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         if (!connected) return
         listJob = viewModelScope.launch {
             for (d in PeakDataset.entries) {
-                val installed = store(d).load()?.takeIf { app.mountainCache(d).count() > 0 }
+                val installed = installedWithMountains(d)
                 val entry = try {
                     when (val check = app.peakDataUpdater(d).check(installed)) {
                         is PeakDataUpdater.Check.UpToDate -> {
@@ -641,6 +641,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * [d] の取り込み済みの記録。記録があっても保存している山が 0 件なら(消去の途中でアプリが終わったときなど)、
+     * まだ取得していないものとして null を返す。
+     */
+    private suspend fun installedWithMountains(d: PeakDataset): InstalledPeakData? =
+        store(d).load()?.takeIf { app.mountainCache(d).count() > 0 }
+
     /** 取得済みの種類の行。 */
     private fun installedEntries(): List<PeakDataEntry> = PeakDataset.entries.mapNotNull { d ->
         store(d).load()?.let { PeakDataEntry(d, it, updateFound = store(d).updateFound()) }
@@ -662,7 +669,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun choosePeakData(d: PeakDataset) {
         viewModelScope.launch {
-            if (store(d).load() != null && app.mountainCache(d).count() > 0) {
+            if (installedWithMountains(d) != null) {
                 updateSettings { it.copy(peakDataset = d) }
                 return@launch
             }
@@ -752,12 +759,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val here = _state.value.location ?: return
         val radius = DialGeometry.fetchRadiusKm(_state.value.rangeKm)
         viewModelScope.launch {
-            val result = repository.mountainsAround(
-                here.latitude, here.longitude, radius, allowNetwork = false,
-                ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
-            )
-            peaks = result.mountains.map { it.mountain }
-            _state.update { it.withPeaksAt(it.observer ?: here).copy(incomplete = result.incomplete) }
+            val incomplete = loadPeaks(here, radius)
+            _state.update { it.withPeaksAt(it.observer ?: here).copy(incomplete = incomplete) }
         }
     }
 
@@ -775,13 +778,22 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(loading = true) }
             // 手動移動中の連続した読み込みをまとめる。
             if (_state.value.exploring) delay(250)
-            val result = repository.mountainsAround(
-                here.latitude, here.longitude, radius, allowNetwork = false,
-                ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
-            )
-            peaks = result.mountains.map { it.mountain }
-            _state.update { it.withPeaksAt(it.observer ?: here).copy(loading = false, incomplete = result.incomplete) }
+            val incomplete = loadPeaks(here, radius)
+            _state.update { it.withPeaksAt(it.observer ?: here).copy(loading = false, incomplete = incomplete) }
         }
+    }
+
+    /**
+     * [here] から [radius] の範囲の山を保存済みのデータから読み、方位盤に出す候補にする(通信はしない)。
+     * 範囲内に一度も取得できていない地域があれば true を返す。
+     */
+    private suspend fun loadPeaks(here: GeoPoint, radius: Double): Boolean {
+        val result = repository.mountainsAround(
+            here.latitude, here.longitude, radius, allowNetwork = false,
+            ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
+        )
+        peaks = result.mountains.map { it.mountain }
+        return result.incomplete
     }
 
     /**
@@ -793,9 +805,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         failedOffer = null
         runPeakDataTask {
             // 画面の状態ではなく保存した記録を使う(キャッシュが作り直されて記録が消えていることがある)。
-            // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
             val d = dataset
-            val installed = store(d).load()?.takeIf { app.mountainCache(d).count() > 0 }
+            val installed = installedWithMountains(d)
             when (val check = app.peakDataUpdater(d).check(installed)) {
                 is PeakDataUpdater.Check.UpToDate -> {
                     store(d).save(check.installed)
