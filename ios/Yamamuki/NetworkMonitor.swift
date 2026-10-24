@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Network
 
 /// 端末が通信できる状態か(圏外・機内モードでないか)を流す。

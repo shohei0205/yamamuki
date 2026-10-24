@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Foundation
 
 /// 地点の `tags`(「日本百名山」などの分類ラベル)で分けた山のグループ。

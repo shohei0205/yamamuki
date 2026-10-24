@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Foundation
 
 /// 端末に残した、取り込んだときの manifest とデータ本体(gz)の組。

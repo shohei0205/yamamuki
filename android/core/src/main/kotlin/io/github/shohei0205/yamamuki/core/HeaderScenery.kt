@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 /** 2 次ベジェ曲線の 1 区間。始点は前の区間の終点。座標は dp。 */

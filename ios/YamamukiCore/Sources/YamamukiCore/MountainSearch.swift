@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Foundation
 
 /// 山の検索。山名・よみがな・別名のどれかに、入力した文字を含む山を探す。先頭が一致した山を先に並べる。

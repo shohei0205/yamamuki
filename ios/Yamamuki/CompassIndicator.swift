@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import SwiftUI
 
 /// 表示中の地図に対する北の方向。方位が未取得の間は針を出さない。

@@ -263,7 +263,7 @@ Android 版では、山データのキャッシュと、事前ダウンロード
 
 ## ライセンス
 
-ソースコードは [MIT License](LICENSE) で公開する。著作権者の「The yamamuki Authors」は [AUTHORS.md](AUTHORS.md) に載せた開発者を指す。
+ソースコードは [MIT License](LICENSE) で公開する。著作権者の「The yamamuki Authors」は [AUTHORS.md](AUTHORS.md) に載せた開発者を指す。ソースコードの各ファイルの先頭には、著作権とライセンスを [SPDX](https://spdx.dev/) の形式（`SPDX-FileCopyrightText` と `SPDX-License-Identifier`）で書いている。
 
 アプリ名「山むき」とアプリアイコン（`android/app/src/main/res/drawable/ic_launcher_*.xml`、`ios/Yamamuki/Assets.xcassets/AppIcon.appiconset/`、`docs/images/app-icon.png`）は MIT License の対象外とする。コードを使って別のアプリを配布するときは、別の名前とアイコンを使う。利用者が公式のアプリと取り違えないようにするため。
 

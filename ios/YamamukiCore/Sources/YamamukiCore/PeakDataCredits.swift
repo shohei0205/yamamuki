@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Foundation
 
 /// 取り込み済みの山データの出典とライセンス。設定の「データの出典とライセンス」に出す。

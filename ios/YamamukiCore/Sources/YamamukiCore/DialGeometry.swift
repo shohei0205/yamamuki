@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Foundation
 
 /// 方位盤の平面図の計算。現在地を原点とし、端末を向けている方位を画面の上方向とする。
