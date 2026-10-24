@@ -62,7 +62,7 @@ final class MainScreenUITests: XCTestCase {
     /// 初回起動の確認に答える。山データの取得と位置情報の許可は 1 度答えると出なくなる。
     /// 山データの取得には「あとで」で答え、テストのたびに通信しないようにする。
     private func answerFirstLaunchPrompts() {
-        let peakData = app.alerts["山データを取得"]
+        let peakData = app.alerts["山データをダウンロードします"]
         if peakData.waitForExistence(timeout: 2) {
             peakData.buttons["あとで"].tap()
         }
@@ -80,7 +80,7 @@ final class MainScreenUITests: XCTestCase {
 
     /// 通信に失敗したときのアラートが出ていると、下のボタンを押せないので閉じる。
     private func dismissFetchErrorIfShown() {
-        let error = app.alerts["山データを取得できませんでした"]
+        let error = app.alerts["山データをダウンロードできませんでした"]
         if error.exists {
             error.buttons["閉じる"].tap()
         }
