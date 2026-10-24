@@ -59,16 +59,14 @@ struct SettingsView: View {
                         title: Strings.text("settings_grid_style"),
                         options: GridStyle.allCases,
                         selected: settings.gridStyle,
-                        label: { $0.label },
-                        description: Strings.text("settings_grid_style_description")
+                        label: { $0.label }
                     ) { v in model.updateSettings { $0.gridStyle = v } }
                     Choice(
                         title: Strings.text("settings_initial_range"),
                         options: Settings.initialRangesKm,
                         selected: settings.initialRangeKm,
                         // 6 つ並ぶと「10km」が収まらないので、単位は見出しに出す。
-                        label: { "\($0)" },
-                        description: Strings.text("settings_initial_range_description")
+                        label: { "\($0)" }
                     ) { v in model.updateSettings { $0.initialRangeKm = v } }
                 }
 
@@ -199,7 +197,6 @@ private struct Choice<T: Hashable>: View {
     let options: [T]
     let selected: T
     let label: (T) -> String
-    var description: String?
     let onSelect: (T) -> Void
 
     var body: some View {
@@ -212,9 +209,6 @@ private struct Choice<T: Hashable>: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            if let description {
-                Text(description).font(.footnote).foregroundStyle(.secondary)
-            }
         }
     }
 }

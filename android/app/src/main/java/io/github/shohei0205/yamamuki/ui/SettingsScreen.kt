@@ -146,7 +146,6 @@ fun SettingsScreen(
                 options = GridStyle.entries,
                 selected = settings.gridStyle,
                 label = { stringResource(it.label) },
-                description = stringResource(R.string.settings_grid_style_description),
                 onSelect = { v -> onSettingsChange { it.copy(gridStyle = v) } },
             )
             Choice(
@@ -155,7 +154,6 @@ fun SettingsScreen(
                 selected = settings.initialRangeKm,
                 // 6 つ並ぶと「10km」が収まらないので、単位は見出しに出す。
                 label = { "$it" },
-                description = stringResource(R.string.settings_initial_range_description),
                 onSelect = { v -> onSettingsChange { it.copy(initialRangeKm = v) } },
             )
 
@@ -328,7 +326,6 @@ private fun <T> Choice(
     selected: T,
     label: @Composable (T) -> String,
     onSelect: (T) -> Unit,
-    description: String? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
@@ -342,7 +339,6 @@ private fun <T> Choice(
                 ) { Text(label(option), maxLines = 1) }
             }
         }
-        if (description != null) Text(description, style = MaterialTheme.typography.bodySmall)
     }
 }
 
