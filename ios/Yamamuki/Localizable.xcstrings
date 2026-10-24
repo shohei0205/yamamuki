@@ -683,17 +683,6 @@
         }
       }
     },
-    "dial_heading": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@向きです"
-          }
-        }
-      }
-    },
     "dial_heading_accuracy_low": {
       "extractionState": "manual",
       "localizations": {

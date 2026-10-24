@@ -18,7 +18,6 @@
     <string name="dial_heading_accuracy_low">方位が不安定です。端末を8の字に動かしてください</string>
     <string name="dial_area_download">山データの事前ダウンロード</string>
     <string name="dial_others">ほか %1$d 山</string>
-    <string name="dial_heading">%1$s向きです</string>
     <string name="dial_heading_loading">方位を確認しています</string>
     <string name="dial_altitude">\u3000標高 %1$,dm</string>
     <string name="dial_status_locating">現在地を確認中…</string>

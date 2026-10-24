@@ -738,7 +738,7 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
 private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Float) {
     val texts = rememberDialTexts()
     val parts = headingDeg?.let { texts.readoutParts(it, altitudeM) }
-    val heading = if (parts == null) stringResource(R.string.dial_heading_loading) else stringResource(R.string.dial_heading, parts.first)
+    val heading = if (parts == null) stringResource(R.string.dial_heading_loading) else parts.first
     val text = buildAnnotatedString {
         append(heading)
         if (parts != null) withStyle(SpanStyle(color = TapeSubtle)) { append(parts.second) }
@@ -772,7 +772,7 @@ private fun ViewpointLabel(mountain: Mountain, headingDeg: Double?, textScale: F
         if (mountain.longitude >= 0) R.string.detail_longitude_east else R.string.detail_longitude_west,
         degreeText(mountain.longitude),
     )
-    val heading = headingDeg?.let { stringResource(R.string.dial_heading, texts.readoutParts(it, null).first) }
+    val heading = headingDeg?.let { texts.readoutParts(it, null).first }
         ?: stringResource(R.string.dial_heading_loading)
     val elevation = elevationListLabel(mountain.elevationM)
     val boardShape = RoundedCornerShape(6.dp)

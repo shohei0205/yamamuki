@@ -278,7 +278,7 @@ struct DialView: View {
     private var headingLabel: some View {
         let parts = model.heading.map { readoutParts(headingDeg: $0, altitudeM: model.observer?.mslAltitudeM) }
         let text = parts.map {
-            Text(Strings.format("dial_heading", $0.direction)).foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle)
+            Text($0.direction).foregroundColor(tapeInk) + Text($0.altitude).foregroundColor(tapeSubtle)
         } ?? Text(Strings.text("dial_heading_loading")).foregroundColor(tapeInk)
         return text
             .font(.system(size: 15 * model.settings.textScale, weight: .bold))
@@ -576,7 +576,7 @@ private struct ViewpointLabel: View {
     var body: some View {
         let lat = Strings.format(mountain.latitude >= 0 ? "detail_latitude_north" : "detail_latitude_south", degreeText(mountain.latitude))
         let lon = Strings.format(mountain.longitude >= 0 ? "detail_longitude_east" : "detail_longitude_west", degreeText(mountain.longitude))
-        let heading = headingDeg.map { Strings.format("dial_heading", readoutParts(headingDeg: $0, altitudeM: nil).direction) }
+        let heading = headingDeg.map { readoutParts(headingDeg: $0, altitudeM: nil).direction }
             ?? Strings.text("dial_heading_loading")
         let board = RoundedRectangle(cornerRadius: 6)
         VStack(alignment: .leading, spacing: 0) {
