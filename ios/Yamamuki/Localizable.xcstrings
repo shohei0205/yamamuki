@@ -700,7 +700,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位を確認しています"
+            "value": "方位を確認中…"
           }
         }
       }
