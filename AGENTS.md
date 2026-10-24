@@ -1,7 +1,7 @@
 ﻿# 開発ルール（Claude / Codex / Cursor 共通）
 
 このリポジトリで AI エージェント（Claude Code、Codex、Cursor など）が作業するときの共通ルール。人が作業するときも同じルールに従う。
-アプリの機能・構成・ビルド手順の詳細は [README.md](README.md) にある。ここには作業の進め方だけを書く。
+アプリの構成・ビルド手順は [README.md](README.md)、機能の詳しい仕様は [docs/](docs/) にある。ここには作業の進め方だけを書く。
 
 ## プロジェクトの概要
 
@@ -18,6 +18,7 @@
 | `ios/Yamamuki/` | iOS アプリ（画面、位置と方位の取得、設定） |
 | `ios/YamamukiUITests/` | iOS アプリの画面を操作する UI テスト（XCUITest） |
 | `ios/project.yml` | XcodeGen の設定。`ios/Yamamuki.xcodeproj` はここから生成する |
+| `docs/` | アプリの詳しい仕様（画面・山データ・設定・キャッシュなど）と、開発中に分かったことの記録 |
 | `site/` | GitHub Pages で公開するページ（プライバシーポリシー、山データのカタログと参照先ファイル `data/`）。main に入ると `.github/workflows/pages.yml` で公開する |
 
 ## 言葉づかい
@@ -109,7 +110,7 @@ Co-authored-by: Codex GPT-6
 
 - 機能の追加や不具合の修正は、特に指示がなければ Android と iOS の両方に同じ動作で入れる。片方だけにするときは PR の説明にそう書く。
 - `android/core/`（Kotlin）と `ios/YamamukiCore/`（Swift）は同じロジックの移植。片方を変えたらもう片方も同じに変え、テストも両方に足す。
-- 両 OS の違いは端末の機能による差だけにする。違いを増やしたら README の「Android 版と iOS 版の違い」を更新する。
+- 両 OS の違いは端末の機能による差だけにする。違いを増やしたら [docs/platform-differences.md](docs/platform-differences.md)（Android 版と iOS 版の違い）を更新する。
 
 ## DB の版と移行
 
@@ -216,7 +217,7 @@ AI ツールが起こしやすい失敗を防ぐための指示。人の作業�
 
 ## ドキュメント
 
-- 画面・設定項目・キャッシュの仕組み・ビルド手順を変えたら、同じ PR で README.md も更新する。
+- 画面・設定項目・キャッシュの仕組みを変えたら、同じ PR で `docs/` の仕様のページも更新する。ビルド手順を変えたら README.md を更新する。
 - CI で確かめる内容を変えたら、同じ PR でこのファイルの「変更の確かめ方」も更新する。
 - このファイルのルールを変えたら、同じ PR で理由を説明する。
 
