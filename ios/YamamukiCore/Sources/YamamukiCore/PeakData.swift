@@ -197,10 +197,7 @@ public enum PeakData {
         guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
             throw PeakDataError("山データのカタログを読めません")
         }
-        // JSONSerialization は true / false も NSNumber で返すので、整数だけを通す。
-        let number = root["schemaVersion"] as? NSNumber
-        let schemaVersion = number.flatMap { CFGetTypeID($0) == CFBooleanGetTypeID() ? nil : $0 }
-            .flatMap { $0.doubleValue == $0.doubleValue.rounded() ? $0.intValue : nil }
+        let schemaVersion = jsonInt(root["schemaVersion"])
         guard schemaVersion == catalogSchemaVersion else {
             throw PeakDataError("このアプリが読めない形式の山データのカタログです(形式の版 \(schemaVersion.map(String.init) ?? "不明"))。アプリを更新してください。")
         }
@@ -225,6 +222,18 @@ public enum PeakData {
             throw PeakDataError("山データのカタログの \(id) の \(channel) の manifestSha256 が SHA-256 ではありません")
         }
         return PeakDataPointer(manifestUrl: manifestUrl, manifestSha256: sha256)
+    }
+
+    /// JSON の数。JSONSerialization は true / false も NSNumber で返すので、真偽値は数として扱わない。
+    static func jsonNumber(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        return number.doubleValue
+    }
+
+    /// JSON の整数。小数と真偽値は nil。
+    static func jsonInt(_ value: Any?) -> Int? {
+        guard let number = jsonNumber(value), number == number.rounded() else { return nil }
+        return (value as? NSNumber)?.intValue
     }
 
     /// カタログが指してよい manifest のファイル名(Release のタグ + .json)か。
@@ -292,12 +301,10 @@ public enum PeakData {
         }
         /// `object`(省略時は manifest 全体)の `key` の整数。エラーの文には `label`(省略時は `key`)を出す。
         func int(_ key: String, in object: [String: Any]? = nil, label: String? = nil) throws -> Int {
-            // JSONSerialization は true / false も NSNumber で返すので、整数だけを通す。
-            guard let number = (object ?? root)[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
-                  number.doubleValue == number.doubleValue.rounded() else {
+            guard let value = jsonInt((object ?? root)[key]) else {
                 throw PeakDataError("manifest の \(label ?? key) が整数ではありません")
             }
-            return number.intValue
+            return value
         }
 
         let schemaVersion = try int("schemaVersion")
@@ -475,12 +482,7 @@ public enum PeakData {
     private static func graphic(_ value: Any?) -> PointGraphic? {
         guard let g = value as? [String: Any], let svg = g["svg"] as? String,
               !svg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, svg.utf8.count <= maxSvgBytes else { return nil }
-        var scale = 1.0
-        // JSONSerialization は true / false も NSNumber で返すので、数だけを通す。
-        if let number = g["scale"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
-           number.doubleValue.isFinite, number.doubleValue > 0 {
-            scale = number.doubleValue
-        }
+        let scale = jsonNumber(g["scale"]).flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? 1.0
         return PointGraphic(svg: svg, scale: scale)
     }
 
@@ -698,10 +700,7 @@ public struct CatalogPeakDataSource: PeakDataSource {
         // 差し替えたばかりのカタログを古いまま読まないよう、端末の HTTP キャッシュは使わない。
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let (data, response) = try await session.data(for: request)
-        let http = response as? HTTPURLResponse
-        guard let status = http?.statusCode, (200..<300).contains(status) else {
-            throw PeakDataError("サーバーが HTTP \(http.map { "\($0.statusCode)" } ?? "-") を返しました(\(url.lastPathComponent))。")
-        }
+        try PeakData.requireSuccess(response as? HTTPURLResponse, url)
         return data
     }
 }
@@ -760,7 +759,7 @@ public struct HTTPPeakDataSource: PeakDataSource {
         let (data, response) = try await session.data(for: request)
         let http = response as? HTTPURLResponse
         if http?.statusCode == 304 { return .notModified }
-        try check(http, manifestUrl)
+        try PeakData.requireSuccess(http, manifestUrl)
         return .fetched(body: data, etag: http?.value(forHTTPHeaderField: "ETag"))
     }
 
@@ -768,11 +767,14 @@ public struct HTTPPeakDataSource: PeakDataSource {
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: request)
-        try check(response as? HTTPURLResponse, url)
+        try PeakData.requireSuccess(response as? HTTPURLResponse, url)
         return data
     }
+}
 
-    private func check(_ response: HTTPURLResponse?, _ url: URL) throws {
+extension PeakData {
+    /// 成功(2xx)の応答か確かめる。それ以外は、`url` のファイル名を添えて `PeakDataError` にする。
+    static func requireSuccess(_ response: HTTPURLResponse?, _ url: URL) throws {
         guard let status = response?.statusCode, (200..<300).contains(status) else {
             throw PeakDataError("サーバーが HTTP \(response.map { "\($0.statusCode)" } ?? "-") を返しました(\(url.lastPathComponent))。")
         }

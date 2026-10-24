@@ -262,11 +262,7 @@ final class DialModel: ObservableObject {
         if viewpoint == nil { updatePeaks(at: point) }
         guard !exploring else { return }
         location = point
-        if let center = fetchedCenter,
-           GeoMath.distanceKm(center.latitude, center.longitude, point.latitude, point.longitude) <= Self.refetchDistanceKm {
-            return
-        }
-        fetch()
+        if movedFromFetched(point) { fetch() }
     }
 
     private func onConnectivity(_ connected: Bool) {
@@ -331,23 +327,33 @@ final class DialModel: ObservableObject {
         let range = rangeKm
         beginExploring()
         northUpTask = Task { @MainActor [weak self] in
-            let started = ProcessInfo.processInfo.systemUptime
             var turn = HeadingTurn(start: startHeading, target: facingDevice ? self?.heading ?? startHeading : 0)
-            while !Task.isCancelled {
-                guard let self else { return }
-                let progress = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
-                let nextHeading = turn.heading(target: facingDevice ? heading ?? startHeading : 0, progress: progress)
+            let finished = await Self.animateTurn { progress in
+                guard let self else { return false }
+                let nextHeading = turn.heading(target: facingDevice ? self.heading ?? startHeading : 0, progress: progress)
                 let next = PanGeometry.rotateViewport(MapCenter(observer.latitude, observer.longitude),
                     viewport: MapCenter(viewport.latitude, viewport.longitude), heading: startHeading,
                     nextHeading: nextHeading, rangeKm: range, canvasHeight: canvasHeight, aroundCenter: aroundCenter)
-                location = next == MapCenter(viewport.latitude, viewport.longitude) ? viewport
+                self.location = next == MapCenter(viewport.latitude, viewport.longitude) ? viewport
                     : GeoPoint(latitude: next.latitude, longitude: next.longitude, mslAltitudeM: nil)
-                lockedHeading = nextHeading
-                if progress >= 1 { break }
-                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
+                self.lockedHeading = nextHeading
+                return true
             }
-            if !Task.isCancelled { self?.fetchForViewport() }
+            if finished { self?.fetchForViewport() }
         }
+    }
+
+    /// 地図を動かす約0.5秒の間、約16ミリ秒ごとに `step` へ進み具合(0〜1)を渡す。最後は 1 を渡す。
+    /// `step` が false を返すか取り消されたら途中でやめて false を、最後まで動かしたら true を返す。
+    @MainActor private static func animateTurn(_ step: @MainActor (Double) -> Bool) async -> Bool {
+        let started = ProcessInfo.processInfo.systemUptime
+        while !Task.isCancelled {
+            let progress = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
+            guard step(progress) else { return false }
+            if progress >= 1 { return !Task.isCancelled }
+            do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return false }
+        }
+        return false
     }
 
     func onTransform(zoom: Double, rotation: Double, previous: PlanOffset, midpoint: PlanOffset, chartHeight: Double) {
@@ -379,23 +385,20 @@ final class DialModel: ObservableObject {
         returning = true
         northUpTask = Task { @MainActor [weak self] in
             defer { if self?.returnGeneration == generation { self?.returning = false } }
-            let started = ProcessInfo.processInfo.systemUptime
             // 回している間に端末の向きが戻り先の真後ろをまたいでも、途中で逆回りしないようにする。
             var turn = HeadingTurn(start: startHeading, target: self?.heading ?? startHeading)
-            while !Task.isCancelled {
-                guard let self, let target = gpsLocation else { return }
-                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.5)
+            let finished = await Self.animateTurn { t in
+                guard let self, let target = self.gpsLocation else { return false }
                 let fraction = t * t * (3 - 2 * t)
-                let nextHeading = turn.heading(target: heading ?? startHeading, progress: t)
+                let nextHeading = turn.heading(target: self.heading ?? startHeading, progress: t)
                 let viewport = PanGeometry.returnViewport(MapCenter(target.latitude, target.longitude),
                     initialOffset: initialOffset, heading: nextHeading, fraction: fraction)
-                location = GeoPoint(latitude: viewport.latitude, longitude: viewport.longitude, mslAltitudeM: target.mslAltitudeM)
-                lockedHeading = t < 1 ? nextHeading : nil
-                exploring = t < 1
-                if t >= 1 { break }
-                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
+                self.location = GeoPoint(latitude: viewport.latitude, longitude: viewport.longitude, mslAltitudeM: target.mslAltitudeM)
+                self.lockedHeading = t < 1 ? nextHeading : nil
+                self.exploring = t < 1
+                return true
             }
-            if !Task.isCancelled { self?.fetch() }
+            if finished { self?.fetch() }
         }
     }
 
@@ -485,10 +488,13 @@ final class DialModel: ObservableObject {
 
     private func fetchForViewport() {
         guard let here = location else { return }
-        if let center = fetchedCenter,
-           GeoMath.distanceKm(center.latitude, center.longitude, here.latitude, here.longitude) <= Self.refetchDistanceKm,
-           DialGeometry.fetchRadiusKm(rangeKm) <= fetchedRadiusKm { return }
-        fetch()
+        if movedFromFetched(here) || DialGeometry.fetchRadiusKm(rangeKm) > fetchedRadiusKm { fetch() }
+    }
+
+    /// まだ読み込んでいないか、前回読み込んだ地点から `refetchDistanceKm` より離れた。
+    private func movedFromFetched(_ p: GeoPoint) -> Bool {
+        guard let center = fetchedCenter else { return true }
+        return GeoMath.distanceKm(center.latitude, center.longitude, p.latitude, p.longitude) > Self.refetchDistanceKm
     }
 
     /// 通信エラーの知らせを閉じる。
@@ -583,8 +589,7 @@ final class DialModel: ObservableObject {
             for d in PeakDataset.allCases {
                 guard let self, !Task.isCancelled else { return }
                 let store = store(d)
-                let hasMountains = await caches[d]!.info().mountainCount > 0
-                let installed = hasMountains ? store.load() : nil
+                let installed = await installedWithMountains(d)
                 var entry: PeakDataEntry?
                 do {
                     switch try await peakDataUpdaters[d]!.check(installed: installed) {
@@ -635,6 +640,13 @@ final class DialModel: ObservableObject {
         }
     }
 
+    /// `d` の取り込み済みの記録。記録があっても保存している山が 0 件なら(消去の途中でアプリが終わったときなど)、
+    /// まだ取得していないものとして nil を返す。
+    @MainActor private func installedWithMountains(_ d: PeakDataset) async -> InstalledPeakData? {
+        guard let installed = store(d).load(), await caches[d]!.info().mountainCount > 0 else { return nil }
+        return installed
+    }
+
     /// 取得済みの種類の行。
     private func installedEntries() -> [PeakDataEntry] {
         PeakDataset.allCases.compactMap { d in
@@ -655,7 +667,7 @@ final class DialModel: ObservableObject {
     /// 空のデータに切り替えず、まだ取得していないものとして扱う。
     func choosePeakData(_ d: PeakDataset) {
         Task { @MainActor in
-            if store(d).load() != nil, await caches[d]!.info().mountainCount > 0 {
+            if await installedWithMountains(d) != nil {
                 updateSettings { $0.peakDataset = d }
                 return
             }
@@ -708,13 +720,8 @@ final class DialModel: ObservableObject {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let result = try await repository.mountainsAround(
-                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false,
-                    ignoreMissing: PeakData.ignoresMissing(latitude: here.latitude, longitude: here.longitude)
-                )
-                peaks = result.mountains.map(\.mountain)
+                incomplete = try await loadPeaks(around: here, radiusKm: radius)
                 updatePeaks(at: observer ?? here)
-                incomplete = result.incomplete
             } catch {
                 logger.error("山データの読み直しに失敗: \(String(describing: error), privacy: .public)")
             }
@@ -735,15 +742,8 @@ final class DialModel: ObservableObject {
             do {
                 // 手動移動中の連続した読み込みをまとめる。
                 if exploring { try await Task.sleep(nanoseconds: 250_000_000) }
-                let result = try await repository.mountainsAround(
-                    latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false,
-                    ignoreMissing: PeakData.ignoresMissing(latitude: here.latitude, longitude: here.longitude)
-                )
-                // 新しい読み込みに置き換わっていたら、古い結果で上書きしない。
-                guard !Task.isCancelled else { return }
-                peaks = result.mountains.map(\.mountain)
+                incomplete = try await loadPeaks(around: here, radiusKm: radius)
                 updatePeaks(at: observer ?? here)
-                incomplete = result.incomplete
                 loading = false
             } catch {
                 guard !Task.isCancelled else { return }
@@ -751,6 +751,19 @@ final class DialModel: ObservableObject {
                 loading = false
             }
         }
+    }
+
+    /// `here` から `radius` の範囲の山を保存済みのデータから読み、方位盤に出す候補にする(通信はしない)。
+    /// 範囲内に一度も取得できていない地域があれば true を返す。
+    /// 新しい読み込みに置き換わって取り消されていたら、古い結果で上書きせずに CancellationError を投げる。
+    @MainActor private func loadPeaks(around here: GeoPoint, radiusKm radius: Double) async throws -> Bool {
+        let result = try await repository.mountainsAround(
+            latitude: here.latitude, longitude: here.longitude, radiusKm: radius, allowNetwork: false,
+            ignoreMissing: PeakData.ignoresMissing(latitude: here.latitude, longitude: here.longitude)
+        )
+        try Task.checkCancellation()
+        peaks = result.mountains.map(\.mountain)
+        return result.incomplete
     }
 
     /// アプリの更新で山データの読み込み処理が新しくなっていたら、残した gz から通信せずに保存データを作り直す。
@@ -832,11 +845,9 @@ final class DialModel: ObservableObject {
     func updatePeakData() {
         failedOffer = nil
         let d = dataset
-        let installed = store(d).load()
         runPeakDataTask { [self] in
-            // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
-            let hasMountains = await caches[d]!.info().mountainCount > 0
-            switch try await peakDataUpdaters[d]!.check(installed: hasMountains ? installed : nil) {
+            let installed = await installedWithMountains(d)
+            switch try await peakDataUpdaters[d]!.check(installed: installed) {
             case .upToDate(let latest):
                 store(d).save(latest)
                 store(d).saveUpdateFound(false)
@@ -845,7 +856,7 @@ final class DialModel: ObservableObject {
                 peakDataUpdateFound = false
             case .available(let offer):
                 peakDataOfferDataset = d
-                peakDataOfferFirst = hasMountains && installed != nil ? nil : d
+                peakDataOfferFirst = installed == nil ? d : nil
                 peakDataOffer = offer
             }
         }
