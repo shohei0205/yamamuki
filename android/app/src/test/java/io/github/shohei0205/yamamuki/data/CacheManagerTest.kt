@@ -1,8 +1,12 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.data
 
 import android.app.Application
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.core.Tile
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -43,11 +47,14 @@ class CacheManagerTest {
     @Test
     fun clearShrinksDatabaseFile() = runBlocking {
         insertMountains(tile = Tile(35, 138), count = 20_000)
-        val before = cacheManager.info()
+        // ほかの種類の山は消さない。
+        insertMountains(tile = Tile(35, 138), count = 10, dataset = PeakDataset.GSI_PEAKS)
+        val before = cacheManager.info(PeakDataset.OSM_PEAKS)
 
-        cacheManager.clear()
+        cacheManager.clear(PeakDataset.OSM_PEAKS)
 
-        val after = cacheManager.info()
+        val after = cacheManager.info(PeakDataset.OSM_PEAKS)
+        assertEquals(10, cacheManager.info(PeakDataset.GSI_PEAKS).mountainCount)
         assertEquals(0, after.mountainCount)
         assertEquals(0, after.tileCount)
         assertTrue(
@@ -61,11 +68,11 @@ class CacheManagerTest {
         val removed = Tile(35, 138)
         insertMountains(tile = removed, count = 20_000)
         insertMountains(tile = Tile(36, 139), count = 10, firstId = 100_000)
-        val before = cacheManager.info()
+        val before = cacheManager.info(PeakDataset.OSM_PEAKS)
 
-        cacheManager.removeTiles(listOf(removed))
+        cacheManager.removeTiles(PeakDataset.OSM_PEAKS, listOf(removed))
 
-        val after = cacheManager.info()
+        val after = cacheManager.info(PeakDataset.OSM_PEAKS)
         assertEquals(10, after.mountainCount)
         assertEquals(1, after.tileCount)
         assertTrue(
@@ -74,12 +81,13 @@ class CacheManagerTest {
         )
     }
 
-    private suspend fun insertMountains(tile: Tile, count: Int, firstId: Long = 1) {
+    private suspend fun insertMountains(tile: Tile, count: Int, firstId: Long = 1, dataset: PeakDataset = PeakDataset.OSM_PEAKS) {
         val dao = database.mountainDao()
         dao.insertMountains(
             (0 until count).map { i ->
                 MountainEntity(
-                    osmId = firstId + i,
+                    dataset = dataset.id,
+                    pointId = "osm:${firstId + i}",
                     name = "山$i", // 文言チェック対象外
                     latitude = tile.latIndex + i % 100 / 100.0,
                     longitude = tile.lonIndex + i / 100 % 100 / 100.0,
@@ -89,6 +97,6 @@ class CacheManagerTest {
                 )
             },
         )
-        dao.insertTiles(listOf(FetchedTileEntity(tile.latIndex, tile.lonIndex, fetchedAtMillis = 0)))
+        dao.insertTiles(listOf(FetchedTileEntity(dataset.id, tile.latIndex, tile.lonIndex, fetchedAtMillis = 0)))
     }
 }

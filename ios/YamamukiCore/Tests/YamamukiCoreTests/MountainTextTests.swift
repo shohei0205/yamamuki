@@ -1,11 +1,14 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import XCTest
 @testable import YamamukiCore
 
 final class MountainTextTests: XCTestCase {
-    private let fuji = Mountain(osmId: 1, name: "富士山", latitude: 35.3605556, longitude: 138.7273889, elevationM: 3776.24)
+    private let fuji = Mountain(id: "osm:1", name: "富士山", latitude: 35.3605556, longitude: 138.7273889, elevationM: 3776.24)
 
     private func variant(id: Int64 = 1, lat: Double? = nil, lon: Double? = nil, ele: Double?) -> Mountain {
-        Mountain(osmId: id, name: fuji.name, latitude: lat ?? fuji.latitude, longitude: lon ?? fuji.longitude, elevationM: ele)
+        Mountain(id: "osm:\(id)", name: fuji.name, latitude: lat ?? fuji.latitude, longitude: lon ?? fuji.longitude, elevationM: ele)
     }
 
     func testElevation() {
@@ -48,7 +51,7 @@ final class MountainTextTests: XCTestCase {
         }
         XCTAssertNil(summitAt([]))
         XCTAssertNil(summitAt([near(1, 0.031), near(2, 3.0)]))
-        XCTAssertEqual(summitAt([near(1, 0.025), near(2, 0.01), near(3, 5.0)])?.mountain.osmId, 2)
-        XCTAssertEqual(summitAt([near(1, 0.03)])?.mountain.osmId, 1)
+        XCTAssertEqual(summitAt([near(1, 0.025), near(2, 0.01), near(3, 5.0)])?.mountain.id, "osm:2")
+        XCTAssertEqual(summitAt([near(1, 0.03)])?.mountain.id, "osm:1")
     }
 }

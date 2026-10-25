@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.ui
 
 import android.app.Application
@@ -26,11 +29,12 @@ import io.github.shohei0205.yamamuki.core.PeakDataCreditsReader
 import io.github.shohei0205.yamamuki.core.PeakDataException
 import io.github.shohei0205.yamamuki.core.PeakDataOffer
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
+import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.core.PeakManifest
 import io.github.shohei0205.yamamuki.core.meetsMinElevation
 import io.github.shohei0205.yamamuki.core.seenFrom
 import io.github.shohei0205.yamamuki.core.summitAt
-import io.github.shohei0205.yamamuki.data.CacheInfo
+import io.github.shohei0205.yamamuki.data.PeakDataStore
 import io.github.shohei0205.yamamuki.sensor.connectivityUpdates
 import io.github.shohei0205.yamamuki.settings.Settings
 import kotlinx.coroutines.CancellationException
@@ -83,12 +87,14 @@ data class DialUiState(
     val loading: Boolean = false,
     /** 端末が通信できる状態か。圏外や機内モードでは false になり、山データの取得を試さない。 */
     val connected: Boolean = true,
-    /** 取り込み済みの全国の山データ。まだ取得していなければ null。 */
+    /** 取り込み済みの全国の山データ(設定で選んだ種類の)。まだ取得していなければ null。 */
     val peakData: InstalledPeakData? = null,
     /** 全国の山データを取得している。 */
     val peakDataUpdating: Boolean = false,
     /** 新しい山データがあり、ダウンロードするかを聞いているときの、その版の manifest(作った日と大きさを出す)。聞いていなければ null。 */
     val peakDataOffer: PeakManifest? = null,
+    /** [peakDataOffer] が、まだ取得していない種類を初めて取得するものなら、その種類。更新なら null。 */
+    val peakDataOfferFirst: PeakDataset? = null,
     /** 設定画面に出す、山データの取得の結果(「山データは最新です」など)。 */
     val peakDataNotice: String? = null,
     /** 自動の確認で新しい山データが見つかり、まだ取り込んでいない。設定で自動の確認をオンにしているときだけ方位盤に出す。 */
@@ -98,8 +104,8 @@ data class DialUiState(
     /** 範囲内に一度も取得できていない地域がある。 */
     val incomplete: Boolean = false,
     val settings: Settings = Settings(),
-    /** 設定画面に出すキャッシュの状況。読み込むまでは null。 */
-    val cacheInfo: CacheInfo? = null,
+    /** 山データの選択画面の状態。開いていなければ null。 */
+    val peakDataList: PeakDataListUiState? = null,
     /** 山の検索画面の状態。開いていなければ null。 */
     val search: SearchUiState? = null,
     /** 保存している山データにある山のグループ(名前順)。読み込むまでは null。 */
@@ -122,6 +128,30 @@ data class SearchUiState(
     val groups: List<String> = emptyList(),
 )
 
+/** 山データの選択画面の状態。 */
+data class PeakDataListUiState(
+    /** 取得済みの種類と、カタログにある種類。並びは [PeakDataset] の順。 */
+    val entries: List<PeakDataEntry>,
+    /** カタログで、取得できる版を確かめている。 */
+    val checking: Boolean = false,
+    /** 圏外のため、カタログを確かめられなかった。取得済みの種類だけを出す。 */
+    val offline: Boolean = false,
+)
+
+/** 山データの選択画面の 1 行。 */
+data class PeakDataEntry(
+    val dataset: PeakDataset,
+    /** 取り込み済みの版。まだ取得していなければ null。 */
+    val installed: InstalledPeakData?,
+    /** カタログで確かめた、取り込める版。確かめていない・取り込み済みが最新・確かめられなかったときは null。 */
+    val available: PeakManifest? = null,
+    /** 取り込み済みの版より新しい版がある(自動の確認か、この画面を開いたときの確認で見つかった)。 */
+    val updateFound: Boolean = false,
+) {
+    /** 試験版のデータ。取り込み済みならその版の、まだなら取り込める版の印を見る。 */
+    val experimental: Boolean get() = installed?.experimental ?: available?.experimental ?: false
+}
+
 /**
  * 山データの取り直しが要る。保存データの読み込み処理の版がアプリより古く、起動時の作り直しもできなかったとき
  * (gz を残す前の版のアプリで取り込んだときなど)。取得中は出さない。
@@ -139,20 +169,27 @@ val DialUiState.peakDataUpdateLabelShown: Boolean
 /** 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ。 */
 class DialViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as YamamukiApp
-    private val repository = app.mountainRepository
     private val appSettings = app.settings
     private val cacheManager = app.cacheManager
 
     private val _state = MutableStateFlow(
         appSettings.settings.value.let {
+            val store = app.peakDataStores.of(it.peakDataset)
             DialUiState(
                 settings = it,
                 rangeKm = it.initialRangeKm.toDouble(),
-                peakData = app.peakDataStore.load(),
-                peakDataUpdateFound = app.peakDataStore.updateFound(),
+                peakData = store.load(),
+                peakDataUpdateFound = store.updateFound(),
             )
         },
     )
+
+    /** 設定で選んだ山データの種類。 */
+    private val dataset: PeakDataset get() = _state.value.settings.peakDataset
+
+    private val repository get() = app.mountainRepository(dataset)
+
+    private fun store(dataset: PeakDataset = this.dataset): PeakDataStore = app.peakDataStores.of(dataset)
     val state: StateFlow<DialUiState> = _state.asStateFlow()
     private var northUpJob: Job? = null
     /** 現在地へ戻る動きの通し番号。取り消された古い動きが、新しく始めた動きの [DialUiState.returning] を消さないようにする。 */
@@ -163,9 +200,12 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     private var fetchedRadiusKm = 0.0
     private var fetchJob: Job? = null
     /** 確認した、まだ取り込んでいない山データの版。ダウンロードするかの答えを待っている間だけ持つ。 */
-    private var peakDataOffer: PeakDataOffer? = null
+    private var peakDataOffer: PendingOffer? = null
     /** ダウンロードすると答えたのに取り込めなかった版。「もう一度取得」では確認を飛ばして、この版を取り直す。 */
-    private var failedOffer: PeakDataOffer? = null
+    private var failedOffer: PendingOffer? = null
+    /** 山データの選択画面を開いたときに確かめた、種類ごとの取り込める版。 */
+    private val listOffers = mutableMapOf<PeakDataset, PeakDataOffer>()
+    private var listJob: Job? = null
     /** 自動の確認。利用者が頼んだ取得を始めたら取り消す(古い記録で上書きしないように)。 */
     private var autoCheckJob: Job? = null
 
@@ -192,19 +232,26 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
      * 作り直せなければ何もしない(次に更新を確かめたときに取り直す)。
      */
     private fun rebuildPeakData() {
-        if (app.peakDataStore.load().let { it == null || it.readerVersion >= PeakData.READER_VERSION }) return
+        val targets = PeakDataset.entries.filter { d -> store(d).load().let { it != null && it.readerVersion < PeakData.READER_VERSION } }
+        if (targets.isEmpty()) return
         viewModelScope.launch {
             _state.update { it.copy(peakDataUpdating = true) }
             try {
-                val rebuilt = app.peakDataUpdater.rebuild(app.peakDataStore.load()) ?: return@launch
-                app.peakDataStore.save(rebuilt)
-                _state.update { it.copy(peakData = rebuilt) }
-                reloadFromCache()
-                refreshCacheInfo()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "山データの作り直しに失敗\n${e.stackTraceToString()}")
+                for (d in targets) {
+                    try {
+                        val rebuilt = app.peakDataUpdater(d).rebuild(store(d).load()) ?: continue
+                        store(d).save(rebuilt)
+                        if (d == dataset) {
+                            _state.update { it.copy(peakData = rebuilt) }
+                            reloadFromCache()
+                            refreshPeakGroups()
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "山データ(${d.id})の作り直しに失敗\n${e.stackTraceToString()}")
+                    }
+                }
             } finally {
                 _state.update { it.copy(peakDataUpdating = false) }
             }
@@ -233,12 +280,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             if (it.viewpoint != null) next else next.withPeaksAt(point)
         }
         if (_state.value.exploring) return
-        val center = fetchedCenter
-        if (center == null ||
-            GeoMath.distanceKm(center.latitude, center.longitude, point.latitude, point.longitude) > REFETCH_DISTANCE_KM
-        ) {
-            fetch()
-        }
+        if (movedFromFetched(point)) fetch()
     }
 
     fun onZoom(zoom: Float) {
@@ -282,9 +324,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(returning = true) }
         northUpJob = viewModelScope.launch {
             try {
-                val started = System.nanoTime()
-                do {
-                    val t = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+                animateTurn { t ->
                     val fraction = t * t * (3 - 2 * t)
                     val target = state.value.gpsLocation ?: return@launch
                     val heading = turn.headingAt(compassHeading(), t)
@@ -293,9 +333,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                         location = target.copy(latitude = viewport.latitude, longitude = viewport.longitude),
                         exploring = t < 1.0, lockedHeading = if (t < 1.0) heading else null,
                     ) }
-                    if (t >= 1.0) break
-                    delay(16)
-                } while (true)
+                }
             } finally {
                 if (generation == returnGeneration) _state.update { it.copy(returning = false) }
             }
@@ -354,7 +392,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         searchQuery = ""
         _state.update { it.copy(search = SearchUiState()) }
         searchJob = viewModelScope.launch {
-            val all = app.mountainCache.allMountains()
+            val all = app.mountainCache(dataset).allMountains()
             // 方位盤と同じく、設定の「フィルター」で選んだグループの山だけから探す。
             val groups = TagGroups.effective(_state.value.settings.peakGroups, TagGroups.of(all.map { it.tags }))
             val targets = all.filter { it.inTagGroups(groups) }
@@ -415,9 +453,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         )
         val turn = HeadingTurn(startHeading, target())
         northUpJob = viewModelScope.launch {
-            val started = System.nanoTime()
-            do {
-                val progress = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+            animateTurn { progress ->
                 val heading = turn.headingAt(target(), progress)
                 val next = PanGeometry.rotateViewport(
                     MapCenter(observer.latitude, observer.longitude), MapCenter(here.latitude, here.longitude),
@@ -429,11 +465,20 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                     exploring = true,
                     lockedHeading = heading,
                 ) }
-                if (progress >= 1.0) break
-                delay(16)
-            } while (true)
+            }
             fetchForViewport()
         }
+    }
+
+    /** 地図を動かす約0.5秒の間、約16ミリ秒ごとに [step] へ進み具合(0〜1)を渡す。最後は必ず 1 を渡す。 */
+    private suspend inline fun animateTurn(step: (Double) -> Unit) {
+        val started = System.nanoTime()
+        do {
+            val progress = ((System.nanoTime() - started) / 500_000_000.0).coerceAtMost(1.0)
+            step(progress)
+            if (progress >= 1.0) break
+            delay(16)
+        } while (true)
     }
 
     fun onTransform(zoom: Float, rotationDeg: Float, previousMidpoint: PlanOffset,
@@ -457,11 +502,13 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun fetchForViewport() {
         val here = _state.value.location ?: return
-        val center = fetchedCenter
-        if (center == null ||
-            GeoMath.distanceKm(center.latitude, center.longitude, here.latitude, here.longitude) > REFETCH_DISTANCE_KM ||
-            DialGeometry.fetchRadiusKm(_state.value.rangeKm) > fetchedRadiusKm
-        ) fetch()
+        if (movedFromFetched(here) || DialGeometry.fetchRadiusKm(_state.value.rangeKm) > fetchedRadiusKm) fetch()
+    }
+
+    /** まだ読み込んでいないか、前回読み込んだ地点から [REFETCH_DISTANCE_KM] より離れた。 */
+    private fun movedFromFetched(p: GeoPoint): Boolean {
+        val center = fetchedCenter ?: return true
+        return GeoMath.distanceKm(center.latitude, center.longitude, p.latitude, p.longitude) > REFETCH_DISTANCE_KM
     }
 
     /** 通信エラーの知らせを閉じる。 */
@@ -492,50 +539,177 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
         // 自動の確認をオンにしたら、次にアプリを開くのを待たずに確かめる(前回から 30 日たっていなければ何もしない)。
         if (after.autoCheckPeakData && !before.autoCheckPeakData) autoCheckPeakData()
+        if (after.peakDataset != before.peakDataset) onDatasetChanged()
     }
 
-    fun refreshCacheInfo() {
-        viewModelScope.launch {
-            val info = cacheManager.info()
-            // DB を開いたときにキャッシュが作り直されていたら、取り込み済みの記録も消えているので読み直す。
-            _state.update { it.copy(cacheInfo = info, peakData = app.peakDataStore.load()) }
+    /**
+     * 使う山データを切り替えたら、その種類の山を読み直す。前の種類の山を選んでいた検索位置モード・検索画面はやめ、
+     * 方位盤の絞り込みのグループも作り直す(種類に無いグループは、選んでいないものとして扱う)。
+     */
+    private fun onDatasetChanged() {
+        fetchJob?.cancel()
+        closeSearch()
+        peaks = emptyList()
+        fetchedCenter = null
+        val store = store()
+        _state.update {
+            it.copy(
+                peakData = store.load(), peakDataUpdateFound = store.updateFound(), peakDataNotice = null,
+                viewpoint = null, mountains = emptyList(), summit = null, peakGroups = null,
+            )
         }
+        refreshPeakGroups()
+        fetch()
+    }
+
+    /** 設定画面を開いたとき。DB を開いたときにキャッシュが作り直されていたら、取り込み済みの記録も消えているので読み直す。 */
+    fun refreshPeakData() {
+        _state.update { it.copy(peakData = store().load()) }
         refreshPeakGroups()
     }
 
-    /** 取り込み済みの山データの出典を、端末に残した manifest から読む(通信はしない)。 */
-    suspend fun peakDataCredits(): PeakDataCredits? =
-        PeakDataCreditsReader.read(app.peakDataStore.load(), app.peakDataStore.archive.readManifest())
+    /** 取り込み済みの山データ(使っている種類の)の出典を、端末に残した manifest から読む(通信はしない)。 */
+    suspend fun peakDataCredits(): PeakDataCredits? = store().let { PeakDataCreditsReader.read(it.load(), it.archive.readManifest()) }
 
     /** 保存している山データから山のグループの一覧を作り直し、方位盤の絞り込みにも反映する。 */
     private fun refreshPeakGroups() {
+        val dataset = dataset
         viewModelScope.launch {
-            val groups = app.mountainCache.peakGroups()
+            val groups = app.mountainCache(dataset).peakGroups()
+            if (dataset != this@DialViewModel.dataset) return@launch
             _state.update { s -> s.copy(peakGroups = groups).let { n -> n.observer?.let { n.withPeaksAt(it) } ?: n } }
         }
     }
 
     /**
-     * 保存している山データを消して、現在地周辺を読み直す(通信はしない)。事前ダウンロードした地域は残す。
-     * 全国の山データも消えるので、取り込み済みの記録も消し、設定画面から取り直せるようにする。
+     * 山データの選択画面を開く。取得済みの種類はすぐ出し、通信できればカタログで取り込める版を確かめて、
+     * 取得していない種類(カタログにあるもの)と、取得済みの種類の更新を足す。データ本体は取らない。
      */
-    fun clearCache() {
-        fetchJob?.cancel()
+    fun openPeakDataList() {
+        listJob?.cancel()
+        listOffers.clear()
+        val connected = _state.value.connected
+        _state.update { it.copy(peakDataList = PeakDataListUiState(installedEntries(), checking = connected, offline = !connected)) }
+        if (!connected) return
+        listJob = viewModelScope.launch {
+            for (d in PeakDataset.entries) {
+                val installed = installedWithMountains(d)
+                val entry = try {
+                    when (val check = app.peakDataUpdater(d).check(installed)) {
+                        is PeakDataUpdater.Check.UpToDate -> {
+                            store(d).save(check.installed)
+                            store(d).saveUpdateFound(false)
+                            PeakDataEntry(d, check.installed)
+                        }
+                        is PeakDataUpdater.Check.Available -> {
+                            listOffers[d] = check.offer
+                            if (installed != null) store(d).saveUpdateFound(true)
+                            PeakDataEntry(d, installed, check.offer.manifest, updateFound = installed != null)
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // カタログに無い種類(配布版で stable が無いなど)と、通信の失敗。取得済みなら、そのまま使える。
+                    Log.w(TAG, "山データ(${d.id})の確認に失敗\n${e.stackTraceToString()}")
+                    store(d).load()?.let { PeakDataEntry(d, it, updateFound = store(d).updateFound()) }
+                }
+                updateListEntry(d, entry)
+                if (d == dataset) _state.update { it.copy(peakData = store(d).load(), peakDataUpdateFound = store(d).updateFound()) }
+            }
+            _state.update { s -> s.copy(peakDataList = s.peakDataList?.copy(checking = false)) }
+        }
+    }
+
+    fun closePeakDataList() {
+        listJob?.cancel()
+        listOffers.clear()
+        _state.update { it.copy(peakDataList = null) }
+    }
+
+    /**
+     * 選択画面で消した [d] の取り込める版を確かめ直す。開いたときの確認で最新だった種類は版を覚えていないので、
+     * そのままでは行が消えてダウンロードし直せない。カタログは使い回すので、取り直すのは manifest だけ。
+     * 選択画面を閉じているときと圏外のとき、確かめられなかったときは null。
+     */
+    private suspend fun recheckForList(d: PeakDataset): PeakDataOffer? {
+        if (_state.value.peakDataList == null || !_state.value.connected) return null
+        return try {
+            (app.peakDataUpdater(d).check(null) as? PeakDataUpdater.Check.Available)?.offer?.also { listOffers[d] = it }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "山データ(${d.id})の確認に失敗\n${e.stackTraceToString()}")
+            null
+        }
+    }
+
+    /**
+     * [d] の取り込み済みの記録。記録があっても保存している山が 0 件なら(消去の途中でアプリが終わったときなど)、
+     * まだ取得していないものとして null を返す。
+     */
+    private suspend fun installedWithMountains(d: PeakDataset): InstalledPeakData? =
+        store(d).load()?.takeIf { app.mountainCache(d).count() > 0 }
+
+    /** 取得済みの種類の行。 */
+    private fun installedEntries(): List<PeakDataEntry> = PeakDataset.entries.mapNotNull { d ->
+        store(d).load()?.let { PeakDataEntry(d, it, updateFound = store(d).updateFound()) }
+    }
+
+    /** 選択画面の [d] の行を [entry] にする。null なら行を消す。 */
+    private fun updateListEntry(d: PeakDataset, entry: PeakDataEntry?) {
+        _state.update { s ->
+            val list = s.peakDataList ?: return@update s
+            val others = list.entries.filter { it.dataset != d }
+            s.copy(peakDataList = list.copy(entries = (others + listOfNotNull(entry)).sortedBy { it.dataset.ordinal }))
+        }
+    }
+
+    /**
+     * 選択画面で [d] を選んだ。取得済みならすぐ切り替え、まだなら大きさを見せてダウンロードするかを聞き、
+     * 取り込めたら切り替える。記録があっても保存している山が 0 件なら(削除の途中でアプリが終わったときなど)、
+     * 空のデータに切り替えず、まだ取得していないものとして扱う。
+     */
+    fun choosePeakData(d: PeakDataset) {
+        viewModelScope.launch {
+            if (installedWithMountains(d) != null) {
+                updateSettings { it.copy(peakDataset = d) }
+                return@launch
+            }
+            val offer = listOffers[d] ?: return@launch
+            failedOffer = null
+            peakDataOffer = PendingOffer(d, offer)
+            _state.update { it.copy(peakDataOffer = offer.manifest, peakDataOfferFirst = d) }
+        }
+    }
+
+    /**
+     * [d] の山データを消す(記録・端末に残した gz・DB の山)。使っている種類なら、方位盤は「山データ未取得」の状態になる。
+     * 事前ダウンロードした地域(osm-peaks だけ)は残す。
+     */
+    fun deletePeakData(d: PeakDataset) {
+        if (d == dataset) fetchJob?.cancel()
         autoCheckJob?.cancel()
         viewModelScope.launch {
             // 記録を先に消す。消している途中でアプリが終わっても、記録だけが残って「最新です」となり、
             // 取り直せなくなることがないように。
-            app.peakDataStore.clear()
-            cacheManager.clear(keep = app.savedAreas.tiles())
-            peaks = emptyList()
-            _state.update {
-                it.copy(
-                    mountains = emptyList(), summit = null, cacheInfo = cacheManager.info(),
-                    peakData = null, peakDataNotice = null, peakDataUpdateFound = false,
-                )
+            store(d).clear()
+            cacheManager.clear(d, keep = if (d == PeakDataset.OSM_PEAKS) app.savedAreas.tiles() else emptySet())
+            // 行は「未取得」にしておき、取り込める版が分かったら選べるようにする。
+            updateListEntry(d, PeakDataEntry(d, null, listOffers[d]?.manifest))
+            if (d == dataset) {
+                peaks = emptyList()
+                _state.update {
+                    it.copy(mountains = emptyList(), summit = null, peakData = null, peakDataNotice = null, peakDataUpdateFound = false)
+                }
+                refreshPeakGroups()
+                fetch()
             }
-            refreshPeakGroups()
-            fetch()
+            // 確かめ直しの通信は、方位盤を更新したあとで行う(通信が遅くても方位盤を待たせない)。
+            if (listOffers[d] != null) return@launch
+            val offer = recheckForList(d)
+            // 確かめている間に取り込み直していたら、行はそのまま。
+            if (store(d).load() == null) updateListEntry(d, offer?.let { PeakDataEntry(d, null, it.manifest) })
         }
     }
 
@@ -549,26 +723,35 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun autoCheckPeakData() {
         val s = _state.value
         if (!s.settings.autoCheckPeakData || !s.connected || s.peakDataUpdating || autoCheckJob?.isActive == true) return
-        val installed = app.peakDataStore.load() ?: return
-        if (installed.readerVersion < PeakData.READER_VERSION) return
-        if (!PeakData.autoCheckDue(app.peakDataStore.autoCheckedAtMillis(), System.currentTimeMillis())) return
+        // 取得済みの種類をすべて確かめる(使っていない種類の更新は、選択画面に出す)。
+        val targets = PeakDataset.entries.mapNotNull { d ->
+            store(d).load()?.takeIf { it.readerVersion >= PeakData.READER_VERSION }?.let { d to it }
+        }
+        if (targets.isEmpty()) return
+        if (!PeakData.autoCheckDue(app.peakDataStores.autoCheckedAtMillis(), System.currentTimeMillis())) return
         autoCheckJob = viewModelScope.launch {
-            try {
-                val found = when (val check = app.peakDataUpdater.check(installed)) {
-                    is PeakDataUpdater.Check.UpToDate -> {
-                        app.peakDataStore.save(check.installed)
-                        _state.update { it.copy(peakData = check.installed) }
-                        false
+            var checked = false
+            for ((d, installed) in targets) {
+                try {
+                    val found = when (val check = app.peakDataUpdater(d).check(installed)) {
+                        is PeakDataUpdater.Check.UpToDate -> {
+                            store(d).save(check.installed)
+                            if (d == dataset) _state.update { it.copy(peakData = check.installed) }
+                            false
+                        }
+                        is PeakDataUpdater.Check.Available -> true
                     }
-                    is PeakDataUpdater.Check.Available -> true
+                    store(d).saveUpdateFound(found)
+                    if (d == dataset) _state.update { it.copy(peakDataUpdateFound = found) }
+                    checked = true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "山データ(${d.id})の自動の確認に失敗\n${e.stackTraceToString()}")
                 }
-                app.peakDataStore.saveCheckResult(found, checkedAtMillis = System.currentTimeMillis())
-                _state.update { it.copy(peakDataUpdateFound = found) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "山データの自動の確認に失敗\n${e.stackTraceToString()}")
             }
+            // どれも確かめられなかったとき(圏外になったなど)は、次の機会に確かめ直す。
+            if (checked) app.peakDataStores.saveAutoCheckedAt(System.currentTimeMillis())
         }
     }
 
@@ -579,12 +762,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val here = _state.value.location ?: return
         val radius = DialGeometry.fetchRadiusKm(_state.value.rangeKm)
         viewModelScope.launch {
-            val result = repository.mountainsAround(
-                here.latitude, here.longitude, radius, allowNetwork = false,
-                ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
-            )
-            peaks = result.mountains.map { it.mountain }
-            _state.update { it.withPeaksAt(it.observer ?: here).copy(incomplete = result.incomplete) }
+            val incomplete = loadPeaks(here, radius)
+            _state.update { it.withPeaksAt(it.observer ?: here).copy(incomplete = incomplete) }
         }
     }
 
@@ -602,13 +781,22 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(loading = true) }
             // 手動移動中の連続した読み込みをまとめる。
             if (_state.value.exploring) delay(250)
-            val result = repository.mountainsAround(
-                here.latitude, here.longitude, radius, allowNetwork = false,
-                ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
-            )
-            peaks = result.mountains.map { it.mountain }
-            _state.update { it.withPeaksAt(it.observer ?: here).copy(loading = false, incomplete = result.incomplete) }
+            val incomplete = loadPeaks(here, radius)
+            _state.update { it.withPeaksAt(it.observer ?: here).copy(loading = false, incomplete = incomplete) }
         }
+    }
+
+    /**
+     * [here] から [radius] の範囲の山を保存済みのデータから読み、方位盤に出す候補にする(通信はしない)。
+     * 範囲内に一度も取得できていない地域があれば true を返す。
+     */
+    private suspend fun loadPeaks(here: GeoPoint, radius: Double): Boolean {
+        val result = repository.mountainsAround(
+            here.latitude, here.longitude, radius, allowNetwork = false,
+            ignoreMissing = PeakData.ignoresMissing(here.latitude, here.longitude),
+        )
+        peaks = result.mountains.map { it.mountain }
+        return result.incomplete
     }
 
     /**
@@ -620,12 +808,12 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         failedOffer = null
         runPeakDataTask {
             // 画面の状態ではなく保存した記録を使う(キャッシュが作り直されて記録が消えていることがある)。
-            // 記録があっても保存している山が 0 件なら、未取得として取り直す(消去の途中でアプリが終わったときなど)。
-            val installed = app.peakDataStore.load()?.takeIf { cacheManager.info().mountainCount > 0 }
-            when (val check = app.peakDataUpdater.check(installed)) {
+            val d = dataset
+            val installed = installedWithMountains(d)
+            when (val check = app.peakDataUpdater(d).check(installed)) {
                 is PeakDataUpdater.Check.UpToDate -> {
-                    app.peakDataStore.save(check.installed)
-                    app.peakDataStore.saveCheckResult(updateFound = false)
+                    store(d).save(check.installed)
+                    store(d).saveUpdateFound(false)
                     _state.update {
                         it.copy(
                             peakData = check.installed,
@@ -635,8 +823,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 is PeakDataUpdater.Check.Available -> {
-                    peakDataOffer = check.offer
-                    _state.update { it.copy(peakDataOffer = check.offer.manifest) }
+                    peakDataOffer = PendingOffer(d, check.offer)
+                    _state.update { it.copy(peakDataOffer = check.offer.manifest, peakDataOfferFirst = d.takeIf { installed == null }) }
                 }
             }
         }
@@ -646,23 +834,32 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
     fun answerPeakDataOffer(download: Boolean) {
         val offer = peakDataOffer ?: return
         peakDataOffer = null
-        _state.update { it.copy(peakDataOffer = null) }
+        _state.update { it.copy(peakDataOffer = null, peakDataOfferFirst = null) }
         if (download) installPeakData(offer)
     }
 
-    /** 確認した版のデータ本体を取得して取り込む。取り込めなければ、「もう一度取得」で取り直せるように残す。 */
-    private fun installPeakData(offer: PeakDataOffer) {
-        failedOffer = offer
+    /**
+     * 確認した版のデータ本体を取得して取り込む。取り込めなければ、「もう一度取得」で取り直せるように残す。
+     * 使っていない種類(選択画面で選んだもの)なら、取り込めたらその種類に切り替える。
+     */
+    private fun installPeakData(pending: PendingOffer) {
+        failedOffer = pending
+        val d = pending.dataset
         runPeakDataTask {
-            val installed = app.peakDataUpdater.install(offer)
+            val installed = app.peakDataUpdater(d).install(pending.offer)
             failedOffer = null
-            app.peakDataStore.save(installed)
-            app.peakDataStore.saveCheckResult(updateFound = false)
-            _state.update {
-                it.copy(peakData = installed, peakDataNotice = app.getString(R.string.peak_data_updated), peakDataUpdateFound = false)
+            store(d).save(installed)
+            store(d).saveUpdateFound(false)
+            listOffers.remove(d)
+            updateListEntry(d, PeakDataEntry(d, installed))
+            if (d != dataset) {
+                updateSettings { it.copy(peakDataset = d) }
+            } else {
+                _state.update { it.copy(peakData = installed, peakDataUpdateFound = false) }
+                reloadFromCache()
+                refreshPeakGroups()
             }
-            reloadFromCache()
-            refreshCacheInfo()
+            _state.update { it.copy(peakDataNotice = app.getString(R.string.peak_data_updated)) }
         }
     }
 
@@ -705,7 +902,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         val groups = TagGroups.effective(settings.peakGroups, peakGroups)
         return copy(
             mountains = all.filter {
-                it.mountain.osmId != summit?.mountain?.osmId &&
+                it.mountain.id != summit?.mountain?.id &&
                     it.mountain.meetsMinElevation(minElevation) &&
                     it.mountain.inTagGroups(groups)
             },
@@ -734,6 +931,9 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
             is UnknownHostException, is ConnectException, is NoRouteToHostException -> true
             else -> error.cause?.let(::isOffline) ?: false
         }
+
+        /** 確認した、まだ取り込んでいない [dataset] の版。 */
+        class PendingOffer(val dataset: PeakDataset, val offer: PeakDataOffer)
 
         /** これ以上移動したら、保存済みのデータを読み直す。 */
         const val REFETCH_DISTANCE_KM = 1.0

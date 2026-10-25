@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.ui
 
 import androidx.activity.compose.BackHandler
@@ -108,7 +111,7 @@ fun MountainSearchScreen(
                     for ((title, mountains) in sections) {
                         if (mountains.isEmpty()) continue
                         item(key = "section-$title") { SearchSectionHeader(stringResource(title)) }
-                        items(mountains, key = { it.osmId }) { mountain ->
+                        items(mountains, key = { it.id }) { mountain ->
                             SearchResultRow(mountain, from, onClick = { onSelect(mountain) })
                             HorizontalDivider()
                         }

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import io.ktor.client.HttpClient
@@ -73,16 +76,69 @@ class PeakDataTest {
         assertEquals("", PeakData.parseManifest(manifestV5(sourceTimestamp = null)).sourceTimestamp)
     }
 
+    // yamamuki-data の formats/manifest.md の manifest 版 6 と同じ形。件数と出典は metadata にある。
+    private fun manifestV6(
+        data: ByteArray = gzip,
+        schemaFormat: String = "yamamuki-manifest",
+        dataSchemaFormat: String = "yamamuki-points",
+        dataSchemaVersion: String = "6",
+        fileName: String = "osm-peaks.json.gz",
+        experimental: Boolean? = null,
+        metadata: String = """{"sources":[{"name":"日本百名山","latestTimestamp":"2026-01-01T00:00:00Z"},""" +
+            """{"name":"osm-peaks","license":"ODbL-1.0","latestTimestamp":"2026-10-17T04:42:52Z"}],"pointCount":2}""",
+    ) = """
+        {"schemaFormat":"$schemaFormat","schemaVersion":6,"dataSchemaVersion":$dataSchemaVersion,"name":"山頂",
+         "version":"20261018T115955Z-39125410649-1","fileName":"$fileName",${experimental?.let { "\"experimental\":$it," }.orEmpty()}
+         "downloadUrl":"https://example.com/osm-peaks.json.gz","sha256":"${sha256(data)}","sizeBytes":${data.size},
+         "uncompressedSizeBytes":100,"dataTimestamp":"2026-10-18T12:00:15Z","dataSchemaFormat":"$dataSchemaFormat",
+         "metadata":$metadata}
+    """.trimIndent()
+
+    @Test
+    fun parsesManifestV6() {
+        val m = PeakData.parseManifest(manifestV6())
+        assertEquals(6, m.schemaVersion)
+        assertEquals("20261018T115955Z-39125410649-1", m.version)
+        assertEquals("https://example.com/osm-peaks.json.gz", m.downloadUrl)
+        assertEquals(2, m.mountainCount, "件数は metadata.pointCount から読む")
+        assertEquals("2026-10-17T04:42:52Z", m.sourceTimestamp, "出典の latestTimestamp を読む")
+        // 出典の名前によらず、latestTimestamp のうち最も新しいものを読む(2026-10-20 の版から元データの出典の名前が変わったため)。
+        assertEquals(
+            "2026-10-17T04:42:52Z",
+            PeakData.parseManifest(
+                manifestV6(
+                    metadata = """{"sources":[{"name":"日本百名山"},{"name":"OpenStreetMap（ロシア極東連邦管区・Geofabrik 配布）","latestTimestamp":"2026-10-16T21:00:00Z"},""" +
+                        """{"name":"OpenStreetMap（日本・Geofabrik 配布）","latestTimestamp":"2026-10-17T04:42:52Z"}],"pointCount":2}""",
+                ),
+            ).sourceTimestamp,
+        )
+        // どの出典にも latestTimestamp が無いときは空文字。
+        assertEquals("", PeakData.parseManifest(manifestV6(metadata = """{"sources":[{"name":"osm-peaks"}],"pointCount":2}""")).sourceTimestamp)
+        assertEquals("", PeakData.parseManifest(manifestV6(metadata = """{"pointCount":2}""")).sourceTimestamp)
+    }
+
+    @Test
+    fun rejectsManifestV6OfOtherFormats() {
+        // 形式の名前が違うものと、件数の無いものは読まない。
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(schemaFormat = "other")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(dataSchemaFormat = "other")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(metadata = """{"sources":[]}""")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(metadata = """{"pointCount":"2"}""")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6().replace("\"metadata\":", "\"meta\":")) }
+        // 版 6 の manifest でも、データ本体の版が読めなければ断る。
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(dataSchemaVersion = "7")) }
+    }
+
     @Test
     fun rejectsUnknownSchemaVersion() {
-        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 6)) }
+        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 7)) }
         assertTrue(e.message!!.contains("アプリを更新"))
         assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 3)) }
     }
 
     @Test
     fun rejectsUnknownDataSchemaVersion() {
-        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "6")) }
+        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "7")) }
         assertTrue(e.message!!.contains("アプリを更新"))
         // データ本体の版が分からないときは、manifest の版から推測せずに断る。
         assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "null")) }
@@ -110,12 +166,12 @@ class PeakDataTest {
         assertEquals(
             listOf(
                 Mountain(
-                    3403990450, "万三郎岳", 34.8627963, 139.0018525, 1405.6,
+                    "osm:3403990450", "万三郎岳", 34.8627963, 139.0018525, 1405.6,
                     nameReading = "ばんざぶろうだけ",
                     aliases = listOf("天城山"),
                     wikipediaUrl = "https://ja.wikipedia.org/wiki/%E5%A4%A9%E5%9F%8E%E5%B1%B1",
                 ),
-                Mountain(12, "名無し標高", 43.5, 142.9, null, wikidataUrl = "https://www.wikidata.org/wiki/Q1"),
+                Mountain("osm:12", "名無し標高", 43.5, 142.9, null, wikidataUrl = "https://www.wikidata.org/wiki/Q1"),
             ),
             mountains,
         )
@@ -134,8 +190,8 @@ class PeakDataTest {
         )
         assertEquals(
             listOf(
-                Mountain(1, "山頂", 35.0, 138.0, 100.0, pointId = "1", tags = listOf("日本百名山")),
-                Mountain(2, "種別不明", 35.1, 138.1, null, pointId = "2"),
+                Mountain("osm:1", "山頂", 35.0, 138.0, 100.0, tags = listOf("日本百名山")),
+                Mountain("osm:2", "種別不明", 35.1, 138.1, null),
             ),
             PeakData.parseMountains(v5),
         )
@@ -159,8 +215,7 @@ class PeakDataTest {
         assertEquals(
             listOf(
                 Mountain(
-                    1, "富士山", 35.36, 138.72, 3776.0,
-                    pointId = "1",
+                    "osm:1", "富士山", 35.36, 138.72, 3776.0,
                     nameReading = "ふじさん",
                     aliases = listOf("不二山", "芙蓉峰"),
                     wikipediaUrl = "https://ja.wikipedia.org/wiki/x",
@@ -168,11 +223,71 @@ class PeakDataTest {
                     tags = listOf("日本百名山"),
                     graphic = PointGraphic("<svg/>", 1.5),
                 ),
-                Mountain(2, "山", 35.0, 138.0, null, pointId = "2", graphic = PointGraphic("<svg/>", 1.0)),
-                Mountain(3, "山", 35.0, 138.0, null, pointId = "3"),
+                Mountain("osm:2", "山", 35.0, 138.0, null, graphic = PointGraphic("<svg/>", 1.0)),
+                Mountain("osm:3", "山", 35.0, 138.0, null),
             ),
             PeakData.parseMountains(v5),
         )
+    }
+
+    // yamamuki-data の points/formats/data.md の地点データ版 6 と同じ形。地点は points に入り、ID は osm:<ノード番号>。
+    private val pointsV6 = """
+        {"schemaFormat":"yamamuki-points","schemaVersion":6,
+         "metadata":{"sources":[{"name":"osm-peaks"}],"pointCount":5,"tags":[{"name":"日本百名山","nameReading":"にほんひゃくめいざん"}]},
+         "points":[
+          {"id":"osm:3740788022","type":"peak","name":"鳥海山","nameReading":"ちょうかいさん","latitude":39.0990,"longitude":140.0490,
+           "elevationM":2236,"provenance":{"dataSource":"osm","elevationSource":"supplement"},
+           "aliases":[{"name":"出羽富士","nameReading":"でわふじ"},{"name":"鳥海山"},{"nameReading":"なし"},"秋田富士"],
+           "wikipediaUrl":"https://ja.wikipedia.org/wiki/x","wikidataUrl":null,"tags":["日本百名山"]},
+          {"id":"osm:2","type":"peak","name":"読みが二つ","nameReading":[" ","かな","カナ"],"latitude":35.0,"longitude":138.0,"elevationM":null,"aliases":[]},
+          {"id":"gsi-vector:abc","type":"peak","name":"国土地理院の山","latitude":35.1,"longitude":138.1,"elevationM":100},
+          {"id":"osm:x1","type":"peak","name":"番号でない","latitude":35.2,"longitude":138.2},
+          {"id":"osm:3","type":"parking","name":"駐車場","latitude":35.3,"longitude":138.3}]}
+    """.trimIndent()
+
+    @Test
+    fun parsesPointsV6() {
+        // OSM 以外の ID と、形の違う ID の地点は飛ばす。別名は name を読み、読み仮名が配列なら最初の空でないものを読む。
+        assertEquals(
+            listOf(
+                Mountain(
+                    "osm:3740788022", "鳥海山", 39.0990, 140.0490, 2236.0,
+                    nameReading = "ちょうかいさん",
+                    aliases = listOf("出羽富士", "秋田富士"),
+                    wikipediaUrl = "https://ja.wikipedia.org/wiki/x",
+                    tags = listOf("日本百名山"),
+                ),
+                Mountain("osm:2", "読みが二つ", 35.0, 138.0, null, nameReading = "かな"),
+            ),
+            PeakData.parseMountains(gzip(pointsV6)),
+        )
+    }
+
+    @Test
+    fun rejectsDocumentWithoutPoints() {
+        assertFailsWith<PeakDataException> { PeakData.parseMountains(gzip("""{"schemaVersion":6}""")) }
+        assertFailsWith<PeakDataException> { PeakData.parseMountains(gzip("\"文字列\"")) }
+    }
+
+    @Test
+    fun replacesV5DataWithV6Data() = runTest {
+        // 版 5 の山データを取り込んだ端末に、版 6 の山データが届いたときに入れ替わる。山は同じノード番号で引き継ぐ。
+        val cache = InMemoryMountainCache()
+        val source = FakeSource(manifestV5(), gzip)
+        val updater = PeakDataUpdater(source, cache)
+        val installed = updater.update(null).installed
+        assertEquals(setOf("osm:3403990450", "osm:12"), cache.mountains.keys)
+
+        val v6 = gzip(pointsV6)
+        source.manifestBody = manifestV6(data = v6)
+        source.data = v6
+        source.etag = "\"e2\""
+        val result = updater.update(installed)
+
+        assertIs<UpdateResult.Updated>(result)
+        assertEquals("20261018T115955Z-39125410649-1", result.installed.version)
+        assertEquals(setOf("osm:3740788022", "osm:2"), cache.mountains.keys)
+        assertEquals(2, result.installed.mountainCount, "件数は実際に読めた山の数")
     }
 
     @Test
@@ -199,9 +314,9 @@ class PeakDataTest {
         assertTrue(Tile.of(45.3, 148.5) in tiles, "択捉島")
         assertTrue(Tile.of(32.7, 128.8) in tiles, "五島列島")
         // 範囲の外にある山も、その山のタイルまで広げて取り込む。
-        assertTrue(Tile.of(50.2, 160.3) in PeakData.tilesOf(listOf(Mountain(1, "外", 50.2, 160.3, null))))
+        assertTrue(Tile.of(50.2, 160.3) in PeakData.tilesOf(listOf(Mountain("osm:1", "外", 50.2, 160.3, null))))
         // 日本の外の陸地でも、山のあるタイルは含める。
-        assertTrue(Tile.of(35.1, 129.05) in PeakData.tilesOf(listOf(Mountain(1, "外", 35.1, 129.05, null))))
+        assertTrue(Tile.of(35.1, 129.05) in PeakData.tilesOf(listOf(Mountain("osm:1", "外", 35.1, 129.05, null))))
     }
 
     private class FakeSource(var manifestBody: String, var data: ByteArray, var etag: String? = "\"e1\"") : PeakDataSource {
@@ -229,7 +344,7 @@ class PeakDataTest {
         assertIs<UpdateResult.Updated>(first)
         assertEquals("v1", first.installed.version)
         assertEquals(2, first.installed.mountainCount)
-        assertEquals(setOf(3403990450L, 12L), cache.mountains.keys)
+        assertEquals(setOf("osm:3403990450", "osm:12"), cache.mountains.keys)
         assertEquals(1_000L, cache.tiles[Tile.of(40.0, 141.0)])
         assertNull(source.sentEtags.single(), "初回は ETag を送らない")
 
@@ -288,7 +403,7 @@ class PeakDataTest {
         assertEquals("v1", installed.version)
         assertEquals("\"e1\"", installed.manifestEtag)
         assertEquals(1, source.dataCalls)
-        assertEquals(setOf(3403990450L, 12L), cache.mountains.keys)
+        assertEquals(setOf("osm:3403990450", "osm:12"), cache.mountains.keys)
 
         // 取り込んだあとの確認は、最新として返す。
         assertIs<PeakDataUpdater.Check.UpToDate>(updater.check(installed))
@@ -309,8 +424,8 @@ class PeakDataTest {
         val result = updater.update(installed)
 
         assertIs<UpdateResult.Updated>(result)
-        assertEquals(1406.0, cache.mountains.getValue(3403990450).elevationM)
-        assertEquals(setOf(3403990450L), cache.mountains.keys, "新しい版で消えた山はキャッシュからも消す")
+        assertEquals(1406.0, cache.mountains.getValue("osm:3403990450").elevationM)
+        assertEquals(setOf("osm:3403990450"), cache.mountains.keys, "新しい版で消えた山はキャッシュからも消す")
     }
 
     @Test
@@ -367,7 +482,7 @@ class PeakDataTest {
 
         val rebuilt = updater.rebuild(oldInstalled())
         assertEquals(oldInstalled().copy(mountainCount = 2, readerVersion = PeakData.READER_VERSION), rebuilt)
-        assertEquals(setOf(3403990450L, 12L), cache.mountains.keys)
+        assertEquals(setOf("osm:3403990450", "osm:12"), cache.mountains.keys)
         assertEquals(2_000L, cache.tiles[Tile.of(40.0, 141.0)])
         assertTrue(source.sentEtags.isEmpty() && source.dataCalls == 0, "通信しない")
 
@@ -455,85 +570,251 @@ class PeakDataTest {
         assertTrue(source.fetchData("https://example.com/japan-mountains.json.gz").contentEquals(gzip))
     }
 
-    private val stableUrl = PeakData.POINTER_MANIFEST_URL_PREFIX + "osm-peaks-20261007T071401Z-37585754546-1.json"
-    private val devUrl = PeakData.POINTER_MANIFEST_URL_PREFIX + "osm-peaks-dev-20261010T022253Z-38016527834-1.json"
+    private val stableUrl = PeakDataset.OSM_PEAKS.manifestUrlPrefix + "osm-peaks-20261007T071401Z-37585754546-1.json"
+    private val devUrl = PeakDataset.OSM_PEAKS.manifestUrlPrefix + "osm-peaks-dev-20261010T022253Z-38016527834-1.json"
+    private val gsiUrl = "https://shohei0205.github.io/yamamuki/data/gsi-peaks/manifests/gsi-peaks-dev-20261018T115950Z-39125416076-1.json"
 
     private fun entry(url: String, sha256: String) = """{"manifestUrl":"$url","manifestSha256":"$sha256"}"""
 
-    private fun pointer(stable: String? = entry(stableUrl, "a".repeat(64)), dev: String? = null, schemaVersion: Int = 1) =
-        listOfNotNull("\"schemaVersion\":$schemaVersion", stable?.let { "\"stable\":$it" }, dev?.let { "\"dev\":$it" })
-            .joinToString(",", "{", "}")
+    private fun channels(stable: String?, dev: String?) =
+        listOfNotNull(stable?.let { "\"stable\":$it" }, dev?.let { "\"dev\":$it" }).joinToString(",", "{", "}")
+
+    /** カタログ。osm-peaks のほかに、gsi-peaks の開発版も入れておく。 */
+    private fun catalog(
+        stable: String? = entry(stableUrl, "a".repeat(64)),
+        dev: String? = null,
+        schemaVersion: Int = 1,
+        gsi: String? = channels(stable = null, dev = entry(gsiUrl, "c".repeat(64))),
+    ) = listOfNotNull("\"osm-peaks\":${channels(stable, dev)}", gsi?.let { "\"gsi-peaks\":$it" })
+        .joinToString(",", "{\"schemaVersion\":$schemaVersion,\"datasets\":{", "}}")
 
     @Test
-    fun pointerPicksStableOrDev() {
-        val withDev = pointer(dev = entry(devUrl, "b".repeat(64)))
-        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parsePointer(withDev, useDev = false))
-        assertEquals(PeakDataPointer(devUrl, "b".repeat(64)), PeakData.parsePointer(withDev, useDev = true))
-        // dev が無ければ、開発用のビルドも stable を読む。
-        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parsePointer(pointer(), useDev = true))
+    fun catalogPicksStableOrDevOfOsmPeaks() {
+        val withDev = catalog(dev = entry(devUrl, "b".repeat(64)))
+        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parseCatalog(withDev, useDev = false))
+        assertEquals(PeakDataPointer(devUrl, "b".repeat(64)), PeakData.parseCatalog(withDev, useDev = true))
+        // dev が無ければ、開発用のビルドも stable を読む。gsi-peaks の dev があっても読まない。
+        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parseCatalog(catalog(), useDev = true))
+        // 知らない種類のデータがあっても、osm-peaks だけを読む。
+        val other = catalog(gsi = """{"stable":{"manifestUrl":"x"},"beta":1}""")
+        assertEquals(PeakDataPointer(stableUrl, "a".repeat(64)), PeakData.parseCatalog(other, useDev = false))
     }
 
     @Test
-    fun pointerRejectsUnexpectedContent() {
+    fun catalogRejectsUnexpectedContent() {
         val bad = listOf(
-            pointer(schemaVersion = 2),
-            pointer(stable = null),
-            pointer(stable = null, dev = entry(devUrl, "b".repeat(64))),
-            pointer(stable = entry("https://shohei0205.github.io/yamamuki-data/peaks/manifest.json", "a".repeat(64))),
-            pointer(stable = entry(PeakData.POINTER_MANIFEST_URL_PREFIX + "sub/x.json", "a".repeat(64))),
-            pointer(stable = entry(PeakData.POINTER_MANIFEST_URL_PREFIX + "x.txt", "a".repeat(64))),
-            pointer(stable = entry(stableUrl, "A".repeat(64))),
-            pointer(stable = entry(stableUrl, "a".repeat(63))),
+            catalog(schemaVersion = 2),
+            catalog(stable = null),
+            catalog(stable = null, dev = entry(devUrl, "b".repeat(64))),
+            catalog(stable = entry("https://shohei0205.github.io/yamamuki-data/peaks/manifest.json", "a".repeat(64))),
+            // gsi-peaks の置き場所の manifest を osm-peaks として読まない。
+            catalog(stable = entry(gsiUrl, "a".repeat(64))),
+            catalog(stable = entry(PeakDataset.OSM_PEAKS.manifestUrlPrefix + "sub/x.json", "a".repeat(64))),
+            catalog(stable = entry(PeakDataset.OSM_PEAKS.manifestUrlPrefix + "x.txt", "a".repeat(64))),
+            catalog(stable = entry(stableUrl, "A".repeat(64))),
+            catalog(stable = entry(stableUrl, "a".repeat(63))),
+            """{"schemaVersion":1,"datasets":{"gsi-peaks":${channels(entry(gsiUrl, "a".repeat(64)), null)}}}""",
+            """{"schemaVersion":1,"stable":${entry(stableUrl, "a".repeat(64))}}""",
             "[]",
             "{",
         )
         for (body in bad) {
-            assertFailsWith<PeakDataException>(body) { PeakData.parsePointer(body, useDev = false) }
+            assertFailsWith<PeakDataException>(body) { PeakData.parseCatalog(body, useDev = false) }
         }
         // 開発用のビルドは、dev が壊れていても stable に切り替えない。
-        assertFailsWith<PeakDataException> { PeakData.parsePointer(pointer(dev = entry(devUrl, "x")), useDev = true) }
+        assertFailsWith<PeakDataException> { PeakData.parseCatalog(catalog(dev = entry(devUrl, "x")), useDev = true) }
+        // 読めない版のカタログでは、アプリの更新を促す。
+        val e = assertFailsWith<PeakDataException> { PeakData.parseCatalog(catalog(schemaVersion = 2), useDev = false) }
+        assertTrue(e.message!!.contains("アプリを更新"))
     }
 
     @Test
-    fun pointerSourceFollowsPointerAndSkipsSameManifest() = runTest {
+    fun rejectsManifestOfOtherDataset() {
+        // 版 5 以降は、データ本体のファイル名が osm-peaks.json.gz でなければ読まない(gsi-peaks などを取り違えないため)。
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6().replace("osm-peaks.json.gz\",", "gsi-peaks.json.gz\",")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5().replace("\"fileName\":\"osm-peaks.json.gz\",", "")) }
+        // 版 4 までは、ファイル名を見ない(japan-mountains.json.gz だった)。
+        assertEquals(2, PeakData.parseManifest(manifest()).mountainCount)
+    }
+
+    @Test
+    fun catalogSourceFollowsCatalogAndSkipsSameManifest() = runTest {
         val manifest = manifest(schemaVersion = 4)
         val requests = mutableListOf<String>()
         val engine = MockEngine { request ->
             val url = request.url.toString()
             requests += url
             when (url) {
-                PeakData.POINTER_URL -> respond(pointer(stable = entry(stableUrl, sha256(manifest.toByteArray()))))
+                PeakData.CATALOG_URL -> respond(catalog(stable = entry(stableUrl, sha256(manifest.toByteArray()))))
                 stableUrl -> respond(manifest)
                 else -> respond(gzip)
             }
         }
-        val source = PeakData.source(PeakDataChannel.STABLE, HttpClient(engine), userAgent = "test")
+        val source = PeakData.source(PeakDataChannel.STABLE, PeakDataset.OSM_PEAKS, HttpClient(engine), userAgent = "test")
 
         val fetched = source.fetchManifest(null)
         assertIs<ManifestResponse.Fetched>(fetched)
         assertEquals(manifest, fetched.body)
         assertEquals(sha256(manifest.toByteArray()), fetched.etag)
-        // 指す manifest が前回と同じなら、manifest は取り直さない。
+        // 指す manifest が前回と同じなら、manifest は取り直さない。0.7.0 の current.json で取り込んだ端末も、
+        // 同じ manifest の SHA-256 を覚えているので取り直さない。
         assertIs<ManifestResponse.NotModified>(source.fetchManifest(fetched.etag))
-        assertEquals(listOf(PeakData.POINTER_URL, stableUrl, PeakData.POINTER_URL), requests)
+        assertEquals(listOf(PeakData.CATALOG_URL, stableUrl, PeakData.CATALOG_URL), requests)
     }
 
     @Test
-    fun pointerSourceRejectsManifestWithWrongSha256() = runTest {
+    fun catalogSourceRejectsManifestWithWrongSha256() = runTest {
         val engine = MockEngine { request ->
             when (request.url.toString()) {
-                PeakData.POINTER_URL -> respond(pointer(stable = entry(stableUrl, "a".repeat(64))))
+                PeakData.CATALOG_URL -> respond(catalog(stable = entry(stableUrl, "a".repeat(64))))
                 else -> respond(manifest())
             }
         }
-        val source = PointerPeakDataSource(HttpClient(engine), useDev = false)
+        val source = CatalogPeakDataSource(HttpClient(engine), useDev = false)
         assertFailsWith<PeakDataException> { source.fetchManifest(null) }
     }
 
     @Test
-    fun pointerSourceReportsHttpError() = runTest {
-        val source = PointerPeakDataSource(HttpClient(MockEngine { respond("", HttpStatusCode.NotFound) }), useDev = true)
+    fun catalogSourceReportsHttpError() = runTest {
+        val source = CatalogPeakDataSource(HttpClient(MockEngine { respond("", HttpStatusCode.NotFound) }), useDev = true)
         assertFailsWith<PeakDataException> { source.fetchManifest(null) }
+    }
+
+    // 国土地理院の山頂データ(gsi-peaks)の地点データ版 6。ID は gsi-vector: などの文字列で、OSM のノード番号は無い。
+    private val gsiPoints = """
+        {"schemaFormat":"yamamuki-points","schemaVersion":6,"metadata":{"pointCount":4},
+         "points":[
+          {"id":"gsi-mountain-list:1","type":"peak","name":"富士山","nameReading":"ふじさん","latitude":35.3606,"longitude":138.7274,
+           "elevationM":3776,"tags":["日本百名山","日本の主な山岳標高"]},
+          {"id":"gsi-vector:abc","type":"peak","name":"名の無い標高点の山","latitude":35.1,"longitude":138.1,"elevationM":100},
+          {"id":" ","type":"peak","name":"ID の無い山","latitude":35.2,"longitude":138.2},
+          {"id":"gsi-vector:abc","type":"peak","name":"同じ ID","latitude":35.3,"longitude":138.3}]}
+    """.trimIndent()
+
+    @Test
+    fun parsesGsiPeaks() {
+        // ID をそのまま使う。ID の無い地点は飛ばし、同じ ID は最初の地点だけを読む。
+        assertEquals(
+            listOf(
+                Mountain(
+                    "gsi-mountain-list:1", "富士山", 35.3606, 138.7274, 3776.0,
+                    nameReading = "ふじさん", tags = listOf("日本百名山", "日本の主な山岳標高"),
+                ),
+                Mountain("gsi-vector:abc", "名の無い標高点の山", 35.1, 138.1, 100.0),
+            ),
+            PeakData.parseMountains(gzip(gsiPoints), PeakDataset.GSI_PEAKS),
+        )
+        // osm-peaks として読むと、OSM のノード番号の無い地点は飛ばす(gsi-peaks を取り違えても山が混ざらない)。
+        assertEquals(emptyList<Mountain>(), PeakData.parseMountains(gzip(gsiPoints)))
+    }
+
+    @Test
+    fun parsesGsiManifest() {
+        val body = manifestV6(fileName = "gsi-peaks.json.gz", experimental = true)
+        val m = PeakData.parseManifest(body, PeakDataset.GSI_PEAKS)
+        assertEquals(2, m.mountainCount)
+        assertTrue(m.experimental, "試験版の印(experimental)を読む")
+        assertFalse(PeakData.parseManifest(manifestV6()).experimental, "experimental が無ければ試験版ではない")
+        // 種類とファイル名が食い違う manifest は読まない。
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(body) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(), PeakDataset.GSI_PEAKS) }
+        // 版 4・5 は osm-peaks しか無かったので、ほかの種類では読まない。
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(), PeakDataset.GSI_PEAKS) }
+        assertFailsWith<PeakDataException> {
+            PeakData.parseManifest(manifestV5().replace("osm-peaks.json.gz\",", "gsi-peaks.json.gz\","), PeakDataset.GSI_PEAKS)
+        }
+    }
+
+    @Test
+    fun installsGsiPeaks() = runTest {
+        val data = gzip(gsiPoints)
+        val cache = InMemoryMountainCache()
+        val source = FakeSource(manifestV6(data = data, fileName = "gsi-peaks.json.gz", experimental = true), data)
+        val installed = PeakDataUpdater(source, cache, dataset = PeakDataset.GSI_PEAKS).update(null).installed
+        assertEquals(2, installed.mountainCount)
+        assertTrue(installed.experimental)
+        assertEquals(setOf("gsi-mountain-list:1", "gsi-vector:abc"), cache.mountains.keys)
+    }
+
+    @Test
+    fun catalogPicksGsiPeaks() {
+        val gsiStable = PeakDataset.GSI_PEAKS.manifestUrlPrefix + "gsi-peaks-20261020T014704Z-39355286679-1.json"
+        val body = catalog(gsi = channels(stable = entry(gsiStable, "d".repeat(64)), dev = entry(gsiUrl, "c".repeat(64))))
+        assertEquals(PeakDataPointer(gsiStable, "d".repeat(64)), PeakData.parseCatalog(body, useDev = false, PeakDataset.GSI_PEAKS))
+        assertEquals(PeakDataPointer(gsiUrl, "c".repeat(64)), PeakData.parseCatalog(body, useDev = true, PeakDataset.GSI_PEAKS))
+        // 配布用のビルドは stable しか読まないので、dev しか無い種類は読めない。
+        assertFailsWith<PeakDataException> { PeakData.parseCatalog(catalog(), useDev = false, PeakDataset.GSI_PEAKS) }
+        assertEquals(PeakDataPointer(gsiUrl, "c".repeat(64)), PeakData.parseCatalog(catalog(), useDev = true, PeakDataset.GSI_PEAKS))
+        // osm-peaks の置き場所の manifest を gsi-peaks として読まない。
+        assertFailsWith<PeakDataException> {
+            PeakData.parseCatalog(catalog(gsi = channels(stable = entry(stableUrl, "d".repeat(64)), dev = null)), false, PeakDataset.GSI_PEAKS)
+        }
+    }
+
+    @Test
+    fun dataDevChannelReadsCatalogForOtherDatasets() = runTest {
+        // 取得先を dev にした開発版でも、yamamuki-data の dev を直接読めるのは osm-peaks だけ。gsi-peaks はカタログの dev を読む。
+        val manifest = manifestV6(fileName = "gsi-peaks.json.gz")
+        val requests = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            val url = request.url.toString()
+            requests += url
+            when (url) {
+                PeakData.CATALOG_URL -> respond(catalog(gsi = channels(stable = null, dev = entry(gsiUrl, sha256(manifest.toByteArray())))))
+                gsiUrl -> respond(manifest)
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val source = PeakData.source(PeakDataChannel.DATA_DEV, PeakDataset.GSI_PEAKS, HttpClient(engine), userAgent = "test")
+        assertIs<ManifestResponse.Fetched>(source.fetchManifest(null))
+        assertEquals(listOf(PeakData.CATALOG_URL, gsiUrl), requests)
+        assertIs<HttpPeakDataSource>(PeakData.source(PeakDataChannel.DATA_DEV, PeakDataset.OSM_PEAKS, HttpClient(engine), "test"))
+    }
+
+    @Test
+    fun catalogCacheSharesCatalogBetweenDatasets() = runTest {
+        // 種類ごとの取得元で同じカタログを使い回し、選択画面を開くたびに種類の数だけ取り直さない。
+        val osm = manifest()
+        val gsi = manifestV6(fileName = "gsi-peaks.json.gz")
+        val gsiStable = PeakDataset.GSI_PEAKS.manifestUrlPrefix + "gsi-peaks-20261020T014704Z-39355286679-1.json"
+        val requests = mutableListOf<String>()
+        var failCatalog = true
+        val engine = MockEngine { request ->
+            val url = request.url.toString()
+            requests += url
+            when (url) {
+                PeakData.CATALOG_URL ->
+                    if (failCatalog) {
+                        respond("", HttpStatusCode.InternalServerError)
+                    } else {
+                        respond(
+                            catalog(
+                                stable = entry(stableUrl, sha256(osm.toByteArray())),
+                                gsi = channels(stable = entry(gsiStable, sha256(gsi.toByteArray())), dev = null),
+                            ),
+                        )
+                    }
+                stableUrl -> respond(osm)
+                gsiStable -> respond(gsi)
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        var now = 0L
+        val cache = PeakCatalogCache(maxAgeMillis = 1_000, clock = { now })
+        val client = HttpClient(engine)
+        val osmSource = PeakData.source(PeakDataChannel.STABLE, PeakDataset.OSM_PEAKS, client, "test", cache)
+        val gsiSource = PeakData.source(PeakDataChannel.STABLE, PeakDataset.GSI_PEAKS, client, "test", cache)
+        // 失敗した取得は覚えず、次は取り直す。
+        assertFailsWith<PeakDataException> { osmSource.fetchManifest(null) }
+        failCatalog = false
+        assertIs<ManifestResponse.Fetched>(osmSource.fetchManifest(null))
+        assertIs<ManifestResponse.Fetched>(gsiSource.fetchManifest(null))
+        assertEquals(listOf(PeakData.CATALOG_URL, PeakData.CATALOG_URL, stableUrl, gsiStable), requests)
+        // 覚えておく時間を過ぎたら取り直す。
+        now = 1_000
+        requests.clear()
+        assertIs<ManifestResponse.Fetched>(gsiSource.fetchManifest(null))
+        assertEquals(listOf(PeakData.CATALOG_URL, gsiStable), requests)
     }
 
     @Test

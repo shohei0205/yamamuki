@@ -1,7 +1,7 @@
 ﻿# 開発ルール（Claude / Codex / Cursor 共通）
 
 このリポジトリで AI エージェント（Claude Code、Codex、Cursor など）が作業するときの共通ルール。人が作業するときも同じルールに従う。
-アプリの機能・構成・ビルド手順の詳細は [README.md](README.md) にある。ここには作業の進め方だけを書く。
+アプリの構成・ビルド手順は [README.md](README.md)、機能の詳しい仕様は [docs/](docs/) にある。ここには作業の進め方だけを書く。
 
 ## プロジェクトの概要
 
@@ -18,7 +18,8 @@
 | `ios/Yamamuki/` | iOS アプリ（画面、位置と方位の取得、設定） |
 | `ios/YamamukiUITests/` | iOS アプリの画面を操作する UI テスト（XCUITest） |
 | `ios/project.yml` | XcodeGen の設定。`ios/Yamamuki.xcodeproj` はここから生成する |
-| `site/` | GitHub Pages で公開するページ（プライバシーポリシー、山データの参照先ファイル `data/osm-peaks/`）。main に入ると `.github/workflows/pages.yml` で公開する |
+| `docs/` | アプリの詳しい仕様（画面・山データ・設定・キャッシュなど）と、開発中に分かったことの記録 |
+| `site/` | GitHub Pages で公開するページ（プライバシーポリシー、山データのカタログと参照先ファイル `data/`）。main に入ると `.github/workflows/pages.yml` で公開する |
 
 ## 言葉づかい
 
@@ -109,7 +110,7 @@ Co-authored-by: Codex GPT-6
 
 - 機能の追加や不具合の修正は、特に指示がなければ Android と iOS の両方に同じ動作で入れる。片方だけにするときは PR の説明にそう書く。
 - `android/core/`（Kotlin）と `ios/YamamukiCore/`（Swift）は同じロジックの移植。片方を変えたらもう片方も同じに変え、テストも両方に足す。
-- 両 OS の違いは端末の機能による差だけにする。違いを増やしたら README の「Android 版と iOS 版の違い」を更新する。
+- 両 OS の違いは端末の機能による差だけにする。違いを増やしたら [docs/platform-differences.md](docs/platform-differences.md)（Android 版と iOS 版の違い）を更新する。
 
 ## DB の版と移行
 
@@ -128,9 +129,10 @@ Android 版の山データの DB（Room）は、配布したあとも端末に�
 コミットの前に、変えた部分に応じて次を通す。CI（`.github/workflows/`）でも同じものを動かしている。
 
 ```bash
-# すべて: 改行コードと BOM の確認、画面の文言が文字列リソースにまとまっているかの確認
+# すべて: 改行コードと BOM の確認、画面の文言が文字列リソースにまとまっているかの確認、ソースコードの先頭の著作権とライセンスの表示の確認
 .github/scripts/check-text-format.sh
 .github/scripts/check-ui-strings.py
+.github/scripts/check-license-headers.sh
 
 # Android: core の単体テスト、アプリのビルドと単体テスト、DB のスキーマの確認（Gradle は android/ で動かす）
 (cd android && ./gradlew -p core test)
@@ -139,7 +141,7 @@ Android 版の山データの DB（Room）は、配布したあとも端末に�
 (cd android && ./gradlew :app:testDebugUnitTest)
 git fetch origin main && .github/scripts/check-room-schemas.sh origin/main
 
-# 山データの参照先ファイル（site/data/osm-peaks/）: スクリプトの単体テストと、Release と合っているかの確認
+# 山データのカタログと参照先ファイル（site/data/）: スクリプトの単体テストと、Release と合っているかの確認
 python3 -m unittest discover -s .github/scripts/tests
 git fetch origin main && .github/scripts/peak_data.py check --base origin/main
 
@@ -153,8 +155,8 @@ git fetch origin main && .github/scripts/peak_data.py check --base origin/main
 
 - iOS の画面を変えたら、手元で UI テストも動かす（手順は README の「iOS 版」）。CI では UI テストのビルドだけを確かめ、実行はしない。
 - CI の「Build」（Android）は、配布版のビルド（広告入り、署名なし）、アプリの単体テストと DB のスキーマの確認（スキーマのコミット漏れと、既にある版のスキーマの書き換え）も行う。
-- CI の「Text format」は、画面の文言の確認（コードに直接書いた日本語、iOS のキーの過不足、両 OS のキーと文言のずれ）も行う。
-- CI の「山データの確認」は、参照先ファイルと manifest のコピーが yamamuki-data の Release と合っているか（コピーが Release と同じか、`manifests/` が追加だけか、データ本体の大きさと SHA-256、`stable` の件数の減り方）を確かめる。参照先の manifest をアプリの読み込み処理で読めるかは、core の単体テスト（`SitePeakDataTest`）で確かめる。
+- CI の「Text format」は、画面の文言の確認（コードに直接書いた日本語、iOS のキーの過不足、両 OS のキーと文言のずれ）と、ソースコードの先頭の著作権とライセンスの表示の確認も行う。
+- CI の「山データの確認」は、カタログ・参照先ファイルと manifest のコピーが yamamuki-data の Release と合っているか（参照先ファイルがカタログの osm-peaks の stable と同じか、コピーが Release と同じか、`manifests/` が追加だけか、osm-peaks のデータ本体の大きさと SHA-256、`stable` の件数の減り方）を確かめる。参照先の manifest をアプリの読み込み処理で読めるかは、core の単体テスト（`SitePeakDataTest`）で確かめる。
 - CI の「Build」（Android）と「Text format」はすべての PR で、「iOS」は `ios/` か `.github/workflows/ios.yml` を変えた PR だけで、「山データの確認」は `site/data/` か山データのスクリプト・ワークフローを変えた PR だけで動く。
 - 手元で動かせないもの（Mac が無いときの iOS ビルドなど）は、PR の CI で確かめ、PR の説明に「CI で確認」と書く。
 - ロジックを変えたら単体テストを足す。テストを消したり飛ばしたりして通すことはしない。
@@ -216,7 +218,7 @@ AI ツールが起こしやすい失敗を防ぐための指示。人の作業�
 
 ## ドキュメント
 
-- 画面・設定項目・キャッシュの仕組み・ビルド手順を変えたら、同じ PR で README.md も更新する。
+- 画面・設定項目・キャッシュの仕組みを変えたら、同じ PR で `docs/` の仕様のページも更新する。ビルド手順を変えたら README.md を更新する。
 - CI で確かめる内容を変えたら、同じ PR でこのファイルの「変更の確かめ方」も更新する。
 - このファイルのルールを変えたら、同じ PR で理由を説明する。
 
@@ -227,6 +229,20 @@ AI ツールが起こしやすい失敗を防ぐための指示。人の作業�
 - 例外として、スキルの `SKILL.md` には BOM を付けない。先頭の `---` からスキルの設定を読むため、BOM があると読めなくなるおそれがある。
 - この決まりは `.gitattributes` と `.editorconfig` に書いてある。指定のない新規ファイルは、同じディレクトリにある同じ種類のファイルに合わせる。
 - ルールどおりかは CI の「Text format」で確かめている。手元では `.github/scripts/check-text-format.sh` で確かめられる。
+
+## 著作権とライセンスの表示
+
+- Kotlin（`.kt`・`.kts`）、Swift、Python、シェルスクリプトのファイルの先頭に、次の 2 行を入れる（Python とシェルスクリプトは `//` の代わりに `#`）。新しいファイルを作るときも入れる。
+
+  ```kotlin
+  // SPDX-FileCopyrightText: 2026 The yamamuki Authors
+  // SPDX-License-Identifier: MIT
+  ```
+
+- 1 行目が `#!` か `// swift-tools-version` のファイルは、その次の行に入れる。表示のあとは空行を 1 行あける。
+- 年は最初に公開した年（2026）のまま変えない。著作権者は LICENSE と同じ「The yamamuki Authors」にする（[AUTHORS.md](AUTHORS.md) の開発者を指す）。
+- JSON などコメントを書けないファイルと、`.agents/` のスキル（それぞれのライセンスに従う）には入れない。
+- 入っているかは CI の「Text format」で確かめている。手元では `.github/scripts/check-license-headers.sh` で確かめられる。
 
 ## やってはいけないこと
 

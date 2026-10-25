@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import kotlin.math.PI
@@ -104,19 +107,19 @@ object PeakLayout {
 
     /**
      * 選ぶ順。[displayPriority] の順に、タグの数([tagCount])× [TAG_BONUS_DEG] を上乗せし、
-     * 前回選んだ山([keptIds]、OSM の ID)は [KEPT_BONUS_DEG] だけ上乗せする。
+     * 前回選んだ山([keptIds]、地点の ID)は [KEPT_BONUS_DEG] だけ上乗せする。
      * ヘディングアップでは向いている方角([headingDeg])と表示範囲([rangeKm])を渡し、
      * 正面に近い山に [forwardBonus] を、表示範囲が広いときは高い山に [heightBonus] を上乗せする。
      */
     fun priorityOrder(
         mountains: List<NearbyMountain>,
         observerAltitudeM: Double?,
-        keptIds: Set<Long> = emptySet(),
+        keptIds: Set<String> = emptySet(),
         headingDeg: Double? = null,
         rangeKm: Double? = null,
     ): List<NearbyMountain> {
         fun score(m: NearbyMountain) =
-            m.displayScore(observerAltitudeM) + (if (m.mountain.osmId in keptIds) KEPT_BONUS_DEG else 0.0) +
+            m.displayScore(observerAltitudeM) + (if (m.mountain.id in keptIds) KEPT_BONUS_DEG else 0.0) +
                 TAG_BONUS_DEG * m.mountain.tagCount +
                 (headingDeg?.let { forwardBonus(m.bearingDeg, it) } ?: 0.0) +
                 (rangeKm?.let { heightBonus(m.mountain.elevationM, it) } ?: 0.0)
@@ -138,18 +141,18 @@ object PeakLayout {
     fun candidates(
         mountains: List<NearbyMountain>,
         observerAltitudeM: Double?,
-        keptIds: Set<Long>,
+        keptIds: Set<String>,
         reachKm: Double,
         limit: Int,
         centerKm: Double = 0.0,
         centerBearingDeg: Double = 0.0,
-        drawnIds: Set<Long> = emptySet(),
+        drawnIds: Set<String> = emptySet(),
         headingDeg: Double? = null,
     ): List<NearbyMountain> {
         val inReach = priorityOrder(mountains, observerAltitudeM, keptIds, headingDeg)
             .filter { planeDistanceKm(it.distanceKm, it.bearingDeg, centerKm, centerBearingDeg) <= reachKm }
-        var room = limit.coerceAtLeast(0) - inReach.count { it.mountain.osmId in drawnIds }
-        return inReach.filter { it.mountain.osmId in drawnIds || room-- > 0 }
+        var room = limit.coerceAtLeast(0) - inReach.count { it.mountain.id in drawnIds }
+        return inReach.filter { it.mountain.id in drawnIds || room-- > 0 }
     }
 
     /** 現在地から見た 2 点(距離 km と方角)の、方位盤の平面上での距離(km)。 */

@@ -1,12 +1,15 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import XCTest
 @testable import YamamukiCore
 
 final class MountainSearchTests: XCTestCase {
-    private let yari = Mountain(osmId: 1, name: "槍ヶ岳", latitude: 36.3420, longitude: 137.6476, elevationM: 3180, nameReading: "やりがたけ")
-    private let fuji = Mountain(osmId: 2, name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776, nameReading: "ふじさん")
-    private let koFuji = Mountain(osmId: 3, name: "小富士", latitude: 35.3712, longitude: 138.7639, elevationM: 1979, nameReading: "こふじ")
-    private let mitsutoge = Mountain(osmId: 4, name: "三ツ峠山", latitude: 35.5469, longitude: 138.8133, elevationM: 1785, aliases: ["開運山"])
-    private let unknown = Mountain(osmId: 5, name: "富士見台", latitude: 35.4000, longitude: 137.6000, elevationM: nil)
+    private let yari = Mountain(id: "osm:1", name: "槍ヶ岳", latitude: 36.3420, longitude: 137.6476, elevationM: 3180, nameReading: "やりがたけ")
+    private let fuji = Mountain(id: "osm:2", name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776, nameReading: "ふじさん")
+    private let koFuji = Mountain(id: "osm:3", name: "小富士", latitude: 35.3712, longitude: 138.7639, elevationM: 1979, nameReading: "こふじ")
+    private let mitsutoge = Mountain(id: "osm:4", name: "三ツ峠山", latitude: 35.5469, longitude: 138.8133, elevationM: 1785, aliases: ["開運山"])
+    private let unknown = Mountain(id: "osm:5", name: "富士見台", latitude: 35.4000, longitude: 137.6000, elevationM: nil)
     private var search: MountainSearch { MountainSearch([yari, fuji, koFuji, mitsutoge, unknown]) }
 
     func testMatchesNameReadingAndAliases() {
@@ -40,9 +43,9 @@ final class MountainSearchTests: XCTestCase {
 
     /// 「やま」で探すと、近くの「〜山(やま)」より、先頭が一致した山を先に並べる。
     func testListsPrefixMatchesBeforePartialMatches() {
-        let takayama = Mountain(osmId: 6, name: "高山", latitude: 35.5000, longitude: 138.7700, elevationM: 1000, nameReading: "たかやま")
-        let yamabushi = Mountain(osmId: 7, name: "山伏", latitude: 35.2500, longitude: 138.3700, elevationM: 2014, nameReading: "やまぶし")
-        let yamatai = Mountain(osmId: 8, name: "山大岳", latitude: 36.0000, longitude: 137.0000, elevationM: 1500, nameReading: "やまたいだけ")
+        let takayama = Mountain(id: "osm:6", name: "高山", latitude: 35.5000, longitude: 138.7700, elevationM: 1000, nameReading: "たかやま")
+        let yamabushi = Mountain(id: "osm:7", name: "山伏", latitude: 35.2500, longitude: 138.3700, elevationM: 2014, nameReading: "やまぶし")
+        let yamatai = Mountain(id: "osm:8", name: "山大岳", latitude: 36.0000, longitude: 137.0000, elevationM: 1500, nameReading: "やまたいだけ")
         let s = MountainSearch([takayama, yamatai, yamabushi])
         let results = s.search("やま", latitude: 35.4986, longitude: 138.7690)
         XCTAssertEqual(results.prefix, [yamabushi, yamatai])
@@ -56,8 +59,8 @@ final class MountainSearchTests: XCTestCase {
     /// 仮名か英数字 1 文字だけのときは、先頭が一致した山だけを返す(「や」で「〜山(やま)」を出さない)。
     /// 漢字 1 文字なら途中に含む山も返す。先頭が一致した山が無ければ、仮名や英数字 1 文字でも途中に含む山を返す。
     func testOmitsPartialMatchesForOneKanaOrAlphanumeric() {
-        let takayama = Mountain(osmId: 6, name: "高山", latitude: 35.5000, longitude: 138.7700, elevationM: 1000, nameReading: "たかやま")
-        let peak1 = Mountain(osmId: 9, name: "大平山 第1ピーク (Ohirayama Peak 1)", latitude: 36.0, longitude: 138.0, elevationM: 500)
+        let takayama = Mountain(id: "osm:6", name: "高山", latitude: 35.5000, longitude: 138.7700, elevationM: 1000, nameReading: "たかやま")
+        let peak1 = Mountain(id: "osm:9", name: "大平山 第1ピーク (Ohirayama Peak 1)", latitude: 36.0, longitude: 138.0, elevationM: 500)
         let s = MountainSearch([takayama, yari, peak1])
         // 先頭一致が無いときは、1 文字でも部分一致を返す。
         XCTAssertEqual(s.search("1", latitude: nil, longitude: nil), .init(prefix: [], partial: [peak1]))
@@ -73,9 +76,9 @@ final class MountainSearchTests: XCTestCase {
     }
 
     func testOmitsPartialMatchesForOneAlphanumericWithPrefixMatch() {
-        let peakX = Mountain(osmId: 10, name: "Peak X", latitude: 35.0, longitude: 138.0, elevationM: 1200)
-        let peak1 = Mountain(osmId: 9, name: "大平山 第1ピーク (Ohirayama Peak 1)", latitude: 36.0, longitude: 138.0, elevationM: 500)
-        let first = Mountain(osmId: 11, name: "1峰", latitude: 35.0, longitude: 138.0, elevationM: 900)
+        let peakX = Mountain(id: "osm:10", name: "Peak X", latitude: 35.0, longitude: 138.0, elevationM: 1200)
+        let peak1 = Mountain(id: "osm:9", name: "大平山 第1ピーク (Ohirayama Peak 1)", latitude: 36.0, longitude: 138.0, elevationM: 500)
+        let first = Mountain(id: "osm:11", name: "1峰", latitude: 35.0, longitude: 138.0, elevationM: 900)
         let s = MountainSearch([peakX, peak1, first])
         // 先頭一致があれば、英数字 1 文字では部分一致を返さない。
         XCTAssertEqual(s.search("p", latitude: nil, longitude: nil), .init(prefix: [peakX], partial: []))

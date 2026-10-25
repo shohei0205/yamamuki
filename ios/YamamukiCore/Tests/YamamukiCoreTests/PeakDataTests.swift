@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Foundation
 import XCTest
 @testable import YamamukiCore
@@ -28,7 +31,7 @@ private final class FakeSource: PeakDataSource, @unchecked Sendable {
 
 private final class MemoryCache: MountainCache, @unchecked Sendable {
     var tiles: [Tile: Date] = [:]
-    var mountains: [Int64: Mountain] = [:]
+    var mountains: [String: Mountain] = [:]
 
     func fetchedAt(_ tiles: [Tile]) async throws -> [Tile: Date] { self.tiles.filter { tiles.contains($0.key) } }
 
@@ -39,7 +42,7 @@ private final class MemoryCache: MountainCache, @unchecked Sendable {
     func replaceTiles(_ tiles: [Tile], mountains: [Mountain], fetchedAt: Date) async throws {
         let targets = Set(tiles)
         self.mountains = self.mountains.filter { !targets.contains(Tile.of($0.value.latitude, $0.value.longitude)) }
-        for m in mountains { self.mountains[m.osmId] = m }
+        for m in mountains { self.mountains[m.id] = m }
         for t in tiles { self.tiles[t] = fetchedAt }
     }
 }
@@ -106,15 +109,113 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(try PeakData.parseManifest(manifestV5(sourceTimestamp: nil)).sourceTimestamp, "")
     }
 
+    /// yamamuki-data の formats/manifest.md の manifest 版 6 と同じ形。件数と出典は metadata にある。
+    private func manifestV6(data: Data? = nil, schemaFormat: String = "yamamuki-manifest",
+                            dataSchemaFormat: String = "yamamuki-points", dataSchemaVersion: String = "6",
+                            fileName: String = "osm-peaks.json.gz", experimental: Bool? = nil,
+                            metadata: String = #"{"sources":[{"name":"日本百名山","latestTimestamp":"2026-01-01T00:00:00Z"},"#
+                                + #"{"name":"osm-peaks","license":"ODbL-1.0","latestTimestamp":"2026-10-17T04:42:52Z"}],"pointCount":2}"#,
+                            metadataKey: String = "metadata") -> Data {
+        let data = data ?? gzip
+        return Data("""
+        {"schemaFormat":"\(schemaFormat)","schemaVersion":6,"dataSchemaVersion":\(dataSchemaVersion),"name":"山頂",
+         "version":"20261018T115955Z-39125410649-1","fileName":"\(fileName)",\(experimental.map { #""experimental":\#($0),"# } ?? "")
+         "downloadUrl":"https://example.com/osm-peaks.json.gz","sha256":"\(PeakData.sha256Hex(data))","sizeBytes":\(data.count),
+         "uncompressedSizeBytes":100,"dataTimestamp":"2026-10-18T12:00:15Z","dataSchemaFormat":"\(dataSchemaFormat)",
+         "\(metadataKey)":\(metadata)}
+        """.utf8)
+    }
+
+    func testParsesManifestV6() throws {
+        let m = try PeakData.parseManifest(manifestV6())
+        XCTAssertEqual(m.schemaVersion, 6)
+        XCTAssertEqual(m.version, "20261018T115955Z-39125410649-1")
+        XCTAssertEqual(m.downloadUrl.absoluteString, "https://example.com/osm-peaks.json.gz")
+        XCTAssertEqual(m.mountainCount, 2, "件数は metadata.pointCount から読む")
+        XCTAssertEqual(m.sourceTimestamp, "2026-10-17T04:42:52Z", "出典の latestTimestamp を読む")
+        // 出典の名前によらず、latestTimestamp のうち最も新しいものを読む(2026-10-20 の版から元データの出典の名前が変わったため)。
+        let renamed = #"{"sources":[{"name":"日本百名山"},{"name":"OpenStreetMap（ロシア極東連邦管区・Geofabrik 配布）","latestTimestamp":"2026-10-16T21:00:00Z"},"#
+            + #"{"name":"OpenStreetMap（日本・Geofabrik 配布）","latestTimestamp":"2026-10-17T04:42:52Z"}],"pointCount":2}"#
+        XCTAssertEqual(try PeakData.parseManifest(manifestV6(metadata: renamed)).sourceTimestamp, "2026-10-17T04:42:52Z")
+        // どの出典にも latestTimestamp が無いときは空文字。
+        XCTAssertEqual(try PeakData.parseManifest(manifestV6(metadata: #"{"sources":[{"name":"osm-peaks"}],"pointCount":2}"#)).sourceTimestamp, "")
+        XCTAssertEqual(try PeakData.parseManifest(manifestV6(metadata: #"{"pointCount":2}"#)).sourceTimestamp, "")
+    }
+
+    func testRejectsManifestV6OfOtherFormats() {
+        // 形式の名前が違うものと、件数の無いものは読まない。
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(schemaFormat: "other")))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(dataSchemaFormat: "other")))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(metadata: #"{"sources":[]}"#)))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(metadata: #"{"pointCount":"2"}"#)))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(metadataKey: "meta")))
+        // 版 6 の manifest でも、データ本体の版が読めなければ断る。
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(dataSchemaVersion: "7")))
+    }
+
+    func testRejectsManifestOfOtherDataset() throws {
+        // 版 5 以降は、データ本体のファイル名が osm-peaks.json.gz でなければ読まない(gsi-peaks などを取り違えないため)。
+        func replacing(_ data: Data, _ target: String, _ replacement: String) -> Data {
+            Data(String(decoding: data, as: UTF8.self).replacingOccurrences(of: target, with: replacement).utf8)
+        }
+        XCTAssertThrowsError(try PeakData.parseManifest(replacing(manifestV6(), #""fileName":"osm-peaks.json.gz""#, #""fileName":"gsi-peaks.json.gz""#)))
+        XCTAssertThrowsError(try PeakData.parseManifest(replacing(manifestV5(), #""fileName":"osm-peaks.json.gz","#, "")))
+        // 版 4 までは、ファイル名を見ない(japan-mountains.json.gz だった)。
+        XCTAssertEqual(try PeakData.parseManifest(manifest()).mountainCount, 2)
+    }
+
+    /// 国土地理院の山頂データ(gsi-peaks)の地点データ版 6 を、Python の gzip.compress(mtime=0) で圧縮したもの。
+    /// ID は gsi-vector: などの文字列で、OSM のノード番号は無い。中身は Android の PeakDataTest の gsiPoints と同じ
+    /// (富士山・名の無い標高点の山・ID の無い山・同じ ID の山の 4 件)。
+    private let gsiPoints = Data(base64Encoded:
+        "H4sIAAAAAAAC/51Rz0sCQRS++1cMc1ZxXXNjr0ngoUuHLuFhcodtcGdG3FEQ8bDiUUGISKFLRBAahUVQBP0z0yr9F71tlzA2Lx3f9773/eD1sF8/pZzsyxYnCtu4Szjh7QbLNSUTysfZhHBEWz6TAtvlLOZUEYcogu0e/qbtybaA41I/m0E4ObSPMwj1MHNA1PVZjkccwkTOY76yDRBW3SaFZZOSBkyC8GgKH0bh9SJcLhPokBKHCRc2OnjWwVQH53pwBkuPKKbaDtyYO3mzXIBcnhRughnmbt4qWiUIhBCmHu0AXYoDYFsWUBVxo4h4dXGzurxbz97DyTg2jREd3H+8vOlgDmD4+LS6nX0uprgWFdws1aF1JVs2Oalv7TMZg9Z6eKWDYayyHrwCEpv9KmGkGgCyGd0oFDYDoG2e1Qr68fzDp5jyKf6n1wi+gaqV1CtS6ma/1v8CNEDW/GgCAAA="
+    )!
+
+    func testParsesGsiPeaks() throws {
+        // ID をそのまま使う。ID の無い地点は飛ばし、同じ ID は最初の地点だけを読む。
+        XCTAssertEqual(try PeakData.parseMountains(gsiPoints, dataset: .gsiPeaks), [
+            Mountain(id: "gsi-mountain-list:1", name: "富士山", latitude: 35.3606, longitude: 138.7274, elevationM: 3776.0,
+                     nameReading: "ふじさん", tags: ["日本百名山", "日本の主な山岳標高"]),
+            Mountain(id: "gsi-vector:abc", name: "名の無い標高点の山", latitude: 35.1, longitude: 138.1, elevationM: 100.0),
+        ])
+        // osm-peaks として読むと、OSM のノード番号の無い地点は飛ばす(gsi-peaks を取り違えても山が混ざらない)。
+        XCTAssertEqual(try PeakData.parseMountains(gsiPoints), [])
+    }
+
+    func testParsesGsiManifest() throws {
+        let body = manifestV6(fileName: "gsi-peaks.json.gz", experimental: true)
+        let m = try PeakData.parseManifest(body, dataset: .gsiPeaks)
+        XCTAssertEqual(m.mountainCount, 2)
+        XCTAssertTrue(m.experimental, "試験版の印(experimental)を読む")
+        XCTAssertFalse(try PeakData.parseManifest(manifestV6()).experimental, "experimental が無ければ試験版ではない")
+        // 種類とファイル名が食い違う manifest は読まない。
+        XCTAssertThrowsError(try PeakData.parseManifest(body))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(), dataset: .gsiPeaks))
+        // 版 4・5 は osm-peaks しか無かったので、ほかの種類では読まない。
+        XCTAssertThrowsError(try PeakData.parseManifest(manifest(), dataset: .gsiPeaks))
+        let v5 = Data(String(decoding: manifestV5(), as: UTF8.self)
+            .replacingOccurrences(of: "osm-peaks.json.gz\",", with: "gsi-peaks.json.gz\",").utf8)
+        XCTAssertThrowsError(try PeakData.parseManifest(v5, dataset: .gsiPeaks))
+    }
+
+    func testInstallsGsiPeaks() async throws {
+        let cache = MemoryCache()
+        let source = FakeSource(manifest: manifestV6(data: gsiPoints, fileName: "gsi-peaks.json.gz", experimental: true), data: gsiPoints)
+        let installed = try await PeakDataUpdater(source: source, cache: cache, dataset: .gsiPeaks).update(installed: nil).installed
+        XCTAssertEqual(installed.mountainCount, 2)
+        XCTAssertTrue(installed.experimental)
+        XCTAssertEqual(Set(cache.mountains.keys), ["gsi-mountain-list:1", "gsi-vector:abc"])
+    }
+
     func testRejectsUnknownSchemaVersion() {
-        XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 6))) { error in
+        XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 7))) { error in
             XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
         }
         XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 3)))
     }
 
     func testRejectsUnknownDataSchemaVersion() {
-        XCTAssertThrowsError(try PeakData.parseManifest(manifestV5(dataSchemaVersion: "6"))) { error in
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV5(dataSchemaVersion: "7"))) { error in
             XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
         }
         // データ本体の版が分からないときは、manifest の版から推測せずに断る。
@@ -128,8 +229,8 @@ final class PeakDataTests: XCTestCase {
             "H4sIAAAAAAAC/4uuVspMUbJSUDJU0lFQKqksSAVxClITs0H8/OJcT5CsIZCdl5gLlnu6cePLBU0g2ZzEksyS0hSQqLGpngFIJD8vHSZkaGwBFkvNSS0DKszP8wUJGhiABUsS04uB3GilZ9OXPpuz5vnMfU8n9AJNVoqt1VGAOckI2QlGSE54vmLd046lT3b0PpvRh+kQQywOMUR4Lq80JwfJEmMUfycWZWfmpSPba4xk78vlE17s7nq6YAumpUZYLDVCssYEW/DCzPUP9lV43Lji5bRFLxsWP9k943HjxMeN6563LHzc2AIKFAzbjLHYZlwbCwDxOcQXzQEAAA=="
         )!
         XCTAssertEqual(try PeakData.parseMountains(v5), [
-            Mountain(osmId: 1, name: "山頂", latitude: 35.0, longitude: 138.0, elevationM: 100.0, pointId: "1", tags: ["日本百名山"]),
-            Mountain(osmId: 2, name: "種別不明", latitude: 35.1, longitude: 138.1, elevationM: nil, pointId: "2"),
+            Mountain(id: "osm:1", name: "山頂", latitude: 35.0, longitude: 138.0, elevationM: 100.0, tags: ["日本百名山"]),
+            Mountain(id: "osm:2", name: "種別不明", latitude: 35.1, longitude: 138.1, elevationM: nil),
         ])
     }
 
@@ -140,14 +241,56 @@ final class PeakDataTests: XCTestCase {
             "H4sIAAAAAAAC/5VRy0rDQBTd+xVh1nHSZmirQdy7cKHgqnQxNEMaO3nQpE2lZFF3SgtCES24E1cKWkQQF/5MmtrP8E5S7SMtIgQy99wz98w9p9xBpo40lEcy8s9cBkeX0TpUjmcdQCcvI5taAo+fe/H9YzwaQZNT3/SbOsCkgEkRAMc2Zkie7OCSKiPGWQtojn0IrFKpiHPyliQl044Z1U3bgKFS1H2LurdR9zo6H0gwmXKTesxDWhmN3/vjj14quCgOnzS9HE4HF/Hri7izQCSVRCQw66bLdJOeNDio1Hzf9TRFOaX4t4OdhqGISmnDCHHQqb/CD4IA/3Tm/COyqxIwTAj51EjeOrl5mNw9fQ0/46t++spVpCIjo0HdmllFWgd5LbH9HvyUfSB7VcqFdbgQyqhp120nsAWNAhaGoDSLSd0UkzqPKRtQLpPPmijsJucL9qflGh/BFtamlssZrjqWkvFOvDAxJeuJ0PzTg+2lhcmmhcl/F15STqXUMKx8A0BqkMUBAwAA"
         )!
         XCTAssertEqual(try PeakData.parseMountains(v5), [
-            Mountain(osmId: 1, name: "富士山", latitude: 35.36, longitude: 138.72, elevationM: 3776.0,
-                     pointId: "1", nameReading: "ふじさん", aliases: ["不二山", "芙蓉峰"],
+            Mountain(id: "osm:1", name: "富士山", latitude: 35.36, longitude: 138.72, elevationM: 3776.0,
+                     nameReading: "ふじさん", aliases: ["不二山", "芙蓉峰"],
                      wikipediaUrl: "https://ja.wikipedia.org/wiki/x", wikidataUrl: "https://www.wikidata.org/wiki/Q39231",
                      tags: ["日本百名山"], graphic: PointGraphic(svg: "<svg/>", scale: 1.5)),
-            Mountain(osmId: 2, name: "山", latitude: 35.0, longitude: 138.0, elevationM: nil,
-                     pointId: "2", graphic: PointGraphic(svg: "<svg/>", scale: 1.0)),
-            Mountain(osmId: 3, name: "山", latitude: 35.0, longitude: 138.0, elevationM: nil, pointId: "3"),
+            Mountain(id: "osm:2", name: "山", latitude: 35.0, longitude: 138.0, elevationM: nil,
+                     graphic: PointGraphic(svg: "<svg/>", scale: 1.0)),
+            Mountain(id: "osm:3", name: "山", latitude: 35.0, longitude: 138.0, elevationM: nil),
         ])
+    }
+
+    /// yamamuki-data の points/formats/data.md の地点データ版 6 と同じ形。地点は points に入り、ID は osm:<ノード番号>。
+    /// 中身は Android の PeakDataTest.pointsV6 と同じ 5 件を、Python の gzip.compress(mtime=0) で圧縮したもの。
+    private let pointsV6 = Data(base64Encoded:
+        "H4sIAAAAAAAC/3VTy04bMRTd8xWR13lMZngks63UXTet2k3Ewk2s4GZemkcKirLwgECCVIlEKUWN1CeKlPQBbRESCPox7mTgL3o9k4ZkQnb29fU5555jN5BTXiM6fmjaOnaRijawjnWvRjOWSQ3XQelRwzNiO9Q0kLqcXkghnbi4gl2M1AZyTM8uEweppQYysE4AxHT0jEVwzUHN1TSKkB6YngH4S2nk4upU8/DweNj9Gh5dB51XwekpMIqDxwRXqFGFc84GnF1yf5+zn9zf5KzNfcbZFmdvoAgMTaFoJFctLaRSDUQrsQpVWVmUVgoFSZYB192wBKFQNmKB3e2v4+HZ+f3EH7m/w9k2Z3sR34HgSyMNu9T1KnBZKWalYlGCkmlUR7X8opSVFqEIQlKIaKQO7abxCKmyrCyDG7ZZJwY2ykSYJ0x8EhkYCwb48ZVx3fEsSyM6AQObMSzWKHamPQ92LsLrq+BHK/g8uGeUHvfbnJ1x9hYwGrPD/y9O3ulzdggHKOztha9PRtCrsYKXtEYtUqH4qa1B85rrWo6ay73A2fFJ1rSrObHLrYMgsRDTRv2Gp2njlzDzAqJEJ1OcG95N/xtnfzhr/b1ocfYlOXcJpaAUxdcXC3/AN3dhgskIl7KJ/JSCqEwGF6u983xKX9WhmTopu6at4ufleUKDd1dB933QPQk727dHnzj7Hr+4KSH5GSH5aSF5SUpas56fRxke9IP2uUheBLmVJJNnyOQktjIBje2asPTu2/Q6N5e7wYffSVxlBleBL/oPAJhMN2gEAAA="
+    )!
+
+    func testParsesPointsV6() throws {
+        // OSM 以外の ID と、形の違う ID の地点は飛ばす。別名は name を読み、読み仮名が配列なら最初の空でないものを読む。
+        XCTAssertEqual(try PeakData.parseMountains(pointsV6), [
+            Mountain(id: "osm:3740788022", name: "鳥海山", latitude: 39.0990, longitude: 140.0490, elevationM: 2236.0,
+                     nameReading: "ちょうかいさん", aliases: ["出羽富士", "秋田富士"],
+                     wikipediaUrl: "https://ja.wikipedia.org/wiki/x", tags: ["日本百名山"]),
+            Mountain(id: "osm:2", name: "読みが二つ", latitude: 35.0, longitude: 138.0, elevationM: nil,
+                     nameReading: "かな"),
+        ])
+    }
+
+    func testRejectsDocumentWithoutPoints() {
+        // {"schemaVersion":6} と "文字列" を gzip.compress(mtime=0) で圧縮したもの。
+        XCTAssertThrowsError(try PeakData.parseMountains(Data(base64Encoded: "H4sIAAAAAAAC/6tWKk7OSM1NDEstKs7Mz1OyMqsFAMI9SxYTAAAA")!))
+        XCTAssertThrowsError(try PeakData.parseMountains(Data(base64Encoded: "H4sIAAAAAAAC/1N6Nq396drpTzumKwEAMJshHQsAAAA=")!))
+    }
+
+    func testReplacesV5DataWithV6Data() async throws {
+        // 版 5 の山データを取り込んだ端末に、版 6 の山データが届いたときに入れ替わる。山は同じノード番号で引き継ぐ。
+        let source = FakeSource(manifest: manifestV5(), data: gzip)
+        let cache = MemoryCache()
+        let updater = PeakDataUpdater(source: source, cache: cache)
+        let installed = try await updater.update(installed: nil).installed
+        XCTAssertEqual(Set(cache.mountains.keys), ["osm:3403990450", "osm:12"])
+
+        source.manifestBody = manifestV6(data: pointsV6)
+        source.data = pointsV6
+        source.etag = "\"e2\""
+        let result = try await updater.update(installed: installed)
+
+        guard case .updated(let latest) = result else { return XCTFail("版 6 の山データを取り込むはず") }
+        XCTAssertEqual(latest.version, "20261018T115955Z-39125410649-1")
+        XCTAssertEqual(Set(cache.mountains.keys), ["osm:3740788022", "osm:2"])
+        XCTAssertEqual(latest.mountainCount, 2, "件数は実際に読めた山の数")
     }
 
     func testRejectsBrokenManifest() {
@@ -167,10 +310,10 @@ final class PeakDataTests: XCTestCase {
 
     func testParsesMountains() throws {
         XCTAssertEqual(try PeakData.parseMountains(gzip), [
-            Mountain(osmId: 3_403_990_450, name: "万三郎岳", latitude: 34.8627963, longitude: 139.0018525, elevationM: 1405.6,
+            Mountain(id: "osm:3403990450", name: "万三郎岳", latitude: 34.8627963, longitude: 139.0018525, elevationM: 1405.6,
                      nameReading: "ばんざぶろうだけ", aliases: ["天城山"],
                      wikipediaUrl: "https://ja.wikipedia.org/wiki/%E5%A4%A9%E5%9F%8E%E5%B1%B1"),
-            Mountain(osmId: 12, name: "名無し標高", latitude: 43.5, longitude: 142.9, elevationM: nil,
+            Mountain(id: "osm:12", name: "名無し標高", latitude: 43.5, longitude: 142.9, elevationM: nil,
                      wikidataUrl: "https://www.wikidata.org/wiki/Q1"),
         ])
     }
@@ -197,10 +340,10 @@ final class PeakDataTests: XCTestCase {
         XCTAssertTrue(tiles.contains(Tile.of(45.3, 148.5)), "択捉島")
         XCTAssertTrue(tiles.contains(Tile.of(32.7, 128.8)), "五島列島")
         // 範囲の外にある山も、その山のタイルまで広げて取り込む。
-        let outside = Mountain(osmId: 1, name: "外", latitude: 50.2, longitude: 160.3, elevationM: nil)
+        let outside = Mountain(id: "osm:1", name: "外", latitude: 50.2, longitude: 160.3, elevationM: nil)
         XCTAssertTrue(PeakData.tiles(of: [outside]).contains(Tile.of(50.2, 160.3)))
         // 日本の外の陸地でも、山のあるタイルは含める。
-        let busan = Mountain(osmId: 1, name: "外", latitude: 35.1, longitude: 129.05, elevationM: nil)
+        let busan = Mountain(id: "osm:1", name: "外", latitude: 35.1, longitude: 129.05, elevationM: nil)
         XCTAssertTrue(PeakData.tiles(of: [busan]).contains(Tile.of(35.1, 129.05)))
     }
 
@@ -214,7 +357,7 @@ final class PeakDataTests: XCTestCase {
         guard case .updated(let installed) = first else { return XCTFail("取り込むはず") }
         XCTAssertEqual(installed.version, "v1")
         XCTAssertEqual(installed.mountainCount, 2)
-        XCTAssertEqual(Set(cache.mountains.keys), [3_403_990_450, 12])
+        XCTAssertEqual(Set(cache.mountains.keys), ["osm:3403990450", "osm:12"])
         XCTAssertEqual(cache.tiles[Tile.of(40.0, 141.0)], now)
         XCTAssertEqual(source.sentEtags, [nil], "初回は ETag を送らない")
 
@@ -274,7 +417,7 @@ final class PeakDataTests: XCTestCase {
         XCTAssertEqual(installed.version, "v1")
         XCTAssertEqual(installed.manifestEtag, "\"e1\"")
         XCTAssertEqual(source.dataCalls, 1)
-        XCTAssertEqual(Set(cache.mountains.keys), [3_403_990_450, 12])
+        XCTAssertEqual(Set(cache.mountains.keys), ["osm:3403990450", "osm:12"])
 
         // 取り込んだあとの確認は、最新として返す。
         guard case .upToDate = try await updater.check(installed: installed) else { return XCTFail("最新のはず") }
@@ -300,14 +443,14 @@ final class PeakDataTests: XCTestCase {
         let installed = try await updater.update(installed: nil).installed
 
         // 以前 Overpass で取った山がキャッシュにある状態で、版だけが新しい manifest を返す。
-        let stale = Mountain(osmId: 99, name: "以前 Overpass で取った山", latitude: 36.0, longitude: 138.0, elevationM: nil)
-        cache.mountains[stale.osmId] = stale
+        let stale = Mountain(id: "osm:99", name: "以前 Overpass で取った山", latitude: 36.0, longitude: 138.0, elevationM: nil)
+        cache.mountains[stale.id] = stale
         source.manifestBody = manifest(version: "v2")
         source.etag = "\"e2\""
         let result = try await updater.update(installed: installed)
 
         guard case .updated = result else { return XCTFail("新しい版は取り込むはず") }
-        XCTAssertNil(cache.mountains[99], "配信範囲の古い山はキャッシュから消す")
+        XCTAssertNil(cache.mountains["osm:99"], "配信範囲の古い山はキャッシュから消す")
     }
 
     /// 取り込んだときの manifest と gz の組。
@@ -352,7 +495,7 @@ final class PeakDataTests: XCTestCase {
         expected.mountainCount = 2
         expected.readerVersion = PeakData.readerVersion
         XCTAssertEqual(rebuilt, expected)
-        XCTAssertEqual(Set(cache.mountains.keys), [3_403_990_450, 12])
+        XCTAssertEqual(Set(cache.mountains.keys), ["osm:3403990450", "osm:12"])
         XCTAssertEqual(cache.tiles[Tile.of(40.0, 141.0)], now)
         XCTAssertTrue(source.sentEtags.isEmpty && source.dataCalls == 0, "通信しない")
 
@@ -402,9 +545,9 @@ final class PeakDataTests: XCTestCase {
         let kept = await archive.read()
         XCTAssertEqual(kept, ArchivedPeakData(manifest: manifest(), data: gzip), "前の組は置き換える")
         let files = try FileManager.default.contentsOfDirectory(atPath: folder.path)
-        XCTAssertEqual(Set(files), [FilePeakDataArchive.manifestName, FilePeakDataArchive.dataName], "一時ファイルを残さない")
+        XCTAssertEqual(Set(files), [FilePeakDataArchive.manifestName, archive.dataName], "一時ファイルを残さない")
         // manifest だけなら gz が無くても読める。
-        try FileManager.default.removeItem(at: folder.appendingPathComponent(FilePeakDataArchive.dataName))
+        try FileManager.default.removeItem(at: folder.appendingPathComponent(archive.dataName))
         let manifestOnly = await archive.readManifest()
         XCTAssertEqual(manifestOnly, manifest())
         // 組は片方だけでは読まない。
@@ -431,6 +574,7 @@ final class PeakDataTests: XCTestCase {
         json.removeValue(forKey: "readerVersion")
         json.removeValue(forKey: "dataSha256")
         json.removeValue(forKey: "manifestSha256")
+        json.removeValue(forKey: "experimental")
         let decoded = try JSONDecoder().decode(InstalledPeakData.self, from: JSONSerialization.data(withJSONObject: json))
         XCTAssertEqual(decoded, old)
         XCTAssertEqual(decoded.readerVersion, 0)

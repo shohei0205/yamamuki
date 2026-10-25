@@ -1,11 +1,15 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.data
 
 import android.content.Context
+import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.core.Tile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** 設定画面に出すキャッシュの状況。 */
+/** 山データの種類ごとの、保存データの状況。 */
 data class CacheInfo(
     val mountainCount: Int,
     val tileCount: Int,
@@ -13,30 +17,31 @@ data class CacheInfo(
     val sizeBytes: Long,
 )
 
-/** 山データのキャッシュ(Room)の状況確認と消去。 */
+/** 山データのキャッシュ(Room)の状況確認と消去。どれも山データの種類を 1 つ選んで行う。 */
 class CacheManager(private val context: Context, private val database: MountainDatabase) {
     private val dao = database.mountainDao()
 
-    suspend fun info(): CacheInfo = CacheInfo(
-        mountainCount = dao.countMountains(),
-        tileCount = dao.countTiles(),
+    /** [dataset] の山とタイルの数。大きさは DB のファイル全体(ほかの種類の分も含む)。 */
+    suspend fun info(dataset: PeakDataset): CacheInfo = CacheInfo(
+        mountainCount = dao.countMountains(dataset.id),
+        tileCount = dao.countTiles(dataset.id),
         sizeBytes = withContext(Dispatchers.IO) { databaseFileBytes() },
     )
 
-    /** 山と取得済みタイルを消す([keep] のタイルは残す)。次の表示で現在地周辺を取り直す。 */
-    suspend fun clear(keep: Set<Tile> = emptySet()) {
+    /** [dataset] の山と取得済みタイルを消す([keep] のタイルは残す)。 */
+    suspend fun clear(dataset: PeakDataset, keep: Set<Tile> = emptySet()) {
         if (keep.isEmpty()) {
-            dao.clearAll()
+            dao.clearAll(dataset.id)
         } else {
-            dao.deleteTiles(dao.allTiles().map { Tile(it.tileLat, it.tileLon) }.filter { it !in keep })
+            dao.deleteTiles(dataset.id, dao.allTiles(dataset.id).map { Tile(it.tileLat, it.tileLon) }.filter { it !in keep })
         }
         compact()
     }
 
-    /** 指定したタイルだけを消す(事前ダウンロードした地域の削除)。 */
-    suspend fun removeTiles(tiles: Collection<Tile>) {
+    /** [dataset] の指定したタイルだけを消す(事前ダウンロードした地域の削除)。 */
+    suspend fun removeTiles(dataset: PeakDataset, tiles: Collection<Tile>) {
         if (tiles.isEmpty()) return
-        dao.deleteTiles(tiles.toList())
+        dao.deleteTiles(dataset.id, tiles.toList())
         compact()
     }
 

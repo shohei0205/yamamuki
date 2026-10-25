@@ -1,13 +1,16 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import kotlin.test.*
 
 class MountainSearchTest {
-    private val yari = Mountain(1, "槍ヶ岳", 36.3420, 137.6476, 3180.0, nameReading = "やりがたけ")
-    private val fuji = Mountain(2, "富士山", 35.3606, 138.7274, 3776.0, nameReading = "ふじさん")
-    private val koFuji = Mountain(3, "小富士", 35.3712, 138.7639, 1979.0, nameReading = "こふじ")
-    private val mitsutoge = Mountain(4, "三ツ峠山", 35.5469, 138.8133, 1785.0, aliases = listOf("開運山"))
-    private val unknown = Mountain(5, "富士見台", 35.4000, 137.6000, null)
+    private val yari = Mountain("osm:1", "槍ヶ岳", 36.3420, 137.6476, 3180.0, nameReading = "やりがたけ")
+    private val fuji = Mountain("osm:2", "富士山", 35.3606, 138.7274, 3776.0, nameReading = "ふじさん")
+    private val koFuji = Mountain("osm:3", "小富士", 35.3712, 138.7639, 1979.0, nameReading = "こふじ")
+    private val mitsutoge = Mountain("osm:4", "三ツ峠山", 35.5469, 138.8133, 1785.0, aliases = listOf("開運山"))
+    private val unknown = Mountain("osm:5", "富士見台", 35.4000, 137.6000, null)
     private val search = MountainSearch(listOf(yari, fuji, koFuji, mitsutoge, unknown))
 
     /** 河口湖駅のあたり。小富士 → 富士山 → 富士見台の順に近い。「富士」で探すと、小富士は途中に含む山なので最後になる。 */
@@ -44,9 +47,9 @@ class MountainSearchTest {
 
     /** 「やま」で探すと、近くの「〜山(やま)」より、先頭が一致した山を先に並べる。 */
     @Test fun listsPrefixMatchesBeforePartialMatches() {
-        val takayama = Mountain(6, "高山", 35.5000, 138.7700, 1000.0, nameReading = "たかやま")
-        val yamabushi = Mountain(7, "山伏", 35.2500, 138.3700, 2014.0, nameReading = "やまぶし")
-        val yamatai = Mountain(8, "山大岳", 36.0000, 137.0000, 1500.0, nameReading = "やまたいだけ")
+        val takayama = Mountain("osm:6", "高山", 35.5000, 138.7700, 1000.0, nameReading = "たかやま")
+        val yamabushi = Mountain("osm:7", "山伏", 35.2500, 138.3700, 2014.0, nameReading = "やまぶし")
+        val yamatai = Mountain("osm:8", "山大岳", 36.0000, 137.0000, 1500.0, nameReading = "やまたいだけ")
         val s = MountainSearch(listOf(takayama, yamatai, yamabushi))
         val (lat, lon) = kawaguchiko
         val results = s.search("やま", lat, lon)
@@ -63,8 +66,8 @@ class MountainSearchTest {
      * 漢字 1 文字なら途中に含む山も返す。先頭が一致した山が無ければ、仮名や英数字 1 文字でも途中に含む山を返す。
      */
     @Test fun omitsPartialMatchesForOneKanaOrAlphanumeric() {
-        val takayama = Mountain(6, "高山", 35.5000, 138.7700, 1000.0, nameReading = "たかやま")
-        val peak1 = Mountain(9, "大平山 第1ピーク (Ohirayama Peak 1)", 36.0, 138.0, 500.0)
+        val takayama = Mountain("osm:6", "高山", 35.5000, 138.7700, 1000.0, nameReading = "たかやま")
+        val peak1 = Mountain("osm:9", "大平山 第1ピーク (Ohirayama Peak 1)", 36.0, 138.0, 500.0)
         val s = MountainSearch(listOf(takayama, yari, peak1))
         // 先頭一致が無いときは、1 文字でも部分一致を返す。
         assertEquals(MountainSearch.Results(emptyList(), listOf(peak1)), s.search("1", null, null))
@@ -80,9 +83,9 @@ class MountainSearchTest {
     }
 
     @Test fun omitsPartialMatchesForOneAlphanumericWithPrefixMatch() {
-        val peakX = Mountain(10, "Peak X", 35.0, 138.0, 1200.0)
-        val peak1 = Mountain(9, "大平山 第1ピーク (Ohirayama Peak 1)", 36.0, 138.0, 500.0)
-        val first = Mountain(11, "1峰", 35.0, 138.0, 900.0)
+        val peakX = Mountain("osm:10", "Peak X", 35.0, 138.0, 1200.0)
+        val peak1 = Mountain("osm:9", "大平山 第1ピーク (Ohirayama Peak 1)", 36.0, 138.0, 500.0)
+        val first = Mountain("osm:11", "1峰", 35.0, 138.0, 900.0)
         val s = MountainSearch(listOf(peakX, peak1, first))
         // 先頭一致があれば、英数字 1 文字では部分一致を返さない。
         assertEquals(MountainSearch.Results(listOf(peakX), emptyList()), s.search("p", null, null))

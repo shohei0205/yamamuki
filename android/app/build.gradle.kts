@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import java.util.Properties
 
 plugins {
@@ -25,8 +28,8 @@ android {
         applicationId = "io.github.shohei0205.yamamuki"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.8.0"
     }
 
     // 配布版の署名鍵。キーストアとパスワードはリポジトリに入れず、PC 内の properties ファイルから読む
@@ -39,7 +42,7 @@ android {
         .takeIf { it.exists() }
     val signingProps = signingPropsFile?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 
-    // 開発版が読む山データの取得先。既定(current)は、yamamuki の参照先ファイル(current.json)の dev が指す manifest
+    // 開発版が読む山データの取得先。既定(current)は、yamamuki のカタログ(catalog.json)の osm-peaks の dev が指す manifest
     // (dev が無ければ配布版と同じ stable)。yamamuki-data の dev が公開する最新の開発版(points/osm-peaks-dev/)を直接試すときは、
     // Gradle のプロパティ peakDataSource=dev を付ける
     // (例: ./gradlew :app:installDebug -PpeakDataSource=dev。~/.gradle/gradle.properties に書いてもよい)。
@@ -80,7 +83,7 @@ android {
     }
 
     buildTypes {
-        // 山データは、配布版は参照先ファイルの stable、開発版は peakDataSource で選んだほうを読む(YamamukiApp.peakDataChannel)。
+        // 山データは、配布版はカタログの osm-peaks の stable、開発版は peakDataSource で選んだほうを読む(YamamukiApp.peakDataChannel)。
         // R8 で使わないコードとリソースを削って小さくする。難読化の対応表(build/outputs/mapping/release/mapping.txt)は
         // AAB に入るので、Play Console のクラッシュの記録も元の名前で読める。
         release {

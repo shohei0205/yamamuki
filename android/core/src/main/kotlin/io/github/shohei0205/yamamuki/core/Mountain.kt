@@ -1,21 +1,26 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import java.util.Locale
 import kotlin.math.abs
 
 /**
- * OSM の山頂ノード1件。
- * [pointId] から下は、yamamuki-data の地点データ版 5 の項目。版 4 までのデータと Overpass から取った山には無い。
+ * 山頂 1 件。
+ * [nameReading] から下は、yamamuki-data の地点データ版 5 の項目。版 4 までのデータと Overpass から取った山には無い。
  */
 data class Mountain(
-    val osmId: Long,
+    /**
+     * 山データの種類の中で一意な地点の ID。地点データの id のほか、OSM の山頂(osm-peaks・Overpass)では
+     * ノード番号から作った「osm:<番号>」。
+     */
+    val id: String,
     val name: String,
     val latitude: Double,
     val longitude: Double,
     /** 標高(m)。OSM に ele タグが無い、または解釈できない場合は null。 */
     val elevationM: Double?,
-    /** データセット内で一意な地点の ID(地点データの id)。OSM 由来の山頂では osmId を文字列にしたもの。 */
-    val pointId: String? = null,
     /** 山名の読み仮名。 */
     val nameReading: String? = null,
     /** 別名。 */

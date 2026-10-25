@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import io.ktor.client.HttpClient
@@ -27,7 +30,7 @@ class OverpassClientTest {
 
         val result = client.fetchPeaks(box)
 
-        assertEquals(listOf(Mountain(1, "富士山", 35.36, 138.73, 3776.0)), result)
+        assertEquals(listOf(Mountain("osm:1", "富士山", 35.36, 138.73, 3776.0)), result)
         assertTrue(sentBody.startsWith("data="))
     }
 

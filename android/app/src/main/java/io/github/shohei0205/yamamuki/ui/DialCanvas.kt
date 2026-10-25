@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.ui
 
 import androidx.compose.foundation.Canvas
@@ -471,24 +474,24 @@ private fun Box.contains(p: Offset, slop: Float) =
  */
 private class PeakSelection {
     var key: List<Any?>? = null
-    var drawnIds: Set<Long> = emptySet()
+    var drawnIds: Set<String> = emptySet()
     /** 前回描いた山と、そこにまとめてアイコンだけを描いた山。 */
-    var shownIds: Set<Long> = emptySet()
+    var shownIds: Set<String> = emptySet()
     /** 候補を選んだ円の中にある、すべての山。 */
     var around: List<NearbyMountain> = emptyList()
     /** 山アイコンの画像。 */
     val sprites = PeakIconSprites()
     /** 山名の濃さ(0〜1)。山名を出す山は 1 へ、山名を外した山は 0 へ近づける。0 になったら除く。 */
-    val labelAlpha = HashMap<Long, Float>()
+    val labelAlpha = HashMap<String, Float>()
     /** 山名を出さない山のアイコンの濃さ。画面の外へ出た山は除く。 */
-    val iconAlpha = HashMap<Long, Float>()
+    val iconAlpha = HashMap<String, Float>()
     /** 前回描いた時刻(ns)。山名とアイコンの濃さを時間に合わせて変える。 */
     var lastNanos = 0L
     var frameTick = 0L
     /** 山名かアイコンの濃さを変えている途中か。途中の間は毎フレーム描き直す。 */
     var fading by mutableStateOf(false)
     /** 山ごとの山名と、山の位置を原点にしたアイコンと山名の範囲。文字の大きさが変わったら測り直す。 */
-    val labels = HashMap<Long, Pair<TextLayoutResult, Box>>()
+    val labels = HashMap<String, Pair<TextLayoutResult, Box>>()
     var labelStyles: DialTextStyles? = null
     /** 候補を選んだ円の中心(現在地からの距離と方角)と半径(km)。 */
     var centerKm = 0.0
@@ -583,15 +586,15 @@ private fun DrawScope.drawPeaks(
     val onScreen = selection.around.mapNotNull { m ->
         val o = DialGeometry.project(m.distanceKm, m.bearingDeg, headingDeg)
         val p = Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
-        val top = if (m.mountain.osmId in selection.shownIds) chartTop else chartTop + iconHeight
+        val top = if (m.mountain.id in selection.shownIds) chartTop else chartTop + iconHeight
         if (p.x in 0f..size.width && p.y >= top && p.y < chartBottom) m to p else null
     }
-    val positions = onScreen.associate { (m, p) -> m.mountain.osmId to p }
+    val positions = onScreen.associate { (m, p) -> m.mountain.id to p }
     val visible = PeakLayout.priorityOrder(onScreen.map { it.first }, observerAltitudeM, selection.drawnIds, forwardHeading, headingUpRangeKm)
         .map { m ->
-            val p = positions.getValue(m.mountain.osmId)
+            val p = positions.getValue(m.mountain.id)
             // 山名の大きさは山ごとに一度だけ測る(画面に入る山が多いと、毎回測ると重い)。
-            val (label, rel) = selection.labels.getOrPut(m.mountain.osmId) {
+            val (label, rel) = selection.labels.getOrPut(m.mountain.id) {
                 val icon = PeakIcon.of(m.mountain.elevationClass())
                 val halfWidth = icon.halfWidthDp.dp.toPx()
                 val label = textMeasurer.measure(m.mountain.name, styles.label)
@@ -609,14 +612,14 @@ private fun DrawScope.drawPeaks(
         visible,
         limit = maxPeaks,
         box = { it.box },
-        drawnBefore = { it.mountain.mountain.osmId in selection.drawnIds },
+        drawnBefore = { it.mountain.mountain.id in selection.drawnIds },
         neighbors = { a, b -> PeakLayout.areNeighbors(a.mountain, b.mountain) },
         elevationM = { it.mountain.mountain.elevationM },
         margin = NEW_PEAK_MARGIN.toPx(),
         tagCount = { it.mountain.mountain.tagCount },
     )
-    selection.drawnIds = groups.mapTo(HashSet()) { it.peak.mountain.mountain.osmId }
-    selection.shownIds = selection.drawnIds + groups.flatMap { g -> g.members.map { it.mountain.mountain.osmId } }
+    selection.drawnIds = groups.mapTo(HashSet()) { it.peak.mountain.mountain.id }
+    selection.shownIds = selection.drawnIds + groups.flatMap { g -> g.members.map { it.mountain.mountain.id } }
 
     // 山名は、出すときも外すときも [LABEL_FADE_SECONDS] かけて濃さを変える。外した山名は、薄くなりきるまでその場に描く。
     val now = System.nanoTime()
@@ -624,7 +627,7 @@ private fun DrawScope.drawPeaks(
     selection.lastNanos = now
     val fadeStep = dt / LABEL_FADE_SECONDS
     for (id in selection.drawnIds) selection.labelAlpha[id] = min(1f, (selection.labelAlpha[id] ?: 0f) + fadeStep)
-    val visibleById = visible.associateBy { it.mountain.mountain.osmId }
+    val visibleById = visible.associateBy { it.mountain.mountain.id }
     val fadingOut = mutableListOf<Pair<PlacedPeak, Float>>()
     val iterator = selection.labelAlpha.entries.iterator()
     while (iterator.hasNext()) {
@@ -637,7 +640,7 @@ private fun DrawScope.drawPeaks(
             fadingOut += peak to alpha
         }
     }
-    val fadingOutIds = fadingOut.mapTo(HashSet()) { it.first.mountain.mountain.osmId }
+    val fadingOutIds = fadingOut.mapTo(HashSet()) { it.first.mountain.mountain.id }
 
     // 代表の山の山名と「ほか 3 山」の場所を先に決め、まとめた山のアイコンはそこを避けて描く。
     val placedBoxes = groups.map { it.peak.box }
@@ -662,14 +665,14 @@ private fun DrawScope.drawPeaks(
     // 濃さは [ICON_FADE_SECONDS] かけて変え、まとめた山でなくなった山や範囲を出た山も、急に消さずにだんだん薄くする。
     val focusCenter = Offset(size.width / 2, (chartTop + chartBottom) / 2)
     val focusRadius = size.width * FOCUS_RADIUS_RATIO
-    val owners = HashMap<Long, PeakGroup<PlacedPeak>>()
-    for (group in groups) for (member in group.members) owners[member.mountain.mountain.osmId] = group
+    val owners = HashMap<String, PeakGroup<PlacedPeak>>()
+    for (group in groups) for (member in group.members) owners[member.mountain.mountain.id] = group
     val iconStep = dt / ICON_FADE_SECONDS
     val iconTargets = mutableListOf<PlacedPeak>()
     var iconFading = false
     for (peak in visible) {
         val m = peak.mountain
-        val id = m.mountain.osmId
+        val id = m.mountain.id
         if (m.mountain.elevationM == null) continue
         if (id in selection.drawnIds || id in fadingOutIds) {
             // 山名を出している間は山名と一緒に描く。山名を外し終えたら、アイコンだけの濃さから続ける。
@@ -720,7 +723,7 @@ private fun DrawScope.drawPeaks(
         val peak = group.peak
         val p = peak.position
         val icon = PeakIcon.of(peak.mountain.mountain.elevationClass())
-        val alpha = selection.labelAlpha[peak.mountain.mountain.osmId] ?: 1f
+        val alpha = selection.labelAlpha[peak.mountain.mountain.id] ?: 1f
         drawPeakIcon(selection.sprites, p, icon, alpha = labeledIconAlpha(scoreAlpha(score(peak.mountain)), alpha), shadow = alpha >= 1f)
         drawNameChip(peak, gap, icon.color, alpha)
         var box = peak.box
@@ -1215,7 +1218,7 @@ internal fun rememberDialTexts(): DialTexts {
 @Composable
 private fun DialCanvasPreview() {
     fun peak(name: String, ele: Double, km: Double, bearing: Double) =
-        NearbyMountain(Mountain(name.hashCode().toLong(), name, 0.0, 0.0, ele), km, bearing)
+        NearbyMountain(Mountain(name, name, 0.0, 0.0, ele), km, bearing)
     DialCanvas(
         headingDeg = 0.0,
         mountains = listOf(

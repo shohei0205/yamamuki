@@ -1,6 +1,6 @@
 name: 山データの見張り
 
-# 公開中の current.json から manifest とデータ本体までたどれるかを毎日確かめる。
+# 公開中のカタログ（catalog.json）から manifest とデータ本体までたどれるかと、current.json がカタログと合っているかを毎日確かめる。
 # 失敗したら Issue で知らせる（開いている同じ Issue があれば、そこにコメントする）。
 on:
   schedule:

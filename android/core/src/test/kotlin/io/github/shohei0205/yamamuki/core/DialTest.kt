@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import kotlin.math.PI
@@ -125,7 +128,7 @@ class DialGeometryTest {
 
 class PeakLayoutTest {
     private fun m(name: String, ele: Double?, km: Double) =
-        NearbyMountain(Mountain(name.hashCode().toLong(), name, 0.0, 0.0, ele), km, 0.0)
+        NearbyMountain(Mountain(name, name, 0.0, 0.0, ele), km, 0.0)
 
     @Test
     fun elevationAngleAccountsForEarthCurve() {
@@ -161,7 +164,7 @@ class PeakLayoutTest {
         val b = m("B", 1010.0, 10.0)
         assertEquals(listOf("B", "A"), PeakLayout.priorityOrder(listOf(a, b), 0.0).map { it.mountain.name })
         // 前回選んだ A は、わずかな差なら B より先に残る。
-        val kept = setOf(a.mountain.osmId)
+        val kept = setOf(a.mountain.id)
         assertEquals(listOf("A", "B"), PeakLayout.priorityOrder(listOf(a, b), 0.0, kept).map { it.mountain.name })
     }
 
@@ -178,10 +181,10 @@ class PeakLayoutTest {
     @Test
     fun candidatesAroundScreenCenter() {
         // 現在地のそばの高い山は、画面の周りの円(現在地から北東 60km の点を中心に 5km)の外なので選ばない。
-        val nearHigh = NearbyMountain(Mountain(1, "手前", 0.0, 0.0, 2000.0), 5.0, 180.0)
-        val target = NearbyMountain(Mountain(2, "筑波山", 0.0, 0.0, 877.0), 60.0, 45.0)
-        val next = NearbyMountain(Mountain(3, "宝篋山", 0.0, 0.0, 461.0), 62.0, 47.0)
-        val far = NearbyMountain(Mountain(4, "外", 0.0, 0.0, 900.0), 60.0, 60.0)
+        val nearHigh = NearbyMountain(Mountain("osm:1", "手前", 0.0, 0.0, 2000.0), 5.0, 180.0)
+        val target = NearbyMountain(Mountain("osm:2", "筑波山", 0.0, 0.0, 877.0), 60.0, 45.0)
+        val next = NearbyMountain(Mountain("osm:3", "宝篋山", 0.0, 0.0, 461.0), 62.0, 47.0)
+        val far = NearbyMountain(Mountain("osm:4", "外", 0.0, 0.0, 900.0), 60.0, 60.0)
         val all = listOf(nearHigh, target, next, far)
         assertEquals(listOf("手前"), PeakLayout.candidates(all, 0.0, emptySet(), reachKm = 70.0, limit = 1).map { it.mountain.name })
         assertEquals(listOf("筑波山", "宝篋山"),
@@ -197,7 +200,7 @@ class PeakLayoutTest {
         val out = m("外", 500.0, 40.0)
         val all = listOf(high, mid, low, out)
         // 前回描いた「低い」は上限によらず残し、残りの枠を優先順に埋める。円の外の山は描いていても残さない。
-        val drawn = setOf(low.mountain.osmId, out.mountain.osmId)
+        val drawn = setOf(low.mountain.id, out.mountain.id)
         assertEquals(listOf("高い", "低い"),
             PeakLayout.candidates(all, 0.0, emptySet(), reachKm = 20.0, limit = 2, drawnIds = drawn).map { it.mountain.name })
     }
@@ -213,8 +216,8 @@ class PeakLayoutTest {
     @Test
     fun headingUpPrefersPeaksAhead() {
         // 横の山のほうが少し高く見えても、ヘディングアップでは正面の山を先にする。
-        val ahead = NearbyMountain(Mountain(1, "正面", 0.0, 0.0, 1000.0), 10.0, 0.0)
-        val side = NearbyMountain(Mountain(2, "横", 0.0, 0.0, 1100.0), 10.0, 90.0)
+        val ahead = NearbyMountain(Mountain("osm:1", "正面", 0.0, 0.0, 1000.0), 10.0, 0.0)
+        val side = NearbyMountain(Mountain("osm:2", "横", 0.0, 0.0, 1100.0), 10.0, 90.0)
         assertEquals(listOf("横", "正面"), PeakLayout.priorityOrder(listOf(ahead, side), 0.0).map { it.mountain.name })
         assertEquals(listOf("正面", "横"),
             PeakLayout.priorityOrder(listOf(ahead, side), 0.0, headingDeg = 0.0).map { it.mountain.name })
@@ -235,8 +238,8 @@ class PeakLayoutTest {
     @Test
     fun wideRangePrefersHighPeaksFarAway() {
         // 近くの低い山のほうが高く見えても、表示範囲が広いときは遠くの高い山を先にする。
-        val near = NearbyMountain(Mountain(1, "近くの低い山", 0.0, 0.0, 400.0), 5.0, 0.0)
-        val far = NearbyMountain(Mountain(2, "遠くの高い山", 0.0, 0.0, 2500.0), 70.0, 0.0)
+        val near = NearbyMountain(Mountain("osm:1", "近くの低い山", 0.0, 0.0, 400.0), 5.0, 0.0)
+        val far = NearbyMountain(Mountain("osm:2", "遠くの高い山", 0.0, 0.0, 2500.0), 70.0, 0.0)
         assertEquals(listOf("近くの低い山", "遠くの高い山"),
             PeakLayout.priorityOrder(listOf(near, far), 0.0, rangeKm = 15.0).map { it.mountain.name })
         assertEquals(listOf("遠くの高い山", "近くの低い山"),
@@ -252,7 +255,7 @@ class PeakLayoutTest {
 
     @Test
     fun neighbors() {
-        fun at(name: String, lat: Double) = NearbyMountain(Mountain(name.hashCode().toLong(), name, lat, 137.0, 1000.0), 5.0, 0.0)
+        fun at(name: String, lat: Double) = NearbyMountain(Mountain(name, name, lat, 137.0, 1000.0), 5.0, 0.0)
         assertTrue(PeakLayout.areNeighbors(at("奥穂高岳", 36.2894), at("ジャンダルム", 36.2862)))
         assertFalse(PeakLayout.areNeighbors(at("奥穂高岳", 36.2894), at("遠い山", 36.40)))
     }
@@ -335,7 +338,7 @@ class PeakLayoutTest {
 
     @Test
     fun tagCountCountsDistinctTags() {
-        fun count(vararg tags: String) = Mountain(1, "山", 0.0, 0.0, 1000.0, tags = tags.toList()).tagCount
+        fun count(vararg tags: String) = Mountain("osm:1", "山", 0.0, 0.0, 1000.0, tags = tags.toList()).tagCount
         assertEquals(0, count())
         assertEquals(1, count("日本百名山"))
         assertEquals(1, count("日本百名山", "日本百名山", ""))
@@ -345,7 +348,7 @@ class PeakLayoutTest {
     @Test
     fun priorityOrderAddsBonusPerTag() {
         fun at(name: String, ele: Double, km: Double, vararg tags: String) =
-            NearbyMountain(Mountain(name.hashCode().toLong(), name, 0.0, 0.0, ele, tags = tags.toList()), km, 0.0)
+            NearbyMountain(Mountain(name, name, 0.0, 0.0, ele, tags = tags.toList()), km, 0.0)
         val near = at("裏山", 600.0, 2.0)
         val plain = at("遠い山", 1500.0, 40.0)
         val one = at("百名山", 1500.0, 40.0, "日本百名山")
@@ -388,7 +391,7 @@ class PeakLayoutTest {
 
     @Test
     fun elevationClass() {
-        fun cls(ele: Double?) = Mountain(1, "山", 0.0, 0.0, ele).elevationClass()
+        fun cls(ele: Double?) = Mountain("osm:1", "山", 0.0, 0.0, ele).elevationClass()
         assertEquals(ElevationClass.LOW, cls(null))
         assertEquals(ElevationClass.LOW, cls(999.9))
         assertEquals(ElevationClass.MIDDLE, cls(1000.0))

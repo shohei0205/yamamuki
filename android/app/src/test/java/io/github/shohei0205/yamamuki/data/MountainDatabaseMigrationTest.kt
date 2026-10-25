@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.data
 
 import android.app.Application
@@ -50,11 +53,12 @@ class MountainDatabaseMigrationTest {
                 .build()
             try {
                 val db = database.openHelper.readableDatabase
-                db.query("SELECT name FROM mountains WHERE osmId = 1").use {
+                // 版 3 より前の山は osm-peaks のものとして、ノード番号から作った地点の ID で残る。
+                db.query("SELECT name FROM mountains WHERE dataset = 'osm-peaks' AND pointId = 'osm:1'").use {
                     assertTrue("版 $version から移したあとに山が残っていない", it.moveToFirst())
                     assertEquals("富士山", it.getString(0))
                 }
-                db.query("SELECT COUNT(*) FROM fetched_tiles").use {
+                db.query("SELECT COUNT(*) FROM fetched_tiles WHERE dataset = 'osm-peaks'").use {
                     it.moveToFirst()
                     assertEquals("版 $version から移したあとに取得済みのタイルが残っていない", 1, it.getInt(0))
                 }
@@ -126,7 +130,11 @@ class MountainDatabaseMigrationTest {
         /** 事前ダウンロードした山と、その取得済みのタイル。移行のあとも残っていなければならない。 */
         val SAMPLE_ROWS: Map<String, Map<String, Any>> = mapOf(
             "mountains" to mapOf(
+                // 版 2 まで。
                 "osmId" to 1L,
+                // 版 3 から必須(pointId は版 2 にもあるが省略可能)。
+                "dataset" to "osm-peaks",
+                "pointId" to "osm:1",
                 "name" to "富士山",
                 "latitude" to 35.3606,
                 "longitude" to 138.7274,
@@ -135,6 +143,7 @@ class MountainDatabaseMigrationTest {
                 "tileLon" to 637,
             ),
             "fetched_tiles" to mapOf(
+                "dataset" to "osm-peaks",
                 "tileLat" to 250,
                 "tileLon" to 637,
                 "fetchedAtMillis" to 1L,

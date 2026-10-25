@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The yamamuki Authors
+# SPDX-License-Identifier: MIT
+
 """画面の文言が文字列リソースにまとまっているかを確かめる。
 
 - Android(android/app/src/main)と iOS(ios/Yamamuki)のコードに、日本語の文字列を直接書いていないか。

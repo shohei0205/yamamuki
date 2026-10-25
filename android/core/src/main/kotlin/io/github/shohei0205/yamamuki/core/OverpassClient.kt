@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import io.ktor.client.HttpClient
@@ -123,14 +126,14 @@ object OverpassParser {
             val displayName = cells[nameJa].trim().ifEmpty { cells[name].trim() }
             if (displayName.isEmpty()) continue
             mountains += Mountain(
-                osmId = cells[id].toLongOrNull() ?: continue,
+                id = cells[id].toLongOrNull()?.let { "osm:$it" } ?: continue,
                 name = displayName,
                 latitude = cells[lat].toDoubleOrNull() ?: continue,
                 longitude = cells[lon].toDoubleOrNull() ?: continue,
                 elevationM = parseElevation(cells[ele].ifEmpty { null }),
             )
         }
-        return mountains.distinctBy { it.osmId }
+        return mountains.distinctBy { it.id }
     }
 
     /**

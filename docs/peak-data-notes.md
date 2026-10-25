@@ -49,7 +49,7 @@ Overpass を使っていたころのコード（`OverpassClient` など）は事
 ### キャッシュの区切り方
 
 - 0.5° 四方のタイル単位で取得とキャッシュをした。範囲を少し動かしても、問い合わせ直さずに済む。
-- 山が 0 件のタイル（海など）も「取得済み」として時刻を記録する。記録しないと、毎回問い合わせ直したり「一部の山データがありません」と出たりする。
+- 山が 0 件のタイル（海など）も「取得済み」として時刻を記録する。記録しないと、毎回問い合わせ直したり「周辺の山データの一部がありません」と出たりする。
 - 事前ダウンロードは 2×2 タイルずつ問い合わせた。北海道は 1 地域だと約 130 区画になるので、4 地域に分けた。都道府県の範囲は国土数値情報をもとにした簡略な境界から求めた矩形。
 
 ### クラウドの開発環境から試すとき
@@ -61,12 +61,13 @@ Overpass を使っていたころのコード（`OverpassClient` など）は事
 ### データの作り方
 
 - Overpass は使わず、Geofabrik の日本全国の PBF（約 2.5 GB）から `osmium tags-filter` で山頂だけを抜き出す。全国で約 14,000 件、gzip で約 0.45 MB（展開後 2.7 MB）なので、地域ごとに分けなくてよい。
-- 形式は yamamuki-data の [peaks/README.md](https://github.com/shohei0205/yamamuki-data/blob/main/peaks/README.md) にある。アプリは manifest の `schemaVersion` が 4 のものだけを読み、知らない版なら「アプリを更新してください」と出す。
+- 形式は yamamuki-data の [points/osm-peaks/README.md](https://github.com/shohei0205/yamamuki-data/blob/main/points/osm-peaks/README.md) にある。アプリは読める manifest の `schemaVersion` を決めておき、知らない版なら「アプリを更新してください」と出す。0.5.0 が読む版4 の `peaks/manifest.json` は、2026-10-21 に `{"schemaVersion": 999}` に置き換えて公開を終えた（yamamuki-data #48）。
 
 ### 最新版の目印の置き場所
 
 - はじめは固定の Release（`peaks-dev-latest`）の `manifest.json` を `gh release upload --clobber` で差し替えていた。この方法は古いファイルを消してから上げ直すので、その間にアプリが取りに来ると 404 になる。どれが公開済みかも Releases の一覧から分かりにくかった。
-- 今は最新版の manifest を GitHub Pages に置き、データ本体は版ごとの Release に置く（manifest の `downloadUrl`）。差し替えの途中で欠けず、古い manifest が返っても対応する本体は取れる。
+- 次に、最新版の manifest を yamamuki-data の GitHub Pages に置き、データ本体は版ごとの Release に置く形にした（manifest の `downloadUrl`）。差し替えの途中で欠けず、古い manifest が返っても対応する本体は取れる。
+- 2026-10-07 に yamamuki-data の公開で配布版の manifest が消える事故（yamamuki-data #44）があり、0.6.0 からはアプリが読む版を yamamuki 側で決める形にした。yamamuki の Pages の参照先ファイル（0.6.0・0.7.0 は `site/data/osm-peaks/current.json`、0.8.0 からはカタログ `site/data/catalog.json`）が、yamamuki にコピーした Release の manifest を指す。yamamuki-data の正式版は Release を作るところまでで、Pages には置かない。
 - GitHub の定期実行（`schedule`）はデフォルトブランチ（main）のワークフローでしか動かない。dev にだけ書いても毎月の自動生成は動かない。
 
 ### アプリでの取り込み
@@ -75,7 +76,7 @@ Overpass を使っていたころのコード（`OverpassClient` など）は事
 - 本体は展開する前に、manifest のサイズと SHA-256 に合うかを確かめる。合わなければキャッシュには手を付けない。
 - 本体は gzip のファイルそのものとして配っている。Release のファイルは `Content-Encoding` なしで届くため、受け取ったバイト列をそのまま検証できる。サーバーが `Content-Encoding: gzip` を付けると、OkHttp も URLSession も HTTP の層で展開してしまい、サイズと SHA-256 が合わなくなる（取り込まずに失敗するので、壊れたデータは入らない）。
 - iOS の Foundation には gzip を展開する関数が無い。ヘッダー（10 バイトと任意の項目）を飛ばし、中身の deflate を Compression で展開し、末尾の元の大きさ（ISIZE）で確かめている。
-- 取り込むときは、日本の端の島まで入る範囲（北緯 20〜46°・東経 122〜154°）のタイルを置き換える。これで海のタイルも取得済みになり、新しい版で消えた山や、以前 Overpass で取った山がキャッシュに残らない。この矩形には朝鮮半島やサハリンの南端も入るので、日本の外の陸地は 0.5° のタイルの境目にそろえた矩形（`PeakData.FOREIGN_AREAS`）で除き、山が無いのに取得済みと扱わないようにした。そのままでは対馬や宗谷岬など国境の近くで「一部の山データがありません」が出続けるので、方位盤では現在地が日本側なら外国のタイルを欠けたものとして数えない（`PeakData.ignoresMissing`）。現在地が外国の陸地の中なら「データがありません」と知らせる。対馬・宗谷岬・択捉島のように、外国の陸地とタイルを共有する日本の島や岬は残す。iOS はタイルごとにファイルを作るので、約 3,400 個のファイルになる。
+- 取り込むときは、日本の端の島まで入る範囲（北緯 20〜46°・東経 122〜154°）のタイルを置き換える。これで海のタイルも取得済みになり、新しい版で消えた山や、以前 Overpass で取った山がキャッシュに残らない。この矩形には朝鮮半島やサハリンの南端も入るので、日本の外の陸地は 0.5° のタイルの境目にそろえた矩形（`PeakData.FOREIGN_AREAS`）で除き、山が無いのに取得済みと扱わないようにした。そのままでは対馬や宗谷岬など国境の近くで「周辺の山データの一部がありません」が出続けるので、方位盤では現在地が日本側なら外国のタイルを欠けたものとして数えない（`PeakData.ignoresMissing`）。現在地が外国の陸地の中なら「この付近に山データがありません」と知らせる。対馬・宗谷岬・択捉島のように、外国の陸地とタイルを共有する日本の島や岬は残す。iOS はタイルごとにファイルを作るので、約 3,400 個のファイルになる。
 
 ### データの中身の癖（#40 のレビューより）
 

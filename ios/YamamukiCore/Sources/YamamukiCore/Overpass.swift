@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -135,21 +138,21 @@ public enum OverpassParser {
         let ele = try column("ele")
 
         var mountains: [Mountain] = []
-        var seen = Set<Int64>()
+        var seen = Set<String>()
         while let line = lines.next() {
             let cells = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
             guard cells.count == header.count else { continue }
             let ja = cells[nameJa].trimmingCharacters(in: .whitespaces)
             let displayName = ja.isEmpty ? cells[name].trimmingCharacters(in: .whitespaces) : ja
             guard !displayName.isEmpty,
-                  let osmId = Int64(cells[id]),
+                  let pointId = Int64(cells[id]).map({ "\(PeakData.osmIdPrefix)\($0)" }),
                   let latitude = Double(cells[lat]),
                   let longitude = Double(cells[lon]),
-                  !seen.contains(osmId)
+                  !seen.contains(pointId)
             else { continue }
-            seen.insert(osmId)
+            seen.insert(pointId)
             mountains.append(Mountain(
-                osmId: osmId,
+                id: pointId,
                 name: displayName,
                 latitude: latitude,
                 longitude: longitude,

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import XCTest
 @testable import YamamukiCore
 
@@ -67,7 +70,7 @@ final class DialGeometryTests: XCTestCase {
 
 final class PeakLayoutTests: XCTestCase {
     private func m(_ name: String, _ ele: Double?, _ km: Double) -> NearbyMountain {
-        NearbyMountain(mountain: Mountain(osmId: Int64(name.hashValue), name: name, latitude: 0, longitude: 0, elevationM: ele), distanceKm: km, bearingDeg: 0)
+        NearbyMountain(mountain: Mountain(id: name, name: name, latitude: 0, longitude: 0, elevationM: ele), distanceKm: km, bearingDeg: 0)
     }
 
     func testElevationAngleAccountsForEarthCurve() {
@@ -100,7 +103,7 @@ final class PeakLayoutTests: XCTestCase {
         let b = m("B", 1010, 10)
         XCTAssertEqual(PeakLayout.priorityOrder([a, b], observerAltitudeM: 0).map(\.mountain.name), ["B", "A"])
         // 前回選んだ A は、わずかな差なら B より先に残る。
-        XCTAssertEqual(PeakLayout.priorityOrder([a, b], observerAltitudeM: 0, keptIds: [a.mountain.osmId]).map(\.mountain.name), ["A", "B"])
+        XCTAssertEqual(PeakLayout.priorityOrder([a, b], observerAltitudeM: 0, keptIds: [a.mountain.id]).map(\.mountain.name), ["A", "B"])
     }
 
     func testCandidatesAreLimitedByReachAndCount() {
@@ -112,7 +115,7 @@ final class PeakLayoutTests: XCTestCase {
     func testCandidatesAroundScreenCenter() {
         // 現在地のそばの高い山は、画面の周りの円(現在地から北東 60km の点を中心に 5km)の外なので選ばない。
         func at(_ id: Int64, _ name: String, _ ele: Double, _ km: Double, _ bearing: Double) -> NearbyMountain {
-            NearbyMountain(mountain: Mountain(osmId: id, name: name, latitude: 0, longitude: 0, elevationM: ele), distanceKm: km, bearingDeg: bearing)
+            NearbyMountain(mountain: Mountain(id: "osm:\(id)", name: name, latitude: 0, longitude: 0, elevationM: ele), distanceKm: km, bearingDeg: bearing)
         }
         let all = [at(1, "手前", 2000, 5, 180), at(2, "筑波山", 877, 60, 45), at(3, "宝篋山", 461, 62, 47), at(4, "外", 900, 60, 60)]
         XCTAssertEqual(PeakLayout.candidates(all, observerAltitudeM: 0, keptIds: [], reachKm: 70, limit: 1).map(\.mountain.name), ["手前"])
@@ -123,7 +126,7 @@ final class PeakLayoutTests: XCTestCase {
     func testCandidatesKeepDrawnPeaks() {
         let high = m("高い", 3000, 10), mid = m("中", 2000, 10), low = m("低い", 1000, 10), out = m("外", 500, 40)
         // 前回描いた「低い」は上限によらず残し、残りの枠を優先順に埋める。円の外の山は描いていても残さない。
-        let drawn: Set<Int64> = [low.mountain.osmId, out.mountain.osmId]
+        let drawn: Set<String> = [low.mountain.id, out.mountain.id]
         XCTAssertEqual(PeakLayout.candidates([high, mid, low, out], observerAltitudeM: 0, keptIds: [], reachKm: 20, limit: 2, drawnIds: drawn)
             .map(\.mountain.name), ["高い", "低い"])
     }
@@ -137,8 +140,8 @@ final class PeakLayoutTests: XCTestCase {
 
     func testHeadingUpPrefersPeaksAhead() {
         // 横の山のほうが少し高く見えても、ヘディングアップでは正面の山を先にする。
-        let ahead = NearbyMountain(mountain: Mountain(osmId: 1, name: "正面", latitude: 0, longitude: 0, elevationM: 1000), distanceKm: 10, bearingDeg: 0)
-        let side = NearbyMountain(mountain: Mountain(osmId: 2, name: "横", latitude: 0, longitude: 0, elevationM: 1100), distanceKm: 10, bearingDeg: 90)
+        let ahead = NearbyMountain(mountain: Mountain(id: "osm:1", name: "正面", latitude: 0, longitude: 0, elevationM: 1000), distanceKm: 10, bearingDeg: 0)
+        let side = NearbyMountain(mountain: Mountain(id: "osm:2", name: "横", latitude: 0, longitude: 0, elevationM: 1100), distanceKm: 10, bearingDeg: 90)
         XCTAssertEqual(PeakLayout.priorityOrder([ahead, side], observerAltitudeM: 0).map(\.mountain.name), ["横", "正面"])
         XCTAssertEqual(PeakLayout.priorityOrder([ahead, side], observerAltitudeM: 0, headingDeg: 0).map(\.mountain.name), ["正面", "横"])
         XCTAssertEqual(PeakLayout.candidates([ahead, side], observerAltitudeM: 0, keptIds: [], reachKm: 20, limit: 1, headingDeg: 0)
@@ -155,8 +158,8 @@ final class PeakLayoutTests: XCTestCase {
 
     func testWideRangePrefersHighPeaksFarAway() {
         // 近くの低い山のほうが高く見えても、表示範囲が広いときは遠くの高い山を先にする。
-        let near = NearbyMountain(mountain: Mountain(osmId: 1, name: "近くの低い山", latitude: 0, longitude: 0, elevationM: 400), distanceKm: 5, bearingDeg: 0)
-        let far = NearbyMountain(mountain: Mountain(osmId: 2, name: "遠くの高い山", latitude: 0, longitude: 0, elevationM: 2500), distanceKm: 70, bearingDeg: 0)
+        let near = NearbyMountain(mountain: Mountain(id: "osm:1", name: "近くの低い山", latitude: 0, longitude: 0, elevationM: 400), distanceKm: 5, bearingDeg: 0)
+        let far = NearbyMountain(mountain: Mountain(id: "osm:2", name: "遠くの高い山", latitude: 0, longitude: 0, elevationM: 2500), distanceKm: 70, bearingDeg: 0)
         XCTAssertEqual(PeakLayout.priorityOrder([near, far], observerAltitudeM: 0, rangeKm: 15).map(\.mountain.name), ["近くの低い山", "遠くの高い山"])
         XCTAssertEqual(PeakLayout.priorityOrder([near, far], observerAltitudeM: 0, rangeKm: 80).map(\.mountain.name), ["遠くの高い山", "近くの低い山"])
     }
@@ -169,7 +172,7 @@ final class PeakLayoutTests: XCTestCase {
 
     func testNeighbors() {
         func at(_ name: String, _ lat: Double) -> NearbyMountain {
-            NearbyMountain(mountain: Mountain(osmId: Int64(name.hashValue), name: name, latitude: lat, longitude: 137, elevationM: 1000), distanceKm: 5, bearingDeg: 0)
+            NearbyMountain(mountain: Mountain(id: name, name: name, latitude: lat, longitude: 137, elevationM: 1000), distanceKm: 5, bearingDeg: 0)
         }
         XCTAssertTrue(PeakLayout.areNeighbors(at("奥穂高岳", 36.2894), at("ジャンダルム", 36.2862)))
         XCTAssertFalse(PeakLayout.areNeighbors(at("奥穂高岳", 36.2894), at("遠い山", 36.40)))
@@ -249,7 +252,7 @@ final class PeakLayoutTests: XCTestCase {
 
     func testTagCountCountsDistinctTags() {
         func count(_ tags: String...) -> Int {
-            Mountain(osmId: 1, name: "山", latitude: 0, longitude: 0, elevationM: 1000, tags: tags).tagCount
+            Mountain(id: "osm:1", name: "山", latitude: 0, longitude: 0, elevationM: 1000, tags: tags).tagCount
         }
         XCTAssertEqual(count(), 0)
         XCTAssertEqual(count("日本百名山"), 1)
@@ -259,7 +262,7 @@ final class PeakLayoutTests: XCTestCase {
 
     func testPriorityOrderAddsBonusPerTag() {
         func at(_ name: String, _ ele: Double, _ km: Double, _ tags: String...) -> NearbyMountain {
-            NearbyMountain(mountain: Mountain(osmId: Int64(name.hashValue), name: name, latitude: 0, longitude: 0, elevationM: ele, tags: tags),
+            NearbyMountain(mountain: Mountain(id: name, name: name, latitude: 0, longitude: 0, elevationM: ele, tags: tags),
                            distanceKm: km, bearingDeg: 0)
         }
         let near = at("裏山", 600, 2)
@@ -298,7 +301,7 @@ final class PeakLayoutTests: XCTestCase {
 
     func testElevationClass() {
         func cls(_ ele: Double?) -> ElevationClass {
-            Mountain(osmId: 1, name: "山", latitude: 0, longitude: 0, elevationM: ele).elevationClass
+            Mountain(id: "osm:1", name: "山", latitude: 0, longitude: 0, elevationM: ele).elevationClass
         }
         XCTAssertEqual(cls(nil), .low)
         XCTAssertEqual(cls(999.9), .low)

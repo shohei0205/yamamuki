@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import SwiftUI
 import YamamukiCore
 
@@ -59,16 +62,14 @@ struct SettingsView: View {
                         title: Strings.text("settings_grid_style"),
                         options: GridStyle.allCases,
                         selected: settings.gridStyle,
-                        label: { $0.label },
-                        description: Strings.text("settings_grid_style_description")
+                        label: { $0.label }
                     ) { v in model.updateSettings { $0.gridStyle = v } }
                     Choice(
                         title: Strings.text("settings_initial_range"),
                         options: Settings.initialRangesKm,
                         selected: settings.initialRangeKm,
                         // 6 つ並ぶと「10km」が収まらないので、単位は見出しに出す。
-                        label: { "\($0)" },
-                        description: Strings.text("settings_initial_range_description")
+                        label: { "\($0)" }
                     ) { v in model.updateSettings { $0.initialRangeKm = v } }
                 }
 
@@ -88,6 +89,12 @@ struct SettingsView: View {
                 }
 
                 Section(Strings.text("settings_section_peak_data")) {
+                    // 見出しが「山データ」なので、行には選んでいる山データの名前だけを出す。
+                    NavigationLink {
+                        PeakDataListView(model: model)
+                    } label: {
+                        Text(settings.peakDataset.label)
+                    }
                     PeakDataSection(
                         data: model.peakData,
                         updating: model.peakDataUpdating,
@@ -99,15 +106,21 @@ struct SettingsView: View {
                         description: Strings.text("settings_peak_data_auto_check_description"),
                         isOn: settings.autoCheckPeakData
                     ) { v in model.updateSettings { $0.autoCheckPeakData = v } }
-                    CacheSection(info: model.cacheInfo, onClear: model.clearCache)
                 }
 
                 Section(Strings.text("settings_section_about")) {
                     // 山データの著作者表示は方位盤と「データの出典とライセンス」の画面に出すので、ここには出さない。
-                    Text(Strings.format("settings_version", appVersion))
-                    // 名前は AUTHORS.md と合わせる。
-                    Text(Strings.text("settings_copyright"))
-                    Text(Strings.text("settings_developers"))
+                    // 版・コピーライト・開発者は 1 つのまとまりに見えるよう、罫線で区切らず 1 つのセルにまとめる。
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Strings.format("settings_version", appVersion))
+                        // 名前は AUTHORS.md と合わせる。
+                        Group {
+                            Text(Strings.text("settings_copyright"))
+                            Text(Strings.text("settings_developers"))
+                        }
+                        // Android の bodyMedium に合わせて、版の行より一回り小さくする。
+                        .font(.subheadline)
+                    }
                     // 山データが無くても OSM の表示は見られるよう、いつでも押せる。
                     NavigationLink {
                         CreditsView(model: model)
@@ -126,7 +139,7 @@ struct SettingsView: View {
         }
         // iOS 15 でも使えるよう NavigationView にする。1 画面だけなので分割表示にはしない。
         .navigationViewStyle(.stack)
-        .onAppear { model.refreshCacheInfo() }
+        .onAppear { model.refreshPeakData() }
     }
 
     /// project.yml の MARKETING_VERSION / CURRENT_PROJECT_VERSION。
@@ -187,7 +200,6 @@ private struct Choice<T: Hashable>: View {
     let options: [T]
     let selected: T
     let label: (T) -> String
-    var description: String?
     let onSelect: (T) -> Void
 
     var body: some View {
@@ -200,9 +212,6 @@ private struct Choice<T: Hashable>: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            if let description {
-                Text(description).font(.footnote).foregroundStyle(.secondary)
-            }
         }
     }
 }
@@ -274,32 +283,5 @@ private struct PeakDataSection: View {
         formatter.locale = Locale(identifier: "ja_JP")
         formatter.dateFormat = "yyyy/MM/dd"
         return formatter.string(from: date)
-    }
-}
-
-private struct CacheSection: View {
-    let info: CacheInfo?
-    let onClear: () -> Void
-    @State private var confirming = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(Strings.text("settings_cache_title"))
-            if let info {
-                Text(Strings.format("settings_cache_summary", groupedInteger(info.mountainCount), info.tileCount, byteSizeText(info.sizeBytes)))
-                    .font(.subheadline)
-            } else {
-                Text(Strings.text("common_loading")).font(.subheadline)
-            }
-            Text(Strings.text("settings_cache_description")).font(.footnote).foregroundStyle(.secondary)
-        }
-        Button(Strings.text("settings_cache_clear"), role: .destructive) { confirming = true }
-            .disabled(info == nil || info?.tileCount == 0)
-            .alert(Strings.text("settings_cache_clear_title"), isPresented: $confirming) {
-                Button(Strings.text("settings_cache_clear_confirm"), role: .destructive, action: onClear)
-                Button(Strings.text("common_cancel"), role: .cancel) {}
-            } message: {
-                Text(Strings.text(Features.areaDownload ? "settings_cache_clear_message_keep_areas" : "settings_cache_clear_message"))
-            }
     }
 }

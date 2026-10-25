@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import java.text.Normalizer
@@ -32,7 +35,7 @@ class MountainSearch(mountains: List<Mountain>) {
     /**
      * [query] を含む山を、先頭が一致した山、途中に含む山の順に、合わせて最大 [limit] 件返す。
      * それぞれの中は ([latitude], [longitude]) から近い順。地点が無ければ標高の高い順(標高不明は最後)。
-     * 並びが同じなら osmId の順。入力が空白だけなら空。
+     * 並びが同じなら地点の ID の順。入力が空白だけなら空。
      * 入力が仮名か英数字 1 文字だけのときは、途中に含む山が多すぎて探しにくいので返さない(漢字 1 文字なら返す)。
      * ただし先頭が一致した山が 1 つも無いときは、何も出ないよりよいので返す。
      */
@@ -50,10 +53,10 @@ class MountainSearch(mountains: List<Mountain>) {
     private fun sort(hits: List<Mountain>, latitude: Double?, longitude: Double?): List<Mountain> =
         if (latitude != null && longitude != null) {
             hits.map { it to GeoMath.distanceKm(latitude, longitude, it.latitude, it.longitude) }
-                .sortedWith(compareBy<Pair<Mountain, Double>> { it.second }.thenBy { it.first.osmId })
+                .sortedWith(compareBy<Pair<Mountain, Double>> { it.second }.thenBy { it.first.id })
                 .map { it.first }
         } else {
-            hits.sortedWith(compareByDescending<Mountain> { it.elevationM ?: Double.NEGATIVE_INFINITY }.thenBy { it.osmId })
+            hits.sortedWith(compareByDescending<Mountain> { it.elevationM ?: Double.NEGATIVE_INFINITY }.thenBy { it.id })
         }
 
     companion object {

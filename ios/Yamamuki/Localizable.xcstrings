@@ -29,7 +29,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$ld 区画の山データを OpenStreetMap（Overpass API）から取得します。サーバーの混み具合によっては数分かかります。途中で中断でき、この画面を閉じてもダウンロードは継続します。アプリを終了すると一時停止しますが、次に開いた時に再開できます。"
+            "value": "%1$ld区画の山データをOpenStreetMap（Overpass API）から取得します。サーバーの混雑状況によっては数分かかることがあります。途中で中断できます。画面を閉じてもダウンロードは継続されます。アプリを終了すると一時停止し、次回起動時に再開します。"
           }
         }
       }
@@ -51,7 +51,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存した山データを削除します。ほかの保存済み地域と重複するデータは残ります。"
+            "value": "保存した山データを削除します。ほかの保存済み地域と重なるデータは残ります。"
           }
         }
       }
@@ -73,7 +73,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "電波が届く場所で、目的地周辺の山データを事前に保存できます。\n事前に保存した山データは、キャッシュを消去しても残ります。"
+            "value": "通信できる場所で、目的地周辺の山データをあらかじめ保存できます。\n保存した山データは、設定で山データを削除しても残ります。"
           }
         }
       }
@@ -106,7 +106,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@のダウンロードが完了しました（山 %2$@ 件）。"
+            "value": "%1$@のダウンロードが完了しました（山%2$@件）。"
           }
         }
       }
@@ -128,7 +128,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@の取得に失敗しました（%2$ld / %3$ld 区画保存済み）。サーバーの混雑または通信状況が原因の可能性があります。"
+            "value": "%1$@の取得に失敗しました（%2$ld / %3$ld区画保存済み）。サーバーの混雑または通信状況が原因の可能性があります。"
           }
         }
       }
@@ -139,7 +139,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@のダウンロードが中断されています。「ダウンロードを再開」で再開できます。"
+            "value": "%1$@のダウンロードを中断しています。「ダウンロードを再開」を選ぶと再開できます。"
           }
         }
       }
@@ -150,7 +150,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "圏外のためダウンロードできません。通信可能な場所でお試しください。"
+            "value": "通信できないためダウンロードできません。通信可能な場所でお試しください。"
           }
         }
       }
@@ -227,7 +227,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "通信に失敗しました。%1$ld 秒後に再試行します（%2$ld 回目）"
+            "value": "通信に失敗しました。%1$ld秒後に再試行します（%2$ld回目）"
           }
         }
       }
@@ -320,17 +320,6 @@
         }
       }
     },
-    "common_loading": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "読み込み中…"
-          }
-        }
-      }
-    },
     "common_unknown": {
       "extractionState": "manual",
       "localizations": {
@@ -370,7 +359,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "コンパス：方位を確認中"
+            "value": "コンパス：方位を確認しています"
           }
         }
       }
@@ -381,7 +370,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "コンパス：赤い針が北を示します"
+            "value": "コンパス：赤い針が北を示しています"
           }
         }
       }
@@ -408,6 +397,17 @@
         }
       }
     },
+    "credits_gsi_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データ 出典：国土地理院 (PDL 1.0)"
+          }
+        }
+      }
+    },
     "credits_license": {
       "extractionState": "manual",
       "localizations": {
@@ -425,7 +425,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "出典情報の取得に失敗"
+            "value": "出典情報を取得できませんでした"
           }
         }
       }
@@ -436,7 +436,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "補足資料なし"
+            "value": "補足資料はありません"
           }
         }
       }
@@ -481,6 +481,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "山データ"
+          }
+        }
+      }
+    },
+    "credits_section_sources": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出典"
           }
         }
       }
@@ -672,24 +683,13 @@
         }
       }
     },
-    "dial_heading": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "向き %1$@"
-          }
-        }
-      }
-    },
     "dial_heading_accuracy_low": {
       "extractionState": "manual",
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位が不安定です。8の字に動かしてください"
+            "value": "方位が不安定です。端末を8の字に動かしてください"
           }
         }
       }
@@ -700,7 +700,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位を確認中"
+            "value": "方位を確認中…"
           }
         }
       }
@@ -733,7 +733,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "周辺の山を表示するには、位置情報の許可が必要です。\n設定アプリで「位置情報」を「使用中のみ」にしてください。"
+            "value": "周辺の山の表示には、位置情報の許可が必要です。\n設定アプリで「位置情報」を「使用中のみ」にしてください。"
           }
         }
       }
@@ -744,7 +744,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "周辺の山を表示するには、位置情報の許可が必要です。"
+            "value": "周辺の山の表示には、位置情報の許可が必要です。"
           }
         }
       }
@@ -766,7 +766,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@。設定から取得できます"
+            "value": "%1$@。設定からダウンロードできます"
           }
         }
       }
@@ -810,7 +810,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "この付近の山データがありません"
+            "value": "この付近に山データがありません"
           }
         }
       }
@@ -821,7 +821,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "周辺の一部の山データがありません"
+            "value": "周辺の山データの一部がありません"
           }
         }
       }
@@ -1024,6 +1024,17 @@
         }
       }
     },
+    "gsi_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出典：国土地理院"
+          }
+        }
+      }
+    },
     "map_mode_heading_up": {
       "extractionState": "manual",
       "localizations": {
@@ -1063,7 +1074,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "現在地に戻る（進行方向が上）"
+            "value": "現在地へ戻ります（進行方向が上になります）"
           }
         }
       }
@@ -1074,7 +1085,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "現在の向きのまま操作する"
+            "value": "地図を手動で操作します"
           }
         }
       }
@@ -1090,6 +1101,39 @@
         }
       },
       "shouldTranslate": false
+    },
+    "peak_data_delete_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端末に保存した山データを削除します。必要な場合は後で再度ダウンロードできます。"
+          }
+        }
+      }
+    },
+    "peak_data_delete_message_in_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在使用中の山データです。削除すると再度ダウンロードするまで方位盤に山が表示されなくなります。"
+          }
+        }
+      }
+    },
+    "peak_data_delete_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」の山データを削除しますか？"
+          }
+        }
+      }
     },
     "peak_data_error_invalid": {
       "extractionState": "manual",
@@ -1108,7 +1152,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "サーバーから応答がありません。しばらくしてから再度お試しください。"
+            "value": "サーバーから応答がありませんでした。時間をおいて再度お試しください。"
           }
         }
       }
@@ -1130,7 +1174,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "もう一度取得"
+            "value": "再試行する"
           }
         }
       }
@@ -1141,7 +1185,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得できませんでした"
+            "value": "山データをダウンロードできませんでした"
           }
         }
       }
@@ -1153,6 +1197,116 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@\n\n保存済みのデータを表示しています。"
+          }
+        }
+      }
+    },
+    "peak_data_list_available": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山 %1$@ 件・リリース：%2$@・約 %3$@"
+          }
+        }
+      }
+    },
+    "peak_data_list_available_no_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山 %1$@ 件・約 %2$@"
+          }
+        }
+      }
+    },
+    "peak_data_list_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用可能な山データを確認しています…"
+          }
+        }
+      }
+    },
+    "peak_data_list_delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        }
+      }
+    },
+    "peak_data_list_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用する山データを選択します。保存されていないデータはダウンロードします。"
+          }
+        }
+      }
+    },
+    "peak_data_list_experimental": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "試験版"
+          }
+        }
+      }
+    },
+    "peak_data_list_in_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用中"
+          }
+        }
+      }
+    },
+    "peak_data_list_offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフラインのため、保存済みの山データのみ表示しています。"
+          }
+        }
+      }
+    },
+    "peak_data_list_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データの選択"
+          }
+        }
+      }
+    },
+    "peak_data_list_update_found": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新あり"
           }
         }
       }
@@ -1196,7 +1350,18 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "新しい山データが入手できます。\n%1$@\n今すぐダウンロードしますか？"
+            "value": "新しい山データがあります。\n%1$@\n今すぐダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "peak_data_offer_message_first": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」の山データをダウンロードできます。\n%2$@\n今すぐダウンロードしますか？"
           }
         }
       }
@@ -1251,7 +1416,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得します。保存後は圏外でも利用できます。\n\n今すぐ取得しますか？\nあとで取得する場合は設定画面から実行できます。"
+            "value": "山データをダウンロードします。保存後は圏外でも利用できます。\n\n今すぐダウンロードしますか？\nあとで設定画面からもダウンロードできます。"
           }
         }
       }
@@ -1262,7 +1427,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得"
+            "value": "山データをダウンロードします"
           }
         }
       }
@@ -1284,7 +1449,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "最新の状態です"
+            "value": "すでに最新です"
           }
         }
       }
@@ -1295,7 +1460,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "新しい山データあり"
+            "value": "新しい山データがあります"
           }
         }
       }
@@ -1311,13 +1476,35 @@
         }
       }
     },
+    "peak_dataset_gsi_peaks": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "国土地理院"
+          }
+        }
+      }
+    },
+    "peak_dataset_osm_peaks": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenStreetMap"
+          }
+        }
+      }
+    },
     "search_loading": {
       "extractionState": "manual",
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを読み込んでいます"
+            "value": "山データを読み込み中…"
           }
         }
       }
@@ -1328,7 +1515,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データがありません。設定の「山データを更新」で取得すると検索できます。"
+            "value": "山データがありません。設定の「山データを更新」で取得してください。"
           }
         }
       }
@@ -1339,7 +1526,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "見つかりませんでした"
+            "value": "該当する山が見つかりませんでした"
           }
         }
       }
@@ -1361,7 +1548,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山名・よみがな"
+            "value": "山名またはよみがなを入力してください"
           }
         }
       }
@@ -1443,94 +1630,6 @@
         }
       }
     },
-    "settings_cache_clear": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "キャッシュを消去"
-          }
-        }
-      }
-    },
-    "settings_cache_clear_confirm": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "消去"
-          }
-        }
-      }
-    },
-    "settings_cache_clear_message": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存済みの山データをすべて消去します。必要に応じて再取得できます。"
-          }
-        }
-      }
-    },
-    "settings_cache_clear_message_keep_areas": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存済みの山データを消去します。事前ダウンロードした地域は残ります。"
-          }
-        }
-      }
-    },
-    "settings_cache_clear_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "キャッシュを消去しますか？"
-          }
-        }
-      }
-    },
-    "settings_cache_description": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "消去すると取得済みの山データも消えます。必要に応じて再取得できます。"
-          }
-        }
-      }
-    },
-    "settings_cache_summary": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "山 %1$@ 件（取得済みの区画 %2$ld 個）・容量 %3$@"
-          }
-        }
-      }
-    },
-    "settings_cache_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存データ"
-          }
-        }
-      }
-    },
     "settings_copyright": {
       "extractionState": "manual",
       "localizations": {
@@ -1586,17 +1685,6 @@
         }
       }
     },
-    "settings_grid_style_description": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "方位線は 45° ごとの線と向いている方向の線、目盛りは円に 10° ごとの刻みを足します。"
-          }
-        }
-      }
-    },
     "settings_grid_style_none": {
       "extractionState": "manual",
       "localizations": {
@@ -1641,17 +1729,6 @@
         }
       }
     },
-    "settings_initial_range_description": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "現在地から画面上端までの距離です。起動後もピンチ操作で変更できます。"
-          }
-        }
-      }
-    },
     "settings_keep_screen_on": {
       "extractionState": "manual",
       "localizations": {
@@ -1669,7 +1746,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位盤の表示中は画面が消えなくなります。バッテリーの消耗が早くなります。"
+            "value": "方位盤の表示中は画面を消灯しません。バッテリー消費が増える場合があります。"
           }
         }
       }
@@ -1680,7 +1757,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山名の最大数（%1$ld 件）"
+            "value": "表示する山名の上限（%1$ld件）"
           }
         }
       }
@@ -1691,7 +1768,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "1画面に出す山名の数を変更します。"
+            "value": "1画面に表示する山名の上限を設定します。"
           }
         }
       }
@@ -1713,7 +1790,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "0 m で全て表示します。絞り込み時は標高不明の山を除外します。"
+            "value": "0 m ですべての山を表示します。絞り込み時は標高不明の山を除きます。"
           }
         }
       }
@@ -1746,7 +1823,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "30 日に 1 度、アプリ起動時に新しい山データの確認を行います。"
+            "value": "30日に1回、アプリ起動時に新しい山データがないか確認します。"
           }
         }
       }
@@ -1768,7 +1845,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "山データを取得して端末に保存します。新しいデータがなければ確認のみ行います。"
+            "value": "山データをダウンロードして端末に保存します。最新データがあるかどうかの確認のみ行うこともできます。"
           }
         }
       }
@@ -1867,7 +1944,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "すべてのチェックを外す"
+            "value": "選択をすべて解除する"
           }
         }
       }
@@ -1878,7 +1955,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "チェックしたグループのどれかに入る山だけを方位盤に表示します。チェックが無いときは、すべての山を表示します。"
+            "value": "選択したグループの山を方位盤に表示します。何も選択していない場合は、すべての山を表示します。"
           }
         }
       }
@@ -1977,7 +2054,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "精度を下げるとバッテリー消費を抑えられますが、現在地や方位の更新頻度も下がります。"
+            "value": "精度を下げるとバッテリー消費を抑えられますが、現在地や方位の更新が遅くなります。"
           }
         }
       }

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.data
 
 import android.content.Context
@@ -20,20 +23,25 @@ import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONArray
 
+/**
+ * 保存している山。山データの種類([dataset]、osm-peaks など)ごとに別々に持ち、種類の中では地点の ID([pointId])で見分ける。
+ * DB の版 3 で種類の列を足し、OSM のノード番号(osmId)の列は「osm:<番号>」の地点の ID にまとめた。
+ */
 @Entity(
     tableName = "mountains",
-    indices = [Index("latitude", "longitude"), Index("tileLat", "tileLon")],
+    primaryKeys = ["dataset", "pointId"],
+    indices = [Index("dataset", "latitude", "longitude"), Index("dataset", "tileLat", "tileLon")],
 )
 data class MountainEntity(
-    @PrimaryKey val osmId: Long,
+    val dataset: String,
+    val pointId: String,
     val name: String,
     val latitude: Double,
     val longitude: Double,
     val elevationM: Double?,
     val tileLat: Int,
     val tileLon: Int,
-    // ここから下は地点データ版 5 の項目(DB の版 2 で追加)。版 1 の行と Overpass から取った山には無い。
-    val pointId: String? = null,
+    // ここから下は地点データ版 5 の項目(DB の版 2 で追加)。Overpass から取った山には無い。
     val nameReading: String? = null,
     @ColumnInfo(defaultValue = "[]") val aliases: List<String> = emptyList(),
     val wikipediaUrl: String? = null,
@@ -57,36 +65,38 @@ class StringListConverter {
     }
 }
 
-/** Overpass から取得済みのタイルと取得時刻。山が0件のタイルも記録してオフライン時に再取得しない。 */
-@Entity(tableName = "fetched_tiles", primaryKeys = ["tileLat", "tileLon"])
+/** 山データの種類([dataset])ごとの、取得済みのタイルと取得時刻。山が0件のタイルも記録してオフライン時に再取得しない。 */
+@Entity(tableName = "fetched_tiles", primaryKeys = ["dataset", "tileLat", "tileLon"])
 data class FetchedTileEntity(
+    val dataset: String,
     val tileLat: Int,
     val tileLon: Int,
     val fetchedAtMillis: Long,
 )
 
+/** 山データの DB の読み書き。どれも山データの種類([dataset])を 1 つ選んで行う。 */
 @Dao
 interface MountainDao {
     @Query(
-        "SELECT * FROM mountains WHERE latitude BETWEEN :south AND :north AND longitude BETWEEN :west AND :east"
+        "SELECT * FROM mountains WHERE dataset = :dataset AND latitude BETWEEN :south AND :north AND longitude BETWEEN :west AND :east"
     )
-    suspend fun mountainsIn(south: Double, west: Double, north: Double, east: Double): List<MountainEntity>
+    suspend fun mountainsIn(dataset: String, south: Double, west: Double, north: Double, east: Double): List<MountainEntity>
 
     /** 保存しているすべての山。山の検索で使う(全国分でも 1.5 万件ほど)。 */
-    @Query("SELECT * FROM mountains")
-    suspend fun allMountains(): List<MountainEntity>
+    @Query("SELECT * FROM mountains WHERE dataset = :dataset")
+    suspend fun allMountains(dataset: String): List<MountainEntity>
 
     /** タグのある山の、タグの列(JSON の配列の文字列)。山のグループの一覧を作るのに使う。 */
-    @Query("SELECT tags FROM mountains WHERE tags != '[]'")
-    suspend fun tagColumns(): List<String>
+    @Query("SELECT tags FROM mountains WHERE dataset = :dataset AND tags != '[]'")
+    suspend fun tagColumns(dataset: String): List<String>
 
     @Query(
-        "SELECT * FROM fetched_tiles WHERE tileLat BETWEEN :minLat AND :maxLat AND tileLon BETWEEN :minLon AND :maxLon"
+        "SELECT * FROM fetched_tiles WHERE dataset = :dataset AND tileLat BETWEEN :minLat AND :maxLat AND tileLon BETWEEN :minLon AND :maxLon"
     )
-    suspend fun tilesIn(minLat: Int, maxLat: Int, minLon: Int, maxLon: Int): List<FetchedTileEntity>
+    suspend fun tilesIn(dataset: String, minLat: Int, maxLat: Int, minLon: Int, maxLon: Int): List<FetchedTileEntity>
 
-    @Query("DELETE FROM mountains WHERE tileLat = :tileLat AND tileLon = :tileLon")
-    suspend fun deleteMountainsInTile(tileLat: Int, tileLon: Int)
+    @Query("DELETE FROM mountains WHERE dataset = :dataset AND tileLat = :tileLat AND tileLon = :tileLon")
+    suspend fun deleteMountainsInTile(dataset: String, tileLat: Int, tileLon: Int)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMountains(mountains: List<MountainEntity>)
@@ -94,42 +104,43 @@ interface MountainDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTiles(tiles: List<FetchedTileEntity>)
 
-    @Query("SELECT * FROM fetched_tiles")
-    suspend fun allTiles(): List<FetchedTileEntity>
+    @Query("SELECT * FROM fetched_tiles WHERE dataset = :dataset")
+    suspend fun allTiles(dataset: String): List<FetchedTileEntity>
 
-    @Query("DELETE FROM fetched_tiles WHERE tileLat = :tileLat AND tileLon = :tileLon")
-    suspend fun deleteTile(tileLat: Int, tileLon: Int)
+    @Query("DELETE FROM fetched_tiles WHERE dataset = :dataset AND tileLat = :tileLat AND tileLon = :tileLon")
+    suspend fun deleteTile(dataset: String, tileLat: Int, tileLon: Int)
 
-    @Query("SELECT COUNT(*) FROM mountains")
-    suspend fun countMountains(): Int
+    @Query("SELECT COUNT(*) FROM mountains WHERE dataset = :dataset")
+    suspend fun countMountains(dataset: String): Int
 
-    @Query("SELECT COUNT(*) FROM fetched_tiles")
-    suspend fun countTiles(): Int
+    @Query("SELECT COUNT(*) FROM fetched_tiles WHERE dataset = :dataset")
+    suspend fun countTiles(dataset: String): Int
 
-    @Query("DELETE FROM mountains")
-    suspend fun deleteAllMountains()
+    @Query("DELETE FROM mountains WHERE dataset = :dataset")
+    suspend fun deleteAllMountains(dataset: String)
 
-    @Query("DELETE FROM fetched_tiles")
-    suspend fun deleteAllTiles()
+    @Query("DELETE FROM fetched_tiles WHERE dataset = :dataset")
+    suspend fun deleteAllTiles(dataset: String)
 
+    /** [dataset] の山と取得済みの記録をすべて消す。 */
     @Transaction
-    suspend fun clearAll() {
-        deleteAllMountains()
-        deleteAllTiles()
+    suspend fun clearAll(dataset: String) {
+        deleteAllMountains(dataset)
+        deleteAllTiles(dataset)
     }
 
     /** タイルの山と取得済みの記録を消す。次に表示するときは未取得として扱う。 */
     @Transaction
-    suspend fun deleteTiles(tiles: List<Tile>) {
+    suspend fun deleteTiles(dataset: String, tiles: List<Tile>) {
         tiles.forEach {
-            deleteMountainsInTile(it.latIndex, it.lonIndex)
-            deleteTile(it.latIndex, it.lonIndex)
+            deleteMountainsInTile(dataset, it.latIndex, it.lonIndex)
+            deleteTile(dataset, it.latIndex, it.lonIndex)
         }
     }
 
     @Transaction
-    suspend fun replaceTiles(tiles: List<FetchedTileEntity>, mountains: List<MountainEntity>) {
-        tiles.forEach { deleteMountainsInTile(it.tileLat, it.tileLon) }
+    suspend fun replaceTiles(dataset: String, tiles: List<FetchedTileEntity>, mountains: List<MountainEntity>) {
+        tiles.forEach { deleteMountainsInTile(dataset, it.tileLat, it.tileLon) }
         insertMountains(mountains)
         insertTiles(tiles)
     }
@@ -154,7 +165,7 @@ abstract class MountainDatabase : RoomDatabase() {
         const val FILE_NAME = "mountains.db"
 
         /** DB の版。テーブルや列を変えたら上げる。書き出したスキーマは android/app/schemas/ に版ごとに残す。 */
-        const val VERSION = 2
+        const val VERSION = 3
 
         /**
          * 端末の DB がこのアプリより新しい版のとき(新しい版の開発版を入れたあとで古い版に戻したとき)は、

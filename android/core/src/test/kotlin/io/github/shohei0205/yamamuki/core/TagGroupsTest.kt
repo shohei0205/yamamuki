@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import kotlin.test.Test
@@ -6,7 +9,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TagGroupsTest {
-    private fun peak(id: Long, vararg tags: String) = Mountain(id, "山$id", 35.0, 138.0, 1000.0, tags = tags.toList())
+    private fun peak(id: Long, vararg tags: String) = Mountain("osm:$id", "山$id", 35.0, 138.0, 1000.0, tags = tags.toList())
 
     @Test
     fun groupsAreCountedAndSortedByName() {

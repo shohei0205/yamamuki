@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.ui
 
 import android.app.Application
@@ -8,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.YamamukiApp
 import io.github.shohei0205.yamamuki.core.DownloadProgress
+import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.core.Prefecture
 import io.github.shohei0205.yamamuki.data.SavedArea
 import io.github.shohei0205.yamamuki.sensor.connectivityUpdates
@@ -48,7 +52,7 @@ data class AreaDownloadUiState(
  */
 class AreaDownloadViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as YamamukiApp
-    private val repository = app.mountainRepository
+    private val repository = app.mountainRepository(PeakDataset.OSM_PEAKS)
     private val savedAreas = app.savedAreas
 
     private val _state = MutableStateFlow(AreaDownloadUiState(savedAreas = savedAreas.areas.value))
@@ -165,7 +169,7 @@ class AreaDownloadViewModel(application: Application) : AndroidViewModel(applica
         viewModelScope.launch {
             savedAreas.remove(area.prefecture)
             val keep = savedAreas.tiles()
-            app.cacheManager.removeTiles(area.prefecture.tiles.filter { it !in keep })
+            app.cacheManager.removeTiles(PeakDataset.OSM_PEAKS, area.prefecture.tiles.filter { it !in keep })
             app.cacheChanges.tryEmit(Unit)
         }
     }

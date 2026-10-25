@@ -29,8 +29,8 @@ targets:
       base:
         PRODUCT_NAME: Yamamuki
         PRODUCT_BUNDLE_IDENTIFIER: io.github.shohei0205.yamamuki
-        MARKETING_VERSION: 0.7.0
-        CURRENT_PROJECT_VERSION: 7
+        MARKETING_VERSION: 0.8.0
+        CURRENT_PROJECT_VERSION: 8
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
@@ -46,8 +46,8 @@ targets:
         # 暗号は iOS 標準のもの(URLSession の HTTPS、CryptoKit の SHA-256)しか使わないので、輸出規制の対象外と宣言する。
         # これで TestFlight へのアップロードのたびに輸出コンプライアンスを聞かれなくなる。
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
-      # 山データは、Release は参照先ファイル(current.json)の stable、Debug は PEAK_DATA_SOURCE で選んだほうを読む
-      # (DialModel.peakDataChannel)。既定(current)は参照先ファイルの dev(無ければ配布版と同じ stable)。
+      # 山データは、Release はカタログ(catalog.json)の osm-peaks の stable、Debug は PEAK_DATA_SOURCE で選んだほうを読む
+      # (DialModel.peakDataChannel)。既定(current)はカタログの osm-peaks の dev(無ければ配布版と同じ stable)。
       # yamamuki-data の dev が公開する最新の開発版(points/osm-peaks-dev/)を直接試すときは、ビルド設定 PEAK_DATA_SOURCE を dev にする
       # (例: xcodebuild ... PEAK_DATA_SOURCE=dev。Xcode ではターゲットの Build Settings の User-Defined で変える)。
       # 広告(AdMob のバナー)は Release だけで出す(AdBanner.swift)。開発中に試すときは xcodebuild ... ADS_ENABLED=YES のように変える。

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 /**
@@ -8,14 +11,22 @@ package io.github.shohei0205.yamamuki.core
 data class PeakDataCredits(
     /** データを作った日(UTC)。「2026/10/07」の形。 */
     val releaseDate: String?,
-    /** manifest の license(例: ODbL-1.0)。 */
+    /** manifest の license(例: ODbL-1.0)。版 6 は null(出典ごとの license は [supplements] にある)。 */
     val license: String?,
-    /** manifest の attribution(例: © OpenStreetMap contributors)。 */
+    /** manifest の attribution(例: © OpenStreetMap contributors)。版 6 は null。 */
     val attribution: String?,
-    /** manifest の sourceUrl。元にした OSM データの URL。 */
+    /** manifest の sourceUrl。元にした OSM データの URL。版 6 は null。 */
     val sourceUrl: String?,
-    /** タグ・よみがななどの補足に使った資料(manifest の supplementSources)。出典 ID の文字コード順。 */
+    /**
+     * タグ・よみがななどの補足に使った資料(manifest の supplementSources)。出典 ID の文字コード順。
+     * 版 6 は metadata.sources のすべての出典(元データも含む、[listsAllSources])で、manifest の並び順のまま。
+     */
     val supplements: List<SupplementSource>,
+    /**
+     * [supplements] が補足の資料だけでなく、元データを含むすべての出典か(manifest 版 6)。
+     * 画面はこのとき見出しを「出典」にする。版 6 の出典の並びには元データと補足の区別が無いため。
+     */
+    val listsAllSources: Boolean = false,
 )
 
 /** 補足に使った資料 1 件。出典 ID はタグ名とは関係なく、見出しとして出すだけ。 */
@@ -48,6 +59,7 @@ object PeakDataCreditsReader {
      * manifest の本文から出典を読む。JSON のオブジェクトでなければ null。
      * supplementSources が無い・空・オブジェクトでない古いデータでは、補足は空になる。
      * 出典の値がオブジェクトでないものは飛ばし、属性がどれも無い出典は ID だけを出す。
+     * 版 6 は metadata.sources を読む([parseSources])。名前のある出典が 1 つも無ければ null。
      */
     fun parse(body: String): PeakDataCredits? {
         val root = try {
@@ -55,6 +67,7 @@ object PeakDataCreditsReader {
         } catch (e: IllegalArgumentException) {
             return null
         } as? Map<*, *> ?: return null
+        if (root["metadata"] is Map<*, *>) return parseSources(root)
         val supplements = (root["supplementSources"] as? Map<*, *>).orEmpty().mapNotNull { (key, value) ->
             val id = (key as? String)?.trim()?.ifEmpty { null } ?: return@mapNotNull null
             val item = value as? Map<*, *> ?: return@mapNotNull null
@@ -72,6 +85,35 @@ object PeakDataCreditsReader {
             attribution = text(root["attribution"]),
             sourceUrl = text(root["sourceUrl"]),
             supplements = supplements,
+        )
+    }
+
+    /**
+     * manifest 版 6 の metadata.sources から出典を読む。元データと補足を分けず、すべての出典を manifest の並び順のまま出す
+     * (出典の並びに区別の項目が無く、名前も版ごとに変わるため。2026-10-20 の版から「OpenStreetMap（日本・Geofabrik 配布）」など)。
+     * 並び順は yamamuki-data が決めたものとして、並べ替えない。
+     * name の無い出典は飛ばす。名前のある出典が 1 つも無いときは null を返し、
+     * 画面はアプリが持つ OpenStreetMap の表示に戻す(ライセンスの表示を消さないため)。
+     */
+    private fun parseSources(root: Map<*, *>): PeakDataCredits? {
+        val sources = ((root["metadata"] as Map<*, *>)["sources"] as? List<*>).orEmpty().mapNotNull { value ->
+            val item = value as? Map<*, *> ?: return@mapNotNull null
+            SupplementSource(
+                id = text(item["name"]) ?: return@mapNotNull null,
+                source = text(item["source"]),
+                license = text(item["license"]),
+                attribution = text(item["attribution"]),
+                changes = text(item["changes"]),
+            )
+        }
+        if (sources.isEmpty()) return null
+        return PeakDataCredits(
+            releaseDate = (root["version"] as? String)?.let(PeakData::releaseDate),
+            license = null,
+            attribution = null,
+            sourceUrl = null,
+            supplements = sources,
+            listsAllSources = true,
         )
     }
 

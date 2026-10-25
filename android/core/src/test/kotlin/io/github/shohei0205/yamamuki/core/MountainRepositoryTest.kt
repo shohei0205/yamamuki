@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 package io.github.shohei0205.yamamuki.core
 
 import kotlinx.coroutines.test.runTest
@@ -12,9 +15,9 @@ import kotlin.test.assertTrue
 class MountainRepositoryTest {
     // 大月駅付近から富士山(約 34km)と、遠くの山(範囲外)を返すフェイク
     private val here = 35.61 to 138.94
-    private val fuji = Mountain(1, "富士山", 35.3606, 138.7274, 3776.0)
-    private val near = Mountain(2, "岩殿山", 35.62, 138.96, 634.0)
-    private val far = Mountain(3, "遠い山", 36.4, 138.94, 2000.0)
+    private val fuji = Mountain("osm:1", "富士山", 35.3606, 138.7274, 3776.0)
+    private val near = Mountain("osm:2", "岩殿山", 35.62, 138.96, 634.0)
+    private val far = Mountain("osm:3", "遠い山", 36.4, 138.94, 2000.0)
 
     private class FakeRemote(var peaks: List<Mountain>) : MountainRemoteSource {
         var calls = mutableListOf<BoundingBox>()
@@ -132,7 +135,7 @@ class MountainRepositoryTest {
     @Test
     fun foreignTilesAreNotMissingNearTheBorder() = runTest {
         // 全国の山データを取り込んだ状態。対馬の山だけを持ち、朝鮮半島のタイルは取得済みにならない。
-        val tsushima = Mountain(4, "白嶽", 34.42, 129.31, 519.0)
+        val tsushima = Mountain("osm:4", "白嶽", 34.42, 129.31, 519.0)
         val cache = InMemoryMountainCache()
         cache.replaceTiles(PeakData.tilesOf(listOf(tsushima)), listOf(tsushima), now)
         val repo = repo(FakeRemote(emptyList()), cache)

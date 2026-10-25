@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The yamamuki Authors
+// SPDX-License-Identifier: MIT
+
 import Foundation
 
 extension NearbyMountain {
@@ -94,18 +97,18 @@ public enum PeakLayout {
     public static let tagBonusDeg = 3.0
 
     /// 選ぶ順。[displayPriority] の順に、タグの数([tagCount])× [tagBonusDeg] を上乗せし、
-    /// 前回選んだ山([keptIds]、OSM の ID)は [keptBonusDeg] だけ上乗せする。
+    /// 前回選んだ山([keptIds]、地点の ID)は [keptBonusDeg] だけ上乗せする。
     /// ヘディングアップでは向いている方角([headingDeg])と表示範囲([rangeKm])を渡し、
     /// 正面に近い山に [forwardBonus] を、表示範囲が広いときは高い山に [heightBonus] を上乗せする。
     public static func priorityOrder(
         _ mountains: [NearbyMountain],
         observerAltitudeM: Double?,
-        keptIds: Set<Int64> = [],
+        keptIds: Set<String> = [],
         headingDeg: Double? = nil,
         rangeKm: Double? = nil
     ) -> [NearbyMountain] {
         func score(_ m: NearbyMountain) -> Double {
-            m.displayScore(observerAltitudeM: observerAltitudeM) + (keptIds.contains(m.mountain.osmId) ? keptBonusDeg : 0)
+            m.displayScore(observerAltitudeM: observerAltitudeM) + (keptIds.contains(m.mountain.id) ? keptBonusDeg : 0)
                 + tagBonusDeg * Double(m.mountain.tagCount)
                 + (headingDeg.map { forwardBonus(bearingDeg: m.bearingDeg, headingDeg: $0) } ?? 0)
                 + (rangeKm.map { heightBonus(elevationM: m.mountain.elevationM, rangeKm: $0) } ?? 0)
@@ -128,19 +131,19 @@ public enum PeakLayout {
     public static func candidates(
         _ mountains: [NearbyMountain],
         observerAltitudeM: Double?,
-        keptIds: Set<Int64>,
+        keptIds: Set<String>,
         reachKm: Double,
         limit: Int,
         centerKm: Double = 0,
         centerBearingDeg: Double = 0,
-        drawnIds: Set<Int64> = [],
+        drawnIds: Set<String> = [],
         headingDeg: Double? = nil
     ) -> [NearbyMountain] {
         let inReach = priorityOrder(mountains, observerAltitudeM: observerAltitudeM, keptIds: keptIds, headingDeg: headingDeg)
             .filter { planeDistanceKm($0.distanceKm, $0.bearingDeg, centerKm, centerBearingDeg) <= reachKm }
-        var room = max(limit, 0) - inReach.filter { drawnIds.contains($0.mountain.osmId) }.count
+        var room = max(limit, 0) - inReach.filter { drawnIds.contains($0.mountain.id) }.count
         return inReach.filter { m in
-            if drawnIds.contains(m.mountain.osmId) { return true }
+            if drawnIds.contains(m.mountain.id) { return true }
             room -= 1
             return room >= 0
         }
