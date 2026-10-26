@@ -4,5 +4,8 @@
 // xcconfig では「//」がコメントになるので、ID の「/」は 1 つのまま書けばよい。
 ADMOB_APP_ID = ca-app-pub-3940256099942544~1458002511
 ADMOB_BANNER_ID = ca-app-pub-3940256099942544/2934735716
+// 本番の ID でもテスト広告にする端末の ID(複数はカンマ区切り)。ID はアプリの初回の広告の読み込みで、Xcode のコンソールに
+// 「To get test ads on this device」と出る。AdMob の管理画面の登録は広告 ID(ATT の許可)が要るので、こちらで指定する。
+ADMOB_TEST_DEVICE_IDS =
 
 #include? "Ads.local.xcconfig"

@@ -10,6 +10,11 @@ enum Ads {
     /// このビルドで広告を出すか。Swift Package は構成ごとに外せないので、SDK は常に入れて、出すかどうかをここで決める。
     static let enabled = (Bundle.main.object(forInfoDictionaryKey: "YamamukiAdsEnabled") as? String) == "YES"
     static let bannerUnitID = Bundle.main.object(forInfoDictionaryKey: "YamamukiAdMobBannerID") as? String
+    /// 本番の ID でもテスト広告にする端末(Ads.xcconfig の ADMOB_TEST_DEVICE_IDS。カンマ区切り)。
+    static let testDeviceIDs = ((Bundle.main.object(forInfoDictionaryKey: "YamamukiAdMobTestDeviceIDs") as? String) ?? "")
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
 
     private static var started = false
 
@@ -17,6 +22,7 @@ enum Ads {
     static func startIfNeeded() {
         guard !started else { return }
         started = true
+        MobileAds.shared.requestConfiguration.testDeviceIdentifiers = testDeviceIDs
         MobileAds.shared.start(completionHandler: nil)
     }
 }

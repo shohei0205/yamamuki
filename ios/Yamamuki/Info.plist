@@ -6,6 +6,8 @@
 	<string>$(ADMOB_APP_ID)</string>
 	<key>YamamukiAdMobBannerID</key>
 	<string>$(ADMOB_BANNER_ID)</string>
+	<key>YamamukiAdMobTestDeviceIDs</key>
+	<string>$(ADMOB_TEST_DEVICE_IDS)</string>
 	<key>YamamukiAdsEnabled</key>
 	<string>$(ADS_ENABLED)</string>
 	<key>SKAdNetworkItems</key>

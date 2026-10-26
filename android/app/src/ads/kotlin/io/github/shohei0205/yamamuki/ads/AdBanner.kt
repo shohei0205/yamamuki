@@ -19,6 +19,7 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.RequestConfiguration
 import io.github.shohei0205.yamamuki.BuildConfig
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -58,9 +59,14 @@ fun AdBanner(modifier: Modifier = Modifier) {
 
 private val started = AtomicBoolean(false)
 
-/** AdMob の SDK を一度だけ起動する。時間がかかるので、Google の案内どおり画面の処理とは別のスレッドで行う。 */
+/**
+ * AdMob の SDK を一度だけ起動する。時間がかかるので、Google の案内どおり画面の処理とは別のスレッドで行う。
+ * 本番の ID でもテスト広告にする端末(build.gradle.kts の admobTestDeviceIds)は、最初の広告を読む前に渡す。
+ */
 private fun startMobileAds(context: Context) {
     if (!started.compareAndSet(false, true)) return
+    val testDeviceIds = BuildConfig.ADMOB_TEST_DEVICE_IDS.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    MobileAds.setRequestConfiguration(RequestConfiguration.Builder().setTestDeviceIds(testDeviceIds).build())
     val appContext = context.applicationContext
     Thread { MobileAds.initialize(appContext) }.start()
 }

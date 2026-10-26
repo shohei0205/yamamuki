@@ -53,9 +53,13 @@ android {
     // 無ければ Google のテスト用 ID を使う(「Test Ad」と書かれたテスト広告が出る)。
     val admobAppId = providers.gradleProperty("admobAppId").getOrElse("ca-app-pub-3940256099942544~3347511713")
     val admobBannerId = providers.gradleProperty("admobBannerId").getOrElse("ca-app-pub-3940256099942544/6300978111")
+    // 本番の ID でもテスト広告にする端末の ID(複数はカンマ区切り)。~/.gradle/gradle.properties の admobTestDeviceIds に書く。
+    // ID はアプリの初回の広告の読み込みで、logcat のタグ Ads に「setTestDeviceIds」と一緒に出る。
+    val admobTestDeviceIds = providers.gradleProperty("admobTestDeviceIds").getOrElse("")
     defaultConfig {
         manifestPlaceholders["admobAppId"] = admobAppId
         buildConfigField("String", "ADMOB_BANNER_ID", "\"$admobBannerId\"")
+        buildConfigField("String", "ADMOB_TEST_DEVICE_IDS", "\"$admobTestDeviceIds\"")
     }
     // 広告を入れるビルドは src/ads、入れないビルドは src/noads の AdBanner を使う(noads は何も出さない)。
     sourceSets {

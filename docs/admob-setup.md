@@ -51,7 +51,10 @@ ID を渡さないと Google のテスト用 ID を使い、「Test Ad」と書�
   ADMOB_APP_ID = ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY
   ADMOB_BANNER_ID = ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
   ```
-- 開発中は本番の ID を使わない。自分の広告を自分で見続けたりタップしたりすると、規約違反でアカウントが止まることがある。AdMob の「設定」→「テストデバイス」に自分の端末を登録しておくと、本番の ID でもテスト広告になる。
+- 開発中は本番の ID を使わない。自分の広告を自分で見続けたりタップしたりすると、規約違反でアカウントが止まることがある。自分の端末をテストデバイスにすると、本番の ID でもテスト広告になる。
+  - 端末の ID は、本番の ID の版で最初に広告を読み込んだときに、Android は logcat(タグ `Ads`)、iOS は Xcode のコンソール(「To get test ads on this device」)に出る。アプリを入れ直すと変わることがある。
+  - Android は `~/.gradle/gradle.properties` に `admobTestDeviceIds=<ID>`、iOS は `ios/Ads.local.xcconfig` に `ADMOB_TEST_DEVICE_IDS = <ID>` を書く(複数はカンマ区切り)。
+  - AdMob の「設定」→「テストデバイス」での登録もできるが、iOS は広告 ID(IDFA)が要り、トラッキングの許可(ATT)を求めない山むきでは取れないので、上の方法を使う。
 
 ## 4. app-ads.txt を置く
 
