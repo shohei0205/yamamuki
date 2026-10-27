@@ -98,6 +98,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.shohei0205.yamamuki.Features
 import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.ads.AdBanner
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.Heading
 import io.github.shohei0205.yamamuki.core.PanGeometry
@@ -312,6 +313,8 @@ fun DialScreen(
             viewportLatitude = state.location?.latitude,
             viewportLongitude = state.location?.longitude,
         )
+        // 配布版では、ヘッダーの中央にバナー広告(320×50)を出す。広告を入れないビルドでは何も出さない(build.gradle.kts の ads)。
+        AdBanner(Modifier.align(Alignment.TopCenter).padding(top = ((DialGeometry.HEADER_HEIGHT_DP - 50) / 2).dp))
         Text(
             stringResource(state.settings.peakDataset.attribution),
             style = MaterialTheme.typography.labelSmall,

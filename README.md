@@ -81,6 +81,7 @@ cd android
   ```
 - 山データの取得に失敗したときは、原因を logcat にタグ `DialViewModel` で出している。
 - 開発版はアプリ ID が `io.github.shohei0205.yamamuki.debug`、名前が「山むき(開発版)」になり、配布版と同じ端末に並べて入れられる。
+- 広告(AdMob)の SDK は配布版(release)にだけ入る。開発版でも試すときは `-Pads=all`、どちらにも入れないときは `-Pads=none` を付ける([docs/ads.md](docs/ads.md) を参照)。
 - 配布版(release)は R8 で使わないコードとリソースを削って小さくする。規則は `android/app/proguard-rules.pro` に書く。難読化の対応表(`android/app/build/outputs/mapping/release/mapping.txt`)は AAB に入るので、Play Console のクラッシュの記録も元のクラス名で読める。
 
 ### iOS 版
@@ -115,6 +116,7 @@ open Yamamuki.xcodeproj
   - 初回起動の「山データを取得」には「あとで」で答え(テストのたびに通信しないため)、位置情報の許可には「使用中は許可」で答える。実機では端末に入っている山むきの設定をそのまま使う。
   - テストで撮った画面はテスト結果に残り、Xcode の Report ナビゲータで見られる。
   - テストが終わると、テストした端末で山むきを起動し直す（スキームのテスト後の処理）。
+- 広告(AdMob)は Release だけで出す。Debug で試すときは、ビルド設定 `ADS_ENABLED` を `YES` にする([docs/ads.md](docs/ads.md) を参照)。
 - 山データの取得に失敗したときは、原因を Xcode のコンソール（または Mac の「コンソール」アプリ）にカテゴリ `DialModel` で出している。
 
 ## 詳しい仕様
@@ -130,6 +132,7 @@ open Yamamuki.xcodeproj
 | [山データのカタログと差し替え](docs/peak-data-catalog.md) | `site/data/` のカタログと参照先ファイル、差し替え PR の作り方と CI の確認 |
 | [設定](docs/settings.md) | 設定項目と既定値 |
 | [キャッシュの仕組みと通信量](docs/cache.md) | タイル単位のキャッシュ、自動バックアップ、通信量の目安 |
+| [広告](docs/ads.md) | 配布版のヘッダーのバナー広告（AdMob）、広告を入れるビルドと広告の ID の渡し方 |
 | [データの出典とライセンスの画面](docs/credits-screen.md) | 山データの出典の出し方 |
 | [山データの取得で分かったこと](docs/peak-data-notes.md) | Overpass API から取得していたころの記録 |
 

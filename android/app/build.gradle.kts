@@ -9,6 +9,17 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// 広告(Google AdMob のバナー。方位盤のヘッダーに出す)を入れるビルド。既定(release)は配布版だけに入れ、開発版には SDK も入れない。
+// 開発版でも試すときは all、どちらにも入れないときは none を、Gradle のプロパティ ads に指定する
+// (例: ./gradlew :app:installDebug -Pads=all)。
+val ads = providers.gradleProperty("ads").getOrElse("release")
+require(ads in setOf("release", "all", "none")) { "ads は release か all か none を指定してください: $ads" }
+val adsBuildTypes = when (ads) {
+    "all" -> setOf("debug", "release")
+    "release" -> setOf("release")
+    else -> emptySet()
+}
+
 android {
     namespace = "io.github.shohei0205.yamamuki"
     compileSdk = 37
@@ -37,6 +48,32 @@ android {
     // (例: ./gradlew :app:installDebug -PpeakDataSource=dev。~/.gradle/gradle.properties に書いてもよい)。
     val peakDataSource = providers.gradleProperty("peakDataSource").getOrElse("current")
     require(peakDataSource in setOf("current", "dev")) { "peakDataSource は current か dev を指定してください: $peakDataSource" }
+
+    // AdMob のアプリ ID と広告ユニット ID。本番の ID はリポジトリに入れず、~/.gradle/gradle.properties の admobAppId と admobBannerId に書く。
+    // 無ければ Google のテスト用 ID を使う(「Test Ad」と書かれたテスト広告が出る)。
+    val admobAppId = providers.gradleProperty("admobAppId").getOrElse("ca-app-pub-3940256099942544~3347511713")
+    val admobBannerId = providers.gradleProperty("admobBannerId").getOrElse("ca-app-pub-3940256099942544/6300978111")
+    // 本番の ID でもテスト広告にする端末の ID(複数はカンマ区切り)。~/.gradle/gradle.properties の admobTestDeviceIds に書く。
+    // ID はアプリの初回の広告の読み込みで、logcat のタグ Ads に「setTestDeviceIds」と一緒に出る。
+    val admobTestDeviceIds = providers.gradleProperty("admobTestDeviceIds").getOrElse("")
+    defaultConfig {
+        manifestPlaceholders["admobAppId"] = admobAppId
+        buildConfigField("String", "ADMOB_BANNER_ID", "\"$admobBannerId\"")
+        buildConfigField("String", "ADMOB_TEST_DEVICE_IDS", "\"$admobTestDeviceIds\"")
+    }
+    // 広告を入れるビルドは src/ads、入れないビルドは src/noads の AdBanner を使う(noads は何も出さない)。
+    sourceSets {
+        for (type in listOf("debug", "release")) {
+            named(type) {
+                if (type in adsBuildTypes) {
+                    kotlin.directories.add("src/ads/kotlin")
+                    manifest.srcFile("src/ads/AndroidManifest.xml")
+                } else {
+                    kotlin.directories.add("src/noads/kotlin")
+                }
+            }
+        }
+    }
 
     signingConfigs {
         if (signingPropsFile != null && signingProps != null) {
@@ -109,6 +146,10 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // 広告の SDK は、広告を入れるビルドにだけ入れる(上の ads を参照)。
+    if ("release" in adsBuildTypes) releaseImplementation(libs.play.services.ads)
+    if ("debug" in adsBuildTypes) debugImplementation(libs.play.services.ads)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
