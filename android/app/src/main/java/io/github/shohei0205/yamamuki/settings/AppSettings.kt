@@ -28,7 +28,10 @@ data class Settings(
     val initialRangeKm: Int = DialGeometry.DEFAULT_RANGE_KM.toInt(),
     /** 現在地と方位をどのくらいこまめに測るか。こまめなほど電池を使う。 */
     val sensorPrecision: SensorPrecision = SensorPrecision.STANDARD,
-    /** 初回起動時の「山データを取得しますか」に答えた。答えるまでは位置情報の許可を求めない(ダイアログを重ねない)。 */
+    /**
+     * 初回起動時の山データのダウンロードの確認を済ませた(答えたか、圏外などで出せなかった)。済ませるまでは
+     * 位置情報の許可を求めない(ダイアログを重ねない)。
+     */
     val peakDataAsked: Boolean = false,
     /** 方位盤に出す山のグループ(地点のタグ)。どれかを持つ山だけを出す。空なら絞り込まない。 */
     val peakGroups: Set<String> = emptySet(),

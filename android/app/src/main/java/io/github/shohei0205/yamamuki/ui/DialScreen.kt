@@ -158,7 +158,7 @@ fun DialScreen(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { granted -> hasPermission = granted.values.any { it } }
 
-    // 初回は「山データを取得しますか」を先に聞き、答えてから位置情報の許可を求める(ダイアログを重ねない)。
+    // 初回は山データをダウンロードするかを先に聞き、答えてから位置情報の許可を求める(ダイアログを重ねない)。
     val peakDataAsked = state.settings.peakDataAsked
     LaunchedEffect(peakDataAsked) {
         if (peakDataAsked && !hasPermission) permissionLauncher.launch(LOCATION_PERMISSIONS)
@@ -337,7 +337,11 @@ fun DialScreen(
                 StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null))
                 // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
                 // どちらも設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
-                if (state.peakDataRefreshNeeded) {
+                if (state.peakDataMissing) {
+                    // 初回のダウンロードを「あとで」にしたときに、設定画面を探さなくても取得できるようにする。
+                    StatusLine(message = stringResource(R.string.dial_peak_data_missing))
+                    PeakDataLabel(stringResource(R.string.dial_peak_data_download), onClick = viewModel::updatePeakData)
+                } else if (state.peakDataRefreshNeeded) {
                     PeakDataLabel(stringResource(R.string.peak_data_refresh_needed), onClick = viewModel::updatePeakData)
                 } else if (state.peakDataUpdateLabelShown) {
                     // 設定で自動の確認をオンにしたときに、新しい版が見つかったら出す。
@@ -499,10 +503,6 @@ fun DialScreen(
         onDispose { view.keepScreenOn = false }
     }
 
-    if (!peakDataAsked) {
-        PeakDataPrompt(onAnswer = viewModel::answerPeakDataPrompt)
-    }
-
     // 新しい山データの大きさを見せて、ダウンロードするかを聞く(初回の問い合わせのあとと、設定画面の確認から)。
     state.peakDataOffer?.let { manifest ->
         PeakDataOfferDialog(manifest = manifest, first = state.peakDataOfferFirst, onAnswer = viewModel::answerPeakDataOffer)
@@ -543,19 +543,6 @@ fun DialScreen(
     if (showObserver && location != null && !overlay) {
         ObserverDetailDialog(location, onDismiss = { showObserver = false })
     }
-}
-
-/** 初回起動時に、全国の山データを取得するかを聞く。どちらかを選ぶまで閉じない。 */
-@Composable
-private fun PeakDataPrompt(onAnswer: (Boolean) -> Unit) {
-    AlertDialog(
-        onDismissRequest = {},
-        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
-        title = { Text(stringResource(R.string.peak_data_prompt_title)) },
-        text = { Text(stringResource(R.string.peak_data_prompt_message)) },
-        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.peak_data_prompt_fetch)) } },
-        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.peak_data_prompt_later)) } },
-    )
 }
 
 /**
@@ -730,8 +717,8 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
         !headingAvailable -> stringResource(R.string.dial_status_waiting_heading)
         state.peakDataUpdating -> stringResource(R.string.dial_status_fetching)
         state.loading -> stringResource(R.string.dial_status_loading)
-        state.incomplete && state.peakData == null -> stringResource(R.string.dial_status_fetch_hint, missing)
-        state.incomplete -> missing
+        // 山データを取り込んでいないときは、下のダウンロードのボタンと一緒に知らせるので、ここでは出さない。
+        state.incomplete && !state.peakDataMissing -> missing
         else -> null
     }
 }

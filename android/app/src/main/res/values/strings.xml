@@ -26,7 +26,6 @@
     <string name="dial_status_loading">山データを読み込み中…</string>
     <string name="dial_status_no_data_here">この付近に山データがありません</string>
     <string name="dial_status_partial_data">周辺の山データの一部がありません</string>
-    <string name="dial_status_fetch_hint">%1$s。設定からダウンロードできます</string>
     <string name="dial_permission_message_with_hint">周辺の山の表示には、位置情報の許可が必要です。\n許可の画面が出ない場合は、端末の設定アプリで許可してください。</string>
     <string name="dial_permission_allow">許可する</string>
     <string name="map_mode_manual">手動位置モード</string>
@@ -72,15 +71,13 @@
     <string name="detail_observer_title">現在地</string>
 
     <!-- 山データの取得 -->
-    <string name="peak_data_prompt_title">山データをダウンロードします</string>
-    <string name="peak_data_prompt_message">山データをダウンロードします。保存後は圏外でも利用できます。\n\n今すぐダウンロードしますか？\nあとで設定画面からもダウンロードできます。</string>
-    <string name="peak_data_prompt_fetch">取得する</string>
-    <string name="peak_data_prompt_later">あとで</string>
+    <string name="dial_peak_data_missing">山データがありません</string>
+    <string name="dial_peak_data_download">山データをダウンロード</string>
     <string name="peak_data_refresh_needed">山データの更新が必要です</string>
     <string name="peak_data_update_found">新しい山データがあります</string>
     <string name="peak_data_offer_title">山データのダウンロード</string>
     <string name="peak_data_offer_message">新しい山データがあります。\n%1$s\n今すぐダウンロードしますか？</string>
-    <string name="peak_data_offer_message_first">「%1$s」の山データをダウンロードできます。\n%2$s\n今すぐダウンロードしますか？</string>
+    <string name="peak_data_offer_message_first">「%1$s」の山データをダウンロードできます。保存後は圏外でも利用できます。\n%2$s\n今すぐダウンロードしますか？</string>
     <string name="peak_data_offer_detail">リリース：%1$s、約 %2$s</string>
     <string name="peak_data_offer_size">約 %1$s</string>
     <string name="peak_data_offer_download">ダウンロード</string>
