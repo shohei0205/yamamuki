@@ -148,8 +148,15 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // 広告の SDK は、広告を入れるビルドにだけ入れる(上の ads を参照)。
-    if ("release" in adsBuildTypes) releaseImplementation(libs.play.services.ads)
-    if ("debug" in adsBuildTypes) debugImplementation(libs.play.services.ads)
+    // 広告の SDK が使う fragment は 1.1.0 と古く Play Console で警告されるので、新しい版を指定して引き上げる。
+    if ("release" in adsBuildTypes) {
+        releaseImplementation(libs.play.services.ads)
+        releaseImplementation(libs.androidx.fragment)
+    }
+    if ("debug" in adsBuildTypes) {
+        debugImplementation(libs.play.services.ads)
+        debugImplementation(libs.androidx.fragment)
+    }
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
