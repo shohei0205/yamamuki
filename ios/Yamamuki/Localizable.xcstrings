@@ -716,6 +716,28 @@
         }
       }
     },
+    "dial_peak_data_download": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データをダウンロード"
+          }
+        }
+      }
+    },
+    "dial_peak_data_missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "山データがありません"
+          }
+        }
+      }
+    },
     "dial_permission_allow": {
       "extractionState": "manual",
       "localizations": {
@@ -756,17 +778,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "設定を開く"
-          }
-        }
-      }
-    },
-    "dial_status_fetch_hint": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@。設定からダウンロードできます"
           }
         }
       }
@@ -1361,7 +1372,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "「%1$@」の山データをダウンロードできます。\n%2$@\n今すぐダウンロードしますか？"
+            "value": "「%1$@」の山データをダウンロードできます。保存後は圏外でも利用できます。\n%2$@\n今すぐダウンロードしますか？"
           }
         }
       }
@@ -1384,50 +1395,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "山データのダウンロード"
-          }
-        }
-      }
-    },
-    "peak_data_prompt_fetch": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "取得する"
-          }
-        }
-      }
-    },
-    "peak_data_prompt_later": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "あとで"
-          }
-        }
-      }
-    },
-    "peak_data_prompt_message": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "山データをダウンロードします。保存後は圏外でも利用できます。\n\n今すぐダウンロードしますか？\nあとで設定画面からもダウンロードできます。"
-          }
-        }
-      }
-    },
-    "peak_data_prompt_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "山データをダウンロードします"
           }
         }
       }

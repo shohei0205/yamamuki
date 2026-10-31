@@ -113,7 +113,7 @@ open Yamamuki.xcodeproj
   xcodebuild test -project Yamamuki.xcodeproj -scheme Yamamuki \
     -destination 'id=<UDID>' -allowProvisioningUpdates DEVELOPMENT_TEAM=<Team ID>
   ```
-  - 初回起動の「山データを取得」には「あとで」で答え(テストのたびに通信しないため)、位置情報の許可には「使用中は許可」で答える。実機では端末に入っている山むきの設定をそのまま使う。
+  - 初回起動の山データのダウンロードの確認には「あとで」で答え(テストのたびにデータ本体を取らないため)、位置情報の許可には「使用中は許可」で答える。実機では端末に入っている山むきの設定をそのまま使う。
   - テストで撮った画面はテスト結果に残り、Xcode の Report ナビゲータで見られる。
   - テストが終わると、テストした端末で山むきを起動し直す（スキームのテスト後の処理）。
 - 広告(AdMob)は Release だけで出す。Debug で試すときは、ビルド設定 `ADS_ENABLED` を `YES` にする([docs/ads.md](docs/ads.md) を参照)。

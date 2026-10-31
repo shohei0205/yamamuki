@@ -62,11 +62,11 @@ final class MainScreenUITests: XCTestCase {
         XCTAssertTrue(waitForDisappearance(of: bar))
     }
 
-    /// 初回起動の確認に答える。山データの取得と位置情報の許可は 1 度答えると出なくなる。
-    /// 山データの取得には「あとで」で答え、テストのたびに通信しないようにする。
+    /// 初回起動の確認に答える。山データのダウンロードと位置情報の許可は 1 度答えると出なくなる。
+    /// ダウンロードの確認はアプリが manifest を取ってから出るので少し長めに待ち、「あとで」で答えてデータ本体は取らない。
     private func answerFirstLaunchPrompts() {
-        let peakData = app.alerts["山データをダウンロードします"]
-        if peakData.waitForExistence(timeout: 2) {
+        let peakData = app.alerts["山データのダウンロード"]
+        if peakData.waitForExistence(timeout: 5) {
             peakData.buttons["あとで"].tap()
         }
         let allow = app.buttons["許可する"]

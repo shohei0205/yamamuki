@@ -166,6 +166,13 @@ val DialUiState.peakDataRefreshNeeded: Boolean
 val DialUiState.peakDataUpdateLabelShown: Boolean
     get() = settings.autoCheckPeakData && peakDataUpdateFound && !peakDataUpdating && !peakDataRefreshNeeded
 
+/**
+ * 設定で選んだ種類の山データを、まだ取り込んでいない。方位盤に知らせて、ダウンロードのボタンを出す。
+ * 初回のダウンロードの確認に答える前と、取得中・確認中は出さない。
+ */
+val DialUiState.peakDataMissing: Boolean
+    get() = settings.peakDataAsked && peakData == null && !peakDataUpdating && peakDataOffer == null
+
 /** 現在地と表示範囲に応じて保存済みの山データを読み、方位盤に出す山の一覧を保つ。全国の山データの取得も受け持つ。 */
 class DialViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as YamamukiApp
@@ -225,6 +232,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         }
         refreshPeakGroups()
         rebuildPeakData()
+        if (!_state.value.settings.peakDataAsked) checkPeakDataOnFirstLaunch()
     }
 
     /**
@@ -836,6 +844,24 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         peakDataOffer = null
         _state.update { it.copy(peakDataOffer = null, peakDataOfferFirst = null) }
         if (download) installPeakData(offer)
+        finishFirstLaunch()
+    }
+
+    /**
+     * 初回起動では、利用者に聞く前に山データの manifest を取り、作った日と大きさを見せてダウンロードするかを聞く
+     * ([answerPeakDataOffer])。manifest は小さく、配布版では広告でも通信するので、取る前には聞かない。
+     */
+    private fun checkPeakDataOnFirstLaunch() {
+        updatePeakData()
+    }
+
+    /**
+     * 初回のダウンロードの確認を済ませたことにする。画面はこれを見て位置情報の許可を求める。確認に答えたときのほか、
+     * 圏外や通信の失敗で確認を出せなかったときも呼ぶ(そのときは方位盤のボタンから取得できる)。
+     */
+    private fun finishFirstLaunch() {
+        if (_state.value.settings.peakDataAsked) return
+        updateSettings { it.copy(peakDataAsked = true) }
     }
 
     /**
@@ -868,6 +894,7 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
         if (_state.value.peakDataUpdating) return
         if (!_state.value.connected) {
             _state.update { it.copy(fetchErrorMessage = offlineNotice(peaks.isNotEmpty()), peakDataNotice = null) }
+            finishFirstLaunch()
             return
         }
         // 自動の確認が古い記録を保存して、これから取り込む版の記録を上書きしないよう取り消す。
@@ -884,14 +911,10 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(fetchErrorMessage = errorNotice(e, peaks.isNotEmpty())) }
             } finally {
                 _state.update { it.copy(peakDataUpdating = false) }
+                // 初回の確認を出せないまま終わったとき(失敗したときなど)は、待たせずに位置情報の許可へ進む。
+                if (peakDataOffer == null) finishFirstLaunch()
             }
         }
-    }
-
-    /** 初回起動時の「山データを取得しますか」への答え。いいえなら、あとで設定画面から取得できる。 */
-    fun answerPeakDataPrompt(allow: Boolean) {
-        updateSettings { it.copy(peakDataAsked = true) }
-        if (allow) updatePeakData()
     }
 
     /** [p] から見た山の一覧と、山頂にいるならその山を入れた状態。 */

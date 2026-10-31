@@ -95,7 +95,13 @@ struct DialView: View {
                         StatusLine(message: statusMessage)
                         // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
                         // どちらも設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
-                        if model.peakDataRefreshNeeded {
+                        if model.peakDataMissing {
+                            // 初回のダウンロードを「あとで」にしたときに、設定画面を探さなくても取得できるようにする。
+                            StatusLine(message: Strings.text("dial_peak_data_missing"))
+                            PeakDataLabel(text: Strings.text("dial_peak_data_download"), identifier: "peakDataDownloadLabel") {
+                                model.updatePeakData()
+                            }
+                        } else if model.peakDataRefreshNeeded {
                             PeakDataLabel(text: Strings.text("peak_data_refresh_needed"), identifier: "peakDataRefreshLabel") {
                                 model.updatePeakData()
                             }
@@ -214,12 +220,6 @@ struct DialView: View {
         // @Published は購読した時点の値も流すので、起動時の設定もここで反映される。
         .onReceive(model.$settings.map(\.keepScreenOn).removeDuplicates()) { on in
             UIApplication.shared.isIdleTimerDisabled = on
-        }
-        .alert(Strings.text("peak_data_prompt_title"), isPresented: .constant(!model.settings.peakDataAsked)) {
-            Button(Strings.text("peak_data_prompt_later")) { model.answerPeakDataPrompt(allow: false) }
-            Button(Strings.text("peak_data_prompt_fetch")) { model.answerPeakDataPrompt(allow: true) }
-        } message: {
-            Text(Strings.text("peak_data_prompt_message"))
         }
         // シートを開いている間は、ダウンロードの確認と通信の失敗の知らせをシートの中身からだけ出す。下の画面からも
         // 出そうとすると、シートの上に出た知らせとぶつかり、知らせがシートごと閉じてしまう。
@@ -346,7 +346,8 @@ struct DialView: View {
         if model.loading { return Strings.text("dial_status_loading") }
         // 取得半径(表示範囲より広い)の中に未取得の区画があると incomplete になる。欠けているのはたいてい取得半径の外縁なので、周辺に保存済みの山があれば「周辺の一部」と言う。
         let missing = Strings.text(model.mountains.isEmpty && model.summit == nil ? "dial_status_no_data_here" : "dial_status_partial_data")
-        if model.incomplete { return model.peakData == nil ? Strings.format("dial_status_fetch_hint", missing) : missing }
+        // 山データを取り込んでいないときは、下のダウンロードのボタンと一緒に知らせるので、ここでは出さない。
+        if model.incomplete { return model.peakDataMissing ? nil : missing }
         return nil
     }
 }

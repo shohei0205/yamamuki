@@ -136,6 +136,12 @@ final class DialModel: ObservableObject {
         settings.autoCheckPeakData && peakDataUpdateFound && !peakDataUpdating && !peakDataRefreshNeeded
     }
 
+    /// 設定で選んだ種類の山データを、まだ取り込んでいない。方位盤に知らせて、ダウンロードのボタンを出す。
+    /// 初回のダウンロードの確認に答える前と、取得中・確認中は出さない。
+    var peakDataMissing: Bool {
+        settings.peakDataAsked && peakData == nil && !peakDataUpdating && peakDataOffer == nil
+    }
+
     /// 種類ごとの、保存している山データ。
     private let caches: [PeakDataset: FileMountainCache]
     private let repositories: [PeakDataset: MountainRepository]
@@ -235,9 +241,11 @@ final class DialModel: ObservableObject {
         refreshPeakGroups()
     }
 
-    /// 画面が前面に出たとき。初回は「山データを取得しますか」に答えてから位置情報の許可を求める(ダイアログを重ねない)。
+    /// 画面が前面に出たとき。初回は山データをダウンロードするかに答えてから位置情報の許可を求める(ダイアログを重ねない)。
     func start() {
-        if settings.peakDataAsked && authorization == .notDetermined {
+        if !settings.peakDataAsked {
+            checkPeakDataOnFirstLaunch()
+        } else if authorization == .notDetermined {
             locationService.requestAuthorization()
         }
         locationService.start()
@@ -871,6 +879,22 @@ final class DialModel: ObservableObject {
         peakDataOffer = nil
         peakDataOfferFirst = nil
         if download { installPeakData(offer, dataset: peakDataOfferDataset) }
+        finishFirstLaunch()
+    }
+
+    /// 初回起動では、利用者に聞く前に山データの manifest を取り、作った日と大きさを見せてダウンロードするかを聞く
+    /// (`answerPeakDataOffer`)。manifest は小さく、配布版では広告でも通信するので、取る前には聞かない。
+    private func checkPeakDataOnFirstLaunch() {
+        guard !peakDataUpdating, peakDataOffer == nil else { return }
+        updatePeakData()
+    }
+
+    /// 初回のダウンロードの確認を済ませたことにして、位置情報の許可を求める。確認に答えたときのほか、圏外や通信の失敗で
+    /// 確認を出せなかったときも呼ぶ(そのときは方位盤のボタンから取得できる)。
+    private func finishFirstLaunch() {
+        guard !settings.peakDataAsked else { return }
+        updateSettings { $0.peakDataAsked = true }
+        if authorization == .notDetermined { locationService.requestAuthorization() }
     }
 
     /// 確認した版のデータ本体を取得して取り込む。取り込めなければ、「もう一度取得」で取り直せるように残す。
@@ -902,6 +926,7 @@ final class DialModel: ObservableObject {
         guard isConnected else {
             fetchErrorMessage = Self.offlineNotice(hasCache: !peaks.isEmpty)
             peakDataNotice = nil
+            finishFirstLaunch()
             return
         }
         // 自動の確認が古い記録を保存して、これから取り込む版の記録を上書きしないよう取り消す。
@@ -910,7 +935,11 @@ final class DialModel: ObservableObject {
         peakDataNotice = nil
         Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { peakDataUpdating = false }
+            defer {
+                peakDataUpdating = false
+                // 初回の確認を出せないまま終わったとき(失敗したときなど)は、待たせずに位置情報の許可へ進む。
+                if peakDataOffer == nil { finishFirstLaunch() }
+            }
             do {
                 try await task()
             } catch {
@@ -918,13 +947,6 @@ final class DialModel: ObservableObject {
                 fetchErrorMessage = Self.errorNotice(for: error, hasCache: !peaks.isEmpty)
             }
         }
-    }
-
-    /// 初回起動時の「山データを取得しますか」への答え。いいえなら、あとで設定画面から取得できる。
-    func answerPeakDataPrompt(allow: Bool) {
-        updateSettings { $0.peakDataAsked = true }
-        if allow { updatePeakData() }
-        if authorization == .notDetermined { locationService.requestAuthorization() }
     }
 
     /// 通信エラーの知らせの文言。端末がつながっていないのか、サーバー側の問題かで案内を変える。
