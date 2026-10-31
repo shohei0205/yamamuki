@@ -61,6 +61,14 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
             if let last = manager.location { send(last) }
             manager.startUpdatingLocation()
         }
+        #if DEBUG
+        // シミュレータにはコンパスが無いので、ストア用のスクリーンショットを撮るときは起動時の引数で方位を固定する
+        // (例: xcrun simctl launch <端末> <アプリ ID> -fixedHeading 30)。開発版だけで効く。
+        if let fixed = UserDefaults.standard.string(forKey: "fixedHeading").flatMap(Double.init) {
+            onHeading?(fixed)
+            return
+        }
+        #endif
         if CLLocationManager.headingAvailable() { manager.startUpdatingHeading() }
     }
 
