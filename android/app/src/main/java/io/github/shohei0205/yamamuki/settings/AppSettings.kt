@@ -3,9 +3,13 @@
 
 package io.github.shohei0205.yamamuki.settings
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import androidx.annotation.StringRes
+import androidx.core.content.ContextCompat
 import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.data.PeakDataStore
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.PeakDataset
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +35,7 @@ data class Settings(
     /**
      * 初回起動時の山データのダウンロードの確認を済ませた(答えたか、圏外などで出せなかった)。済ませるまでは
      * 位置情報の許可を求めない(ダイアログを重ねない)。
+     * ほかの設定と違い、自動バックアップに入れない([AppSettings])。入れ直したときは山データも戻らないので、もう一度聞く。
      */
     val peakDataAsked: Boolean = false,
     /** 方位盤に出す山のグループ(地点のタグ)。どれかを持つ山だけを出す。空なら絞り込まない。 */
@@ -69,9 +74,14 @@ enum class GridStyle(@StringRes val label: Int) {
     NONE(R.string.settings_grid_style_none),
 }
 
-/** [Settings] を端末内(SharedPreferences)に保存する。 */
-class AppSettings(context: Context) {
-    private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+/**
+ * [Settings] を端末内(SharedPreferences)に保存する。
+ * [Settings.peakDataAsked] だけは、自動バックアップに入れない first_launch に置く。settings と一緒に戻ると、入れ直したあと
+ * 山データが無いのに初回の確認を出さず、位置情報の許可だけを求めてしまうため(山データの記録はバックアップに入れていない)。
+ */
+class AppSettings(private val context: Context) {
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val firstLaunchPrefs = context.getSharedPreferences(FIRST_LAUNCH_PREFS_NAME, Context.MODE_PRIVATE)
 
     private val _settings = MutableStateFlow(load())
     val settings: StateFlow<Settings> = _settings.asStateFlow()
@@ -87,12 +97,29 @@ class AppSettings(context: Context) {
             .putString(KEY_GRID_STYLE, next.gridStyle.name)
             .putInt(KEY_INITIAL_RANGE, next.initialRangeKm)
             .putInt(KEY_SENSOR_PRECISION, next.sensorPrecision.ordinal)
-            .putBoolean(KEY_PEAK_DATA_ASKED, next.peakDataAsked)
             .putStringSet(KEY_PEAK_GROUPS, next.peakGroups)
             .putBoolean(KEY_AUTO_CHECK_PEAK_DATA, next.autoCheckPeakData)
             .putString(KEY_PEAK_DATASET, next.peakDataset.id)
             .apply()
+        firstLaunchPrefs.edit().putBoolean(KEY_PEAK_DATA_ASKED, next.peakDataAsked).apply()
     }
+
+    /**
+     * 0.10.0 までは settings に置いていた。first_launch にまだ無ければ、settings の値を移す。ただし、バックアップから戻った値と
+     * 見分けるため、バックアップから戻らないもの(取り込み済みの山データの記録か、位置情報の許可)があるときだけ引き継ぐ。
+     */
+    private fun loadPeakDataAsked(): Boolean {
+        if (firstLaunchPrefs.contains(KEY_PEAK_DATA_ASKED)) return firstLaunchPrefs.getBoolean(KEY_PEAK_DATA_ASKED, false)
+        val asked = prefs.getBoolean(KEY_PEAK_DATA_ASKED, false) && usedOnThisDevice()
+        firstLaunchPrefs.edit().putBoolean(KEY_PEAK_DATA_ASKED, asked).apply()
+        prefs.edit().remove(KEY_PEAK_DATA_ASKED).apply()
+        return asked
+    }
+
+    /** この端末で使っていた跡がある(山データを取り込んだか、位置情報の許可に答えて許した)。 */
+    private fun usedOnThisDevice(): Boolean =
+        PeakDataset.entries.any { PeakDataStore(context, it).load() != null } ||
+            LOCATION_PERMISSIONS.any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
 
     private fun load(): Settings {
         val d = Settings()
@@ -106,7 +133,7 @@ class AppSettings(context: Context) {
             initialRangeKm = prefs.getInt(KEY_INITIAL_RANGE, d.initialRangeKm),
             sensorPrecision = SensorPrecision.entries.getOrNull(prefs.getInt(KEY_SENSOR_PRECISION, -1))
                 ?: d.sensorPrecision,
-            peakDataAsked = prefs.getBoolean(KEY_PEAK_DATA_ASKED, d.peakDataAsked),
+            peakDataAsked = loadPeakDataAsked(),
             // getStringSet が返す集合は書き換えてはいけないので写す。
             peakGroups = prefs.getStringSet(KEY_PEAK_GROUPS, null)?.toSet() ?: d.peakGroups,
             autoCheckPeakData = prefs.getBoolean(KEY_AUTO_CHECK_PEAK_DATA, d.autoCheckPeakData),
@@ -115,17 +142,22 @@ class AppSettings(context: Context) {
         )
     }
 
-    private companion object {
-        const val KEY_MIN_ELEVATION = "min_elevation_m"
-        const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
-        const val KEY_MAX_PEAKS = "max_peaks"
-        const val KEY_TEXT_SCALE = "text_scale"
-        const val KEY_GRID_STYLE = "grid_style"
-        const val KEY_INITIAL_RANGE = "initial_range_km"
-        const val KEY_SENSOR_PRECISION = "sensor_precision"
-        const val KEY_PEAK_DATA_ASKED = "peak_data_asked"
-        const val KEY_PEAK_GROUPS = "peak_groups"
-        const val KEY_AUTO_CHECK_PEAK_DATA = "auto_check_peak_data"
-        const val KEY_PEAK_DATASET = "peak_dataset"
+    companion object {
+        /** 自動バックアップに入れる設定。 */
+        const val PREFS_NAME = "settings"
+        /** 自動バックアップに入れない、初回起動の確認を済ませたかの記録。 */
+        const val FIRST_LAUNCH_PREFS_NAME = "first_launch"
+        private val LOCATION_PERMISSIONS = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        private const val KEY_MIN_ELEVATION = "min_elevation_m"
+        private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+        private const val KEY_MAX_PEAKS = "max_peaks"
+        private const val KEY_TEXT_SCALE = "text_scale"
+        private const val KEY_GRID_STYLE = "grid_style"
+        private const val KEY_INITIAL_RANGE = "initial_range_km"
+        private const val KEY_SENSOR_PRECISION = "sensor_precision"
+        private const val KEY_PEAK_DATA_ASKED = "peak_data_asked"
+        private const val KEY_PEAK_GROUPS = "peak_groups"
+        private const val KEY_AUTO_CHECK_PEAK_DATA = "auto_check_peak_data"
+        private const val KEY_PEAK_DATASET = "peak_dataset"
     }
 }
