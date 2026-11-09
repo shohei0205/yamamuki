@@ -2,6 +2,7 @@
 <!--
   Android 11 以前の自動バックアップの対象。設定は残し、山データのキャッシュとそれに対応する
   事前ダウンロード・取り込み済みの全国の山データの記録は外す(取り直せるうえ、古い版の DB が戻ると起動できなくなるため)。
+  初回起動の山データの確認を済ませたかの記録(first_launch)も外す(山データが戻らないので、入れ直したらもう一度聞く)。
   Android 11 以前は機種変更での移行にもこの規則が使われる。
 -->
 <full-backup-content>
@@ -12,4 +13,5 @@
     <exclude domain="sharedpref" path="saved_areas.xml" />
     <exclude domain="sharedpref" path="area_download_pending.xml" />
     <exclude domain="sharedpref" path="peak_data.xml" />
+    <exclude domain="sharedpref" path="first_launch.xml" />
 </full-backup-content>
