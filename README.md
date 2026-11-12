@@ -145,7 +145,7 @@ open Yamamuki.xcodeproj
 
 ソースコードは [MIT License](LICENSE) で公開する。著作権者の「The yamamuki Authors」は [AUTHORS.md](AUTHORS.md) に載せた開発者を指す。ソースコードの各ファイルの先頭には、著作権とライセンスを [SPDX](https://spdx.dev/) の形式（`SPDX-FileCopyrightText` と `SPDX-License-Identifier`）で書いている。
 
-アプリ名「山むき」とアプリアイコン（`android/app/src/main/res/drawable/ic_launcher_*.xml`、`ios/Yamamuki/Assets.xcassets/AppIcon.appiconset/`、`docs/images/app-icon.png`）は MIT License の対象外とする。コードを使って別のアプリを配布するときは、別の名前とアイコンを使う。利用者が公式のアプリと取り違えないようにするため。
+アプリ名「山むき」、アプリアイコン（`android/app/src/main/res/drawable/ic_launcher_*.xml`、`ios/Yamamuki/Assets.xcassets/AppIcon.appiconset/`、`docs/images/app-icon.png`、`store/screenshots/src/icon.png`）、ストアに出す画像（`store/screenshots/` にある画像。キャッチコピーを入れたスクリーンショット、フィーチャーグラフィックと、その素材の画面）は MIT License の対象外とする。コードを使って別のアプリを配布するときは、別の名前とアイコン、ストア用の画像を使う。利用者が公式のアプリと取り違えないようにするため。ストア用の画像を書き出す `store/screenshots/src/` の `panel.html` と `render.sh` は、ソースコードとして MIT License で公開する。
 
 アプリが表示する山データは、OpenStreetMap のもの（既定）と国土地理院のものから選ぶ。コードとは別に、OpenStreetMap のものは [ODbL](https://opendatacommons.org/licenses/odbl/)、国土地理院のものは [公共データ利用規約（PDL 1.0）](https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html) の条件で利用している。方位盤の右下には、使っている種類の短い表示（「© OpenStreetMap contributors」か「出典：国土地理院」）を出す。
 
