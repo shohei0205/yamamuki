@@ -10,7 +10,6 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -122,19 +121,13 @@ sealed interface ManifestResponse {
     data class Fetched(val body: String, val etag: String?) : ManifestResponse
 }
 
-/** 山データをどこから読むか。ビルドの種類と、開発用のビルドの取得先の設定で決まる。 */
+/** 山データをどこから読むか。ビルドの種類で決まる。 */
 enum class PeakDataChannel {
     /** 配布用のビルド: yamamuki のカタログ(catalog.json)の、その種類の stable が指す manifest。 */
     STABLE,
 
-    /** 開発用のビルドの既定: カタログの、その種類の dev が指す manifest。dev が無ければ stable。 */
+    /** 開発用のビルド: カタログの、その種類の dev が指す manifest。dev が無ければ stable。 */
     DEV,
-
-    /**
-     * 開発用のビルドで取得先を dev にしたとき: osm-peaks は yamamuki-data の dev が公開する最新の manifest を直接。
-     * ほかの種類は直接読む置き場所が無いので、[DEV] と同じくカタログの dev を読む。
-     */
-    DATA_DEV,
 }
 
 /** カタログ(catalog.json)に書いた、読む manifest の場所と SHA-256。 */
@@ -154,7 +147,7 @@ object PeakData {
      * データの種類(datasets の osm-peaks・gsi-peaks)ごとに、stable(配布用)と dev(開発用、省略可能)の
      * manifest の URL と SHA-256 が書いてある。このアプリが読むのは [PeakDataset] の種類だけ。
      * 書き換えは「山データの差し替え PR を作る」ワークフローの PR で行う。
-     * 0.7.0 までは site/data/osm-peaks/current.json を読んでいた(0.9.0 で廃止する予定)。
+     * 0.7.0 までは site/data/osm-peaks/current.json を読んでいた(2026-11 に廃止し、版 999 だけのファイルにした)。
      */
     const val CATALOG_URL = "https://shohei0205.github.io/yamamuki/data/catalog.json"
 
@@ -164,14 +157,6 @@ object PeakData {
     /** 読めるカタログの形式の版。 */
     const val CATALOG_SCHEMA_VERSION = 1
 
-    /**
-     * osm-peaks の開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先を dev にしたときに直接読む
-     * ([PeakDataChannel.DATA_DEV])。開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
-     * yamamuki-data の dev が公開する置き場所(points/osm-peaks-dev/)。manifest の版は、yamamuki-data の dev に合わせて変わる
-     * (2026-10-18 から版 6)。
-     */
-    const val DEV_MANIFEST_URL = "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json"
-
     /** [channel] から [dataset] の山データを読む取得元。 */
     fun source(
         channel: PeakDataChannel,
@@ -180,13 +165,9 @@ object PeakData {
         userAgent: String,
         catalogCache: PeakCatalogCache? = null,
     ): PeakDataSource =
-        when {
-            channel == PeakDataChannel.STABLE ->
-                CatalogPeakDataSource(httpClient, dataset, useDev = false, userAgent = userAgent, catalogCache = catalogCache)
-            channel == PeakDataChannel.DATA_DEV && dataset == PeakDataset.OSM_PEAKS ->
-                HttpPeakDataSource(httpClient, DEV_MANIFEST_URL, userAgent = userAgent)
-            else -> CatalogPeakDataSource(httpClient, dataset, useDev = true, userAgent = userAgent, catalogCache = catalogCache)
-        }
+        CatalogPeakDataSource(
+            httpClient, dataset, useDev = channel == PeakDataChannel.DEV, userAgent = userAgent, catalogCache = catalogCache,
+        )
 
     /**
      * カタログを読み、[dataset] の読む manifest の場所を返す。[useDev] なら dev を、dev が無ければ stable を読む。
@@ -659,26 +640,6 @@ class PeakCatalogCache(
         /** 選択画面で種類ごとに確かめる間だけ使い回せればよいので、短くする。 */
         const val DEFAULT_MAX_AGE_MILLIS = 60_000L
     }
-}
-
-/** HTTP で manifest を直接読んで、配信データを取得する。 */
-class HttpPeakDataSource(
-    private val httpClient: HttpClient,
-    private val manifestUrl: String,
-    private val userAgent: String = "yamamuki-android",
-) : PeakDataSource {
-    override suspend fun fetchManifest(etag: String?): ManifestResponse {
-        val response = httpClient.get(manifestUrl) {
-            header(HttpHeaders.UserAgent, userAgent)
-            if (etag != null) header(HttpHeaders.IfNoneMatch, etag)
-        }
-        if (response.status == HttpStatusCode.NotModified) return ManifestResponse.NotModified
-        response.requireSuccess(manifestUrl)
-        return ManifestResponse.Fetched(response.bodyAsText(), response.headers[HttpHeaders.ETag])
-    }
-
-    override suspend fun fetchData(url: String): ByteArray =
-        httpClient.get(url) { header(HttpHeaders.UserAgent, userAgent) }.requireSuccess(url).readRawBytes()
 }
 
 /** 成功(2xx)の応答ならそのまま返す。それ以外は、[url] のファイル名を添えて [PeakDataException] にする。 */

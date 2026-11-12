@@ -2,18 +2,19 @@
 # SPDX-FileCopyrightText: 2026 The yamamuki Authors
 # SPDX-License-Identifier: MIT
 
-"""山データのカタログ（site/data/catalog.json）と参照先ファイル（site/data/osm-peaks/current.json）を差し替え・確認する。
+"""山データのカタログ（site/data/catalog.json）を差し替え・確認する。
 
 アプリ（0.8.0 から）は yamamuki の Pages の catalog.json を読み、そこに書いた osm-peaks の manifest のコピー
 （site/data/osm-peaks/manifests/<タグ>.json）をたどって、yamamuki-data の Release のデータ本体を取る。
 カタログには、アプリがまだ読まないデータ（gsi-peaks）の manifest も、あとで読めるように入れておく。
-current.json は 0.6.0・0.7.0 が読む参照先ファイルで、0.8.0 の間は osm-peaks の stable と同じ manifest を指す。
+site/data/osm-peaks/current.json は 0.6.0・0.7.0 が読んでいた参照先ファイル。2026-11 に廃止し、
+{"schemaVersion": 999} だけにした（0.6.0・0.7.0 は「アプリを更新してください」と出す）。もう書き換えない。
 
 サブコマンド:
   swap         yamamuki-data の Release の manifest をコピーし、カタログの stable か dev を向け直す
                （差し替えの PR を作るワークフローから使う）
-  check        PR の内容を確かめる（カタログと参照先ファイルの形、コピーが元と同じか、追加だけか、件数の減り方）
-  verify-live  公開中のカタログ・参照先ファイル・manifest が git の内容と同じかを確かめる（Pages の公開のあと）
+  check        PR の内容を確かめる（カタログの形、廃止した参照先ファイルのまま、コピーが元と同じか、追加だけか、件数の減り方）
+  verify-live  公開中のカタログ・廃止した参照先ファイル・manifest が git の内容と同じかを確かめる（Pages の公開のあと）
   watch        公開中のカタログからたどれる manifest とデータ本体が取れて中身が合うかを確かめる（毎日の見張り）
 
 標準ライブラリだけで動く。yamamuki-data は公開リポジトリなので、読むのに特別な権限は要らない
@@ -45,7 +46,8 @@ PAGES_DATA_BASE = "https://shohei0205.github.io/yamamuki/data/"
 DOWNLOAD_PREFIX = f"https://github.com/{DATA_REPO}/releases/download/"
 
 CATALOG_SCHEMA_VERSION = 1
-POINTER_SCHEMA_VERSION = 1
+# 0.6.0・0.7.0 が読んでいた参照先ファイル（current.json）を廃止したあとの中身。どのアプリも読めない版にしてある。
+RETIRED_POINTER = {"schemaVersion": 999}
 CHANNELS = ("stable", "dev")
 
 # カタログに入れるデータの種類。アプリの設定「山データ」で選ぶ(0.8.0 から)。osm-peaks は既定の種類で、stable は必ず置く。
@@ -56,8 +58,9 @@ DATASET_LABELS = {"osm-peaks": "山データ", "gsi-peaks": "国土地理院の�
 
 # 配布用（stable）の osm-peaks に書いてよい manifest の形式。配布中のアプリが読める版だけにする。
 # 新しい形式は dev で試し、読めるアプリが行き渡ってから、ここに足して stable に使う。
-STABLE_SCHEMA_VERSIONS = {5}
-STABLE_DATA_SCHEMA_VERSIONS = {5}
+# 版 6 は 0.8.0 から読める。版 5 しか読めない 0.6.0・0.7.0 のサポートは 2026-11 に終えた（#174・#206）。
+STABLE_SCHEMA_VERSIONS = {5, 6}
+STABLE_DATA_SCHEMA_VERSIONS = {5, 6}
 
 # manifest 版 6 から入った、形式の名前（schemaFormat・dataSchemaFormat）。
 MANIFEST_SCHEMA_FORMAT = "yamamuki-manifest"
@@ -202,18 +205,10 @@ def validate_catalog(catalog):
     return tags
 
 
-def validate_pointer(pointer):
-    """参照先ファイル（0.6.0・0.7.0 が読む）の形を確かめ、stable のタグを返す。dev はもう書かない。"""
-    if not isinstance(pointer, dict):
-        raise PeakDataError("current.json がオブジェクトではありません")
-    if pointer.get("schemaVersion") != POINTER_SCHEMA_VERSION:
-        raise PeakDataError(f"current.json の schemaVersion は {POINTER_SCHEMA_VERSION} にしてください")
-    unknown = set(pointer) - {"schemaVersion", "stable"}
-    if unknown:
-        raise PeakDataError(f"current.json に知らない項目があります（dev はカタログに書きます）: {', '.join(sorted(unknown))}")
-    if "stable" not in pointer:
-        raise PeakDataError("current.json に stable がありません")
-    return validate_entry(pointer["stable"], POINTER_DATASET, "stable", "current.json")
+def validate_retired_pointer(pointer):
+    """参照先ファイル（0.6.0・0.7.0 が読んでいた current.json）が、廃止したときの中身のままかを確かめる。"""
+    if pointer != RETIRED_POINTER:
+        raise PeakDataError(f"current.json は廃止したので {json.dumps(RETIRED_POINTER)} のままにしてください")
 
 
 def validate_manifest(data, tag, channel):
@@ -342,13 +337,9 @@ def write_catalog(root, catalog):
 
 
 def read_pointer(root):
-    """参照先ファイルを読む。0.9.0 で無くす予定なので、無ければ None。"""
+    """廃止した参照先ファイルを読む。無ければ None。"""
     path = pointer_path(root)
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-
-
-def write_pointer(root, pointer):
-    write_json(pointer_path(root), {"schemaVersion": pointer["schemaVersion"], "stable": pointer["stable"]})
 
 
 def entry_for(tag, data):
@@ -364,12 +355,15 @@ def local_manifest(root, tag):
 
 # ---- swap ----------------------------------------------------------------
 
-def latest_tag(dataset, target):
-    """dataset の、target が stable ならいちばん新しい正式版、dev ならいちばん新しい開発版のタグ。"""
-    candidates = [r for r in releases() if not r.get("draft") and parse_tag(r.get("tag_name", "")) == (dataset, target)
-                  and bool(r.get("prerelease")) == (target == "dev")]
+def latest_tag(dataset):
+    """dataset のいちばん新しい正式版（Pre-release ではない Release）のタグ。
+
+    dev には使わない。試用版（Pre-release）は採用しなかったものも区別なく残るので、新しい順に選ぶと
+    不採用の版を選ぶおそれがあるため。"""
+    candidates = [r for r in releases() if not r.get("draft") and parse_tag(r.get("tag_name", "")) == (dataset, "stable")
+                  and not r.get("prerelease")]
     if not candidates:
-        raise PeakDataError(f"yamamuki-data に {dataset} の{'正式版' if target == 'stable' else '開発版'}の Release がありません")
+        raise PeakDataError(f"yamamuki-data に {dataset} の正式版の Release がありません")
     return max(candidates, key=lambda r: r.get("published_at") or r.get("created_at") or "")["tag_name"]
 
 
@@ -383,7 +377,7 @@ def describe(root, tag):
 
 def swap(root, dataset, target, tag, remove_dev):
     """カタログを書き換える。変わったかどうかと、PR に使う件名・本文・ブランチ名を返す。
-    osm-peaks の stable を変えたときは、参照先ファイル（current.json）の stable も同じ manifest にする。"""
+    dev ではタグの指定を必須にする（試用版は Pre-release のまま区別なく残り、最新が使う版とは限らないため）。"""
     if dataset not in DATASETS:
         raise PeakDataError(f"知らないデータの種類です: {dataset}")
     catalog = read_catalog(root)
@@ -410,7 +404,10 @@ def swap(root, dataset, target, tag, remove_dev):
             "body": [first, f"- 外す前の `dev`: {describe(root, before['dev'])}"],
         }
 
-    tag = tag or latest_tag(dataset, target)
+    if not tag and target == "dev":
+        raise PeakDataError("dev に向けるときは、試す Release のタグ（試用版の "
+                            f"{dataset}-<版>）を指定してください")
+    tag = tag or latest_tag(dataset)
     parsed = parse_tag(tag)
     if parsed is None or parsed[0] != dataset:
         raise PeakDataError(f"{dataset} の Release のタグの形ではありません: {tag}")
@@ -427,8 +424,7 @@ def swap(root, dataset, target, tag, remove_dev):
         raise PeakDataError(f"{path.relative_to(root)} はもうあり、Release の manifest.json と中身が違います。"
                             "一度置いたファイルは書き換えません。")
     entry = entry_for(tag, data)
-    pointer = read_pointer(root) if dataset == APP_DATASET and target == "stable" else None
-    changed = channels.get(target) != entry or (pointer is not None and pointer.get("stable") != entry)
+    changed = channels.get(target) != entry
     if target == "stable" and remove_dev and "dev" in channels:
         del channels["dev"]
         changed = True
@@ -439,10 +435,6 @@ def swap(root, dataset, target, tag, remove_dev):
     path.write_bytes(data)
     channels[target] = entry
     write_catalog(root, catalog)
-    if pointer is not None:
-        validate_pointer(pointer)
-        pointer["stable"] = entry
-        write_pointer(root, pointer)
 
     old_tag = before.get(target)
     old_count = point_count(json.loads(local_manifest(root, old_tag))) if old_tag else None
@@ -451,8 +443,6 @@ def swap(root, dataset, target, tag, remove_dev):
     if dataset == APP_DATASET and target == "stable":
         title = f"feat: 配布用の山データを {tag} に差し替える"
         lines.append(f"- 配布用のビルドが読む山データ（`stable`）を {since}`{tag}`（{new_count:,} 件）に差し替える。")
-        if pointer is not None:
-            lines.append("- 0.6.0・0.7.0 が読む参照先ファイル（`current.json`）の `stable` も同じ manifest にする。")
     elif dataset == APP_DATASET:
         title = f"feat: 開発用の山データ（dev）を {tag} に向ける"
         lines.append(f"- 開発用のビルドが読む山データ（`dev`）を {since}`{tag}`（{new_count:,} 件）に向ける。"
@@ -540,9 +530,7 @@ def check(root, base, allow_count_drop):
 
     pointer = read_pointer(root)
     if pointer is not None:
-        attempt(validate_pointer, pointer)
-        if pointer.get("stable") != catalog["datasets"][APP_DATASET]["stable"]:
-            problems.append(f"current.json の stable が catalog.json の {APP_DATASET} の stable と違います")
+        attempt(validate_retired_pointer, pointer)
 
     added, others = manifest_changes(git("diff", "--name-status", f"{base}...HEAD", "--", SITE_DATA_DIR.as_posix()))
     for change in others:
@@ -575,20 +563,20 @@ def check(root, base, allow_count_drop):
         for problem in problems:
             print(f"::error::{problem}")
         raise PeakDataError(f"{len(problems)} 件の問題があります")
-    print("山データのカタログと参照先ファイルはルールどおりです。")
+    print("山データのカタログと manifest のコピーはルールどおりです。")
 
 
 # ---- verify-live / watch -------------------------------------------------
 
 def verify_live(root, attempts, interval):
-    """公開中のカタログ・参照先ファイルと、それらが指す manifest が git の内容と同じになるまで、何度か取り直す。"""
+    """公開中のカタログ・廃止した参照先ファイルと、カタログが指す manifest が git の内容と同じになるまで、何度か取り直す。"""
     catalog_bytes = catalog_path(root).read_bytes()
     expected = {f"{PAGES_DATA_BASE}{CATALOG_NAME}": catalog_bytes}
     tags = [tag for channels in validate_catalog(json.loads(catalog_bytes)).values() for tag in channels.values()]
     pointer = read_pointer(root)
     if pointer is not None:
+        validate_retired_pointer(pointer)
         expected[f"{PAGES_DATA_BASE}{POINTER_DATASET}/{POINTER_NAME}"] = pointer_path(root).read_bytes()
-        tags.append(validate_pointer(pointer))
     for tag in tags:
         expected[f"{manifest_url_prefix(parse_tag(tag)[0])}{tag}.json"] = local_manifest(root, tag)
     mismatched = []
@@ -614,7 +602,7 @@ def verify_live(root, attempts, interval):
 
 def watch():
     """公開中のカタログから、manifest とデータ本体までたどれるかを確かめる。
-    アプリがまだ読まないデータは manifest まで。参照先ファイルは、カタログの osm-peaks の stable と同じかを見る。"""
+    アプリがまだ読まないデータは manifest まで。廃止した参照先ファイルは、廃止したときの中身のままかを見る。"""
     problems = []
     now = int(time.time())
     catalog = json.loads(http_get(f"{PAGES_DATA_BASE}{CATALOG_NAME}?t={now}"))
@@ -636,10 +624,8 @@ def watch():
                 problems.append(f"{dataset} の {channel}: {e}")
     try:
         pointer = json.loads(http_get(f"{PAGES_DATA_BASE}{POINTER_DATASET}/{POINTER_NAME}?t={now}"))
-        validate_pointer(pointer)
-        if pointer["stable"] != catalog["datasets"][APP_DATASET]["stable"]:
-            raise PeakDataError(f"stable が catalog.json の {APP_DATASET} の stable と違います")
-        print("確認: current.json の stable は、カタログの osm-peaks の stable と同じです。")
+        validate_retired_pointer(pointer)
+        print("確認: current.json は廃止したときの中身のままです（0.6.0・0.7.0 には更新を促す）。")
     except PeakDataError as e:
         problems.append(f"current.json: {e}")
     if problems:

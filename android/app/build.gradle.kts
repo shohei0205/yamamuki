@@ -42,13 +42,6 @@ android {
         .takeIf { it.exists() }
     val signingProps = signingPropsFile?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 
-    // 開発版が読む山データの取得先。既定(current)は、yamamuki のカタログ(catalog.json)の osm-peaks の dev が指す manifest
-    // (dev が無ければ配布版と同じ stable)。yamamuki-data の dev が公開する最新の開発版(points/osm-peaks-dev/)を直接試すときは、
-    // Gradle のプロパティ peakDataSource=dev を付ける
-    // (例: ./gradlew :app:installDebug -PpeakDataSource=dev。~/.gradle/gradle.properties に書いてもよい)。
-    val peakDataSource = providers.gradleProperty("peakDataSource").getOrElse("current")
-    require(peakDataSource in setOf("current", "dev")) { "peakDataSource は current か dev を指定してください: $peakDataSource" }
-
     // AdMob のアプリ ID と広告ユニット ID。本番の ID はリポジトリに入れず、~/.gradle/gradle.properties の admobAppId と admobBannerId に書く。
     // 無ければ Google のテスト用 ID を使う(「Test Ad」と書かれたテスト広告が出る)。
     val admobAppId = providers.gradleProperty("admobAppId").getOrElse("ca-app-pub-3940256099942544~3347511713")
@@ -87,7 +80,7 @@ android {
     }
 
     buildTypes {
-        // 山データは、配布版はカタログの osm-peaks の stable、開発版は peakDataSource で選んだほうを読む(YamamukiApp.peakDataChannel)。
+        // 山データは、配布版はカタログの stable、開発版はカタログの dev(無ければ stable)を読む(YamamukiApp.peakDataChannel)。
         // R8 で使わないコードとリソースを削って小さくする。難読化の対応表(build/outputs/mapping/release/mapping.txt)は
         // AAB に入るので、Play Console のクラッシュの記録も元の名前で読める。
         release {
@@ -95,13 +88,11 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
-            buildConfigField("boolean", "PEAK_DATA_DEV", "false")
         }
         // 配布版と同じ端末に入れられるよう、開発版は別のアプリにする(名前は src/debug の strings.xml)。
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            buildConfigField("boolean", "PEAK_DATA_DEV", (peakDataSource == "dev").toString())
         }
     }
 

@@ -2,7 +2,7 @@ name: 山データの差し替え PR を作る
 
 # 山データのカタログ（site/data/catalog.json）の、選んだデータの stable か dev を、
 # yamamuki-data の Release の manifest に差し替える PR を作る。人が必要なときに手動で動かす。
-# osm-peaks の stable を変えると、0.6.0・0.7.0 が読む参照先ファイル（site/data/osm-peaks/current.json）も同じ manifest にする。
+# 0.6.0・0.7.0 が読んでいた参照先ファイル（site/data/osm-peaks/current.json）は 2026-11 に廃止したので書き換えない。
 # PR は GitHub App のトークンで作る（GITHUB_TOKEN で作った PR では CI が動かないため）。
 # App の鍵は main だけが使える環境 data-swap に置いてある。
 on:
@@ -24,7 +24,7 @@ on:
           - "remove-dev: 開発用アプリも配布用と同じ山データに戻す（gsi-peaks では dev を外す）"
         default: "dev: 開発用アプリで試す山データを選ぶ"
       tag:
-        description: 差し替える Release のタグ（空欄なら最新。remove-dev 操作では使いません）
+        description: 差し替える Release のタグ（dev 操作では必須。stable 操作は空欄なら最新の正式版。remove-dev 操作では使いません）
         type: string
         default: ""
       remove_dev:
