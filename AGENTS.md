@@ -20,6 +20,7 @@
 | `ios/project.yml` | XcodeGen の設定。`ios/Yamamuki.xcodeproj` はここから生成する |
 | `docs/` | アプリの詳しい仕様（画面・山データ・設定・キャッシュなど）と、開発中に分かったことの記録 |
 | `site/` | GitHub Pages で公開するページ（プライバシーポリシー、山データのカタログと参照先ファイル `data/`）。main に入ると `.github/workflows/pages.yml` で公開する |
+| `store/` | ストア（App Store・Google Play）に出すスクリーンショット。`store/screenshots/src/render.sh` で作り直す |
 
 ## 言葉づかい
 

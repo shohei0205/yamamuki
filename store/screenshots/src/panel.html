@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>山むき ストア用スクリーンショット</title>
+<style>
+  /* 幅 1320 を基準に組み、書き出す大きさに合わせて zoom で拡縮する */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overflow: hidden; background: #000; }
+  body { font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; }
+  #canvas {
+    position: relative; width: 1320px; overflow: hidden;
+    background: linear-gradient(180deg, var(--c1), var(--c2));
+    color: #fff;
+  }
+  .rings, .ridge { position: absolute; left: 0; width: 100%; pointer-events: none; }
+  .rings { top: 560px; height: 2200px; }
+  .ridge { bottom: 0; height: 620px; }
+
+  .copy { position: absolute; top: 150px; left: 0; width: 100%; text-align: center; }
+  h1 {
+    font-size: 116px; line-height: 1.24; font-weight: 800; letter-spacing: 0.01em;
+    text-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+    font-feature-settings: "palt";
+  }
+  h1 em { font-style: normal; color: var(--hi); }
+  .sub {
+    margin-top: 40px; font-size: 47px; line-height: 1.45; font-weight: 600;
+    opacity: 0.96; font-feature-settings: "palt";
+  }
+
+  .phone {
+    position: absolute; top: 700px; left: 50%; width: 930px; margin-left: -465px;
+    border: 20px solid #17181c; border-radius: 142px; background: #17181c;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25), 0 50px 110px rgba(0, 0, 0, 0.38);
+  }
+  .phone img { display: block; width: 100%; border-radius: 122px; }
+  .phone .island {
+    position: absolute; top: 26px; left: 50%; width: 252px; height: 74px;
+    margin-left: -126px; border-radius: 40px; background: #000;
+  }
+  .android .phone { border-radius: 96px; border-width: 18px; }
+  .android .phone img { border-radius: 78px; }
+  .phone .camera {
+    position: absolute; top: 30px; left: 50%; width: 30px; height: 30px;
+    margin-left: -15px; border-radius: 50%; background: #101014;
+  }
+
+  .badge {
+    position: absolute; z-index: 3; padding: 26px 44px; border-radius: 999px;
+    background: #fff; color: #2a2a33; font-size: 42px; font-weight: 800;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28); white-space: nowrap;
+    font-feature-settings: "palt";
+  }
+  .badge b { color: var(--accent); font-size: 1.22em; }
+
+  /* Google Play のフィーチャーグラフィック (1024x500) */
+  #canvas.feature { width: 2048px; height: 1000px; }
+  .feature .rings { top: -700px; left: 800px; width: 2200px; }
+  .feature .ridge { height: 420px; }
+  .feature .brand { position: absolute; left: 130px; top: 150px; display: flex; align-items: center; gap: 44px; }
+  .feature .brand img { width: 190px; border-radius: 44px; box-shadow: 0 16px 40px rgba(0,0,0,.25); }
+  .feature .brand span { font-size: 130px; font-weight: 800; letter-spacing: 0.04em; }
+  .feature h1 { position: absolute; left: 130px; top: 420px; font-size: 104px; text-align: left; }
+  .feature .sub { position: absolute; left: 134px; top: 720px; font-size: 46px; margin: 0; }
+  .feature .phone { top: 110px; left: 1330px; margin: 0; width: 600px; border-width: 14px; border-radius: 96px; transform: rotate(6deg); }
+  .feature .phone img { border-radius: 82px; }
+  .feature .phone { border-radius: 70px; }
+  .feature .phone img { border-radius: 56px; }
+</style>
+</head>
+<body>
+<div id="canvas"></div>
+<script>
+// 各画面のコピーと素材。raw/ios・raw/android の画像を差し替えて render.sh を動かせば作り直せる。
+const PANELS = {
+  1: {
+    c1: '#2c7fd3', c2: '#7cc0ee', hi: '#ffe66d', accent: '#e8590c',
+    h1: 'スマホを向けるだけ。<br><em>あの山の名前</em>がわかる',
+    sub: '向けた方角の山を、方位盤に山名つきで表示',
+    img: '01-heading.png',
+    badges: [
+      { html: '全国 <b>14,000</b> 山以上', style: 'left:36px; top:930px; transform:rotate(-5deg)' },
+      { html: '<b>圏外</b>でも使える', style: 'right:24px; top:1336px; transform:rotate(4deg)' },
+    ],
+  },
+  2: {
+    c1: '#ef7f1a', c2: '#f8b84e', hi: '#fff3b0', accent: '#e8590c',
+    h1: '気になる山をタップ。<br><em>標高と距離</em>をチェック',
+    sub: '山名・標高・緯度経度・現在地からの距離がわかる',
+    img: '02-detail.png',
+  },
+  3: {
+    c1: '#5b43b8', c2: '#9d84e6', hi: '#ffe66d', accent: '#5b43b8',
+    h1: 'あの<em>山頂</em>からは<br>どの山が見える？',
+    sub: '好きな山頂へ移動して、そこからの山並みを予習',
+    img: '03-summit.png',
+  },
+  4: {
+    c1: '#218a4c', c2: '#5cc37f', hi: '#ffe66d', accent: '#218a4c',
+    h1: '<em>日本百名山</em>だけに<br>絞り込める',
+    sub: '遠くの名峰も、ひと目で見つかる',
+    img: '07-hyaku.png',
+    badges: [
+      { html: '表示距離は <b>80km</b> まで', style: 'right:30px; top:2010px; transform:rotate(4deg)' },
+    ],
+  },
+  5: {
+    c1: '#17667f', c2: '#45adc4', hi: '#ffe66d', accent: '#17667f',
+    h1: '山名・よみがなで<br><em>すばやく検索</em>',
+    sub: '山データは端末に保存。電波の届かない山の中でも使える',
+    img: '04-search.png',
+  },
+};
+
+const q = new URLSearchParams(location.search);
+const mode = q.get('mode') || 'panel';      // panel | feature
+const store = q.get('store') || 'ios';      // ios | android
+const n = q.get('n') || '1';
+const W = Number(q.get('w') || 1320);
+const H = Number(q.get('h') || 2868);
+const p = PANELS[n];
+const canvas = document.getElementById('canvas');
+
+const rings = `<svg class="rings" viewBox="0 0 1320 2200" preserveAspectRatio="xMidYMin slice">
+  ${[380, 640, 900, 1160, 1420].map(r =>
+    `<circle cx="660" cy="1100" r="${r}" fill="none" stroke="#fff" stroke-opacity="0.16" stroke-width="5"/>`).join('')}
+</svg>`;
+const ridge = `<svg class="ridge" viewBox="0 0 1320 620" preserveAspectRatio="none">
+  <path d="M0 620V330L150 190l110 110L430 90l150 190 90-80 160 170 130-150 150 130 120-110 90 90V620Z" fill="#fff" fill-opacity="0.13"/>
+  <path d="M0 620V460l120-90 140 110 170-170 150 150 180-210 170 190 140-120 250 190V620Z" fill="#fff" fill-opacity="0.15"/>
+</svg>`;
+
+canvas.style.setProperty('--c1', p.c1);
+canvas.style.setProperty('--c2', p.c2);
+canvas.style.setProperty('--hi', p.hi);
+canvas.style.setProperty('--accent', p.accent);
+
+if (mode === 'feature') {
+  canvas.className = 'feature';
+  document.documentElement.style.zoom = W / 2048;
+  canvas.innerHTML = `${rings}${ridge}
+    <div class="brand"><img src="icon.png"><span>山むき</span></div>
+    <h1>スマホを向けるだけ。<br><em>あの山の名前</em>がわかる</h1>
+    <div class="sub">全国 14,000 山以上・圏外でも使える方位盤</div>
+    <div class="phone"><img src="raw/android/${p.img}"></div>`;
+} else {
+  const zoom = W / 1320;
+  document.documentElement.style.zoom = zoom;
+  canvas.style.height = (H / zoom) + 'px';
+  canvas.className = store;
+  canvas.innerHTML = `${rings}${ridge}
+    <div class="copy"><h1>${p.h1}</h1><div class="sub">${p.sub}</div></div>
+    <div class="phone"><img src="raw/${store}/${p.img}"><div class="${store === 'ios' ? 'island' : 'camera'}"></div></div>
+    ${(p.badges || []).map(b => `<div class="badge" style="${b.style}">${b.html}</div>`).join('')}`;
+}
+</script>
+</body>
+</html>
