@@ -45,7 +45,7 @@ public struct PeakManifest: Equatable, Sendable {
     public let sha256: String
     /// データ本体のバイト数。
     public let sizeBytes: Int
-    /// 収録した山の数。版 4 は mountainCount、版 5 は pointCount、版 6 は metadata.pointCount。
+    /// 収録した山の数。版 5 は pointCount、版 6 は metadata.pointCount。
     public let mountainCount: Int
     /// 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 6 は metadata.sources の latestTimestamp のうち
     /// 最も新しいもの。版 5 で省略されたときと、版 6 でどの出典にも latestTimestamp が無いときは空文字。
@@ -230,10 +230,11 @@ public enum PeakData {
         return name.dropLast(".json".count).allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }
     }
 
-    /// 読める manifest の形式の版。版 4 で downloadUrl が入った。版 5 で件数が pointCount になり、
+    /// 読める manifest の形式の版。版 5 で件数が pointCount になり、
     /// データ本体の版(dataSchemaVersion)が別に書かれるようになった。版 6 で件数と出典が metadata にまとまり、
     /// 形式の名前(schemaFormat・dataSchemaFormat)が入った。
-    public static let supportedSchemaVersions: Set<Int> = [4, 5, 6]
+    /// 版 4 は 0.5.0 まで配っていた形で、もう配っていない(yamamuki のカタログにも版 4 の manifest は無い)ので読まない。
+    public static let supportedSchemaVersions: Set<Int> = [5, 6]
 
     /// 読めるデータ本体の版(manifest 版 5 以降の dataSchemaVersion)。地点データ版 5 は、山ごとの項目(osmId・name・latitude・
     /// longitude・elevationM)が版 4 までと同じで、ID・種別・タグ・画像などの項目が増えただけなので、そのまま読める。
@@ -299,12 +300,10 @@ public enum PeakData {
         guard supportedSchemaVersions.contains(schemaVersion) else {
             throw PeakDataError("このアプリが読めない形式の山データです(形式の版 \(schemaVersion))。アプリを更新してください。")
         }
-        // 版 5 は、データ本体の版が分からなければ読めないものとして扱う(manifest の版から推測しない)。
-        if schemaVersion >= 5 {
-            let dataSchemaVersion = root["dataSchemaVersion"] == nil ? nil : try? int("dataSchemaVersion")
-            guard let dataSchemaVersion, supportedDataSchemaVersions.contains(dataSchemaVersion) else {
-                throw PeakDataError("このアプリが読めない形式の山データです(データの版 \(dataSchemaVersion.map(String.init) ?? "不明"))。アプリを更新してください。")
-            }
+        // データ本体の版が分からなければ読めないものとして扱う(manifest の版から推測しない)。
+        let dataSchemaVersion = root["dataSchemaVersion"] == nil ? nil : try? int("dataSchemaVersion")
+        guard let dataSchemaVersion, supportedDataSchemaVersions.contains(dataSchemaVersion) else {
+            throw PeakDataError("このアプリが読めない形式の山データです(データの版 \(dataSchemaVersion.map(String.init) ?? "不明"))。アプリを更新してください。")
         }
         // 版 6 は、形式の名前が違う(別の種類のデータの)manifest を読まない。
         if schemaVersion >= 6 {
@@ -315,20 +314,20 @@ public enum PeakData {
                 throw PeakDataError("manifest の dataSchemaFormat が \(dataSchemaFormat) ではありません")
             }
         }
-        // 版 5 以降は、データの種類をデータ本体のファイル名で確かめる。ほかの種類の manifest を取り違えて読むと、
+        // データの種類をデータ本体のファイル名で確かめる。ほかの種類の manifest を取り違えて読むと、
         // 地点の ID の形が違うので 0 件になったり、ほかの種類の山が混ざったりするため。
         // 版 5 までは osm-peaks しか無かったので、ほかの種類では読まない。
         if schemaVersion < 6, dataset != .osmPeaks {
             throw PeakDataError("\(dataset.id) の manifest の形式の版 \(schemaVersion) は読めません")
         }
-        if schemaVersion >= 5, root["fileName"] as? String != dataset.fileName {
+        if root["fileName"] as? String != dataset.fileName {
             throw PeakDataError("manifest の fileName が \(dataset.fileName) ではありません(\(root["fileName"].map { "\($0)" } ?? "なし"))")
         }
         let mountainCount: Int
         if schemaVersion >= 6 {
             mountainCount = try int("pointCount", in: root["metadata"] as? [String: Any] ?? [:], label: "metadata.pointCount")
         } else {
-            mountainCount = try int(schemaVersion == 5 ? "pointCount" : "mountainCount")
+            mountainCount = try int("pointCount")
         }
         let downloadText = try string("downloadUrl")
         guard downloadText.hasPrefix("https://"), let downloadUrl = URL(string: downloadText) else {
@@ -341,8 +340,7 @@ public enum PeakData {
             sha256: try string("sha256").lowercased(),
             sizeBytes: try int("sizeBytes"),
             mountainCount: mountainCount,
-            sourceTimestamp: schemaVersion >= 6 ? latestTimestamp(root)
-                : schemaVersion == 5 ? root["sourceTimestamp"] as? String ?? "" : try string("sourceTimestamp"),
+            sourceTimestamp: schemaVersion >= 6 ? latestTimestamp(root) : root["sourceTimestamp"] as? String ?? "",
             experimental: root["experimental"] as? Bool ?? false
         )
         guard (1...maxSizeBytes).contains(manifest.sizeBytes) else {

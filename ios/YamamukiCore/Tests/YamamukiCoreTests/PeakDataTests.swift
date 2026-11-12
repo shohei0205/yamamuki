@@ -67,46 +67,40 @@ final class PeakDataTests: XCTestCase {
     )!
     private let gzipSha256 = "32fd4afa156179dee321e90bebc045b99b4cca902bf8bbf43ce6fbd7cf2e4483"
 
-    private func manifest(version: String = "v1", sha256: String? = nil, size: Int? = nil, schemaVersion: Int = 4,
-                          downloadUrl: String = "https://example.com/japan-mountains.json.gz") -> Data {
-        Data("""
-        {"schemaVersion":\(schemaVersion),"version":"\(version)","downloadUrl":"\(downloadUrl)",
-         "fileName":"japan-mountains.json.gz","sha256":"\((sha256 ?? gzipSha256).uppercased())","sizeBytes":\(size ?? gzip.count),
-         "uncompressedSizeBytes":460,"mountainCount":2,"sourceTimestamp":"2026-09-30T20:21:22Z",
-         "latestMountainTimestamp":"2026-09-29T08:06:38Z","sourceUrl":"https://download.geofabrik.de/asia/japan-260929.osm.pbf",
+    /// yamamuki-data の README.md の manifest 版 5 と同じ形。件数は pointCount、データ本体の版は dataSchemaVersion。
+    private func manifest(version: String = "v1", schemaVersion: Int = 5, dataSchemaVersion: String = "5",
+                          sourceTimestamp: String? = "2026-09-30T20:21:22Z",
+                          downloadUrl: String = "https://example.com/osm-peaks.json.gz") -> Data {
+        let source = sourceTimestamp.map { #""sourceTimestamp":"\#($0)","# } ?? ""
+        return Data("""
+        {"schemaVersion":\(schemaVersion),"dataSchemaVersion":\(dataSchemaVersion),"name":"山頂","version":"\(version)",
+         "fileName":"osm-peaks.json.gz","downloadUrl":"\(downloadUrl)",
+         "sha256":"\(gzipSha256.uppercased())","sizeBytes":\(gzip.count),"uncompressedSizeBytes":460,"pointCount":2,\(source)
          "license":"ODbL-1.0","attribution":"© OpenStreetMap contributors"}
         """.utf8)
     }
 
-    func testParsesManifest() throws {
-        let m = try PeakData.parseManifest(manifest())
-        XCTAssertEqual(m.version, "v1")
-        XCTAssertEqual(m.downloadUrl.absoluteString, "https://example.com/japan-mountains.json.gz")
-        XCTAssertEqual(m.sha256, gzipSha256, "16進数は小文字にそろえる")
-        XCTAssertEqual(m.sizeBytes, gzip.count)
-        XCTAssertEqual(m.mountainCount, 2)
-        XCTAssertEqual(m.sourceTimestamp, "2026-09-30T20:21:22Z")
-    }
-
-    /// yamamuki-data の README.md の manifest 版 5 と同じ形。件数は pointCount、データ本体の版は dataSchemaVersion。
-    private func manifestV5(dataSchemaVersion: String = "5", sourceTimestamp: String? = "2026-09-30T20:21:22Z") -> Data {
-        let source = sourceTimestamp.map { #""sourceTimestamp":"\#($0)","# } ?? ""
-        return Data("""
-        {"schemaVersion":5,"dataSchemaVersion":\(dataSchemaVersion),"name":"山頂","version":"v1",
-         "fileName":"osm-peaks.json.gz","downloadUrl":"https://example.com/osm-peaks.json.gz",
-         "sha256":"\(gzipSha256)","sizeBytes":\(gzip.count),"uncompressedSizeBytes":460,"pointCount":2,\(source)
+    /// 版 4 の manifest(0.5.0 まで配っていた形)。件数は mountainCount で、データ本体の版は書かれていない。
+    private func manifestV4() -> Data {
+        Data("""
+        {"schemaVersion":4,"version":"v1","downloadUrl":"https://example.com/japan-mountains.json.gz",
+         "fileName":"japan-mountains.json.gz","sha256":"\(gzipSha256)","sizeBytes":\(gzip.count),
+         "uncompressedSizeBytes":460,"mountainCount":2,"sourceTimestamp":"2026-09-30T20:21:22Z",
          "license":"ODbL-1.0","attribution":"© OpenStreetMap contributors"}
         """.utf8)
     }
 
     func testParsesManifestV5() throws {
-        let m = try PeakData.parseManifest(manifestV5())
+        let m = try PeakData.parseManifest(manifest())
         XCTAssertEqual(m.schemaVersion, 5)
+        XCTAssertEqual(m.version, "v1")
         XCTAssertEqual(m.downloadUrl.absoluteString, "https://example.com/osm-peaks.json.gz")
+        XCTAssertEqual(m.sha256, gzipSha256, "16進数は小文字にそろえる")
+        XCTAssertEqual(m.sizeBytes, gzip.count)
         XCTAssertEqual(m.mountainCount, 2)
         XCTAssertEqual(m.sourceTimestamp, "2026-09-30T20:21:22Z")
         // 版 5 では元データの日時を省略できる。
-        XCTAssertEqual(try PeakData.parseManifest(manifestV5(sourceTimestamp: nil)).sourceTimestamp, "")
+        XCTAssertEqual(try PeakData.parseManifest(manifest(sourceTimestamp: nil)).sourceTimestamp, "")
     }
 
     /// yamamuki-data の formats/manifest.md の manifest 版 6 と同じ形。件数と出典は metadata にある。
@@ -159,9 +153,7 @@ final class PeakDataTests: XCTestCase {
             Data(String(decoding: data, as: UTF8.self).replacingOccurrences(of: target, with: replacement).utf8)
         }
         XCTAssertThrowsError(try PeakData.parseManifest(replacing(manifestV6(), #""fileName":"osm-peaks.json.gz""#, #""fileName":"gsi-peaks.json.gz""#)))
-        XCTAssertThrowsError(try PeakData.parseManifest(replacing(manifestV5(), #""fileName":"osm-peaks.json.gz","#, "")))
-        // 版 4 までは、ファイル名を見ない(japan-mountains.json.gz だった)。
-        XCTAssertEqual(try PeakData.parseManifest(manifest()).mountainCount, 2)
+        XCTAssertThrowsError(try PeakData.parseManifest(replacing(manifest(), #""fileName":"osm-peaks.json.gz","#, "")))
     }
 
     /// 国土地理院の山頂データ(gsi-peaks)の地点データ版 6 を、Python の gzip.compress(mtime=0) で圧縮したもの。
@@ -191,9 +183,8 @@ final class PeakDataTests: XCTestCase {
         // 種類とファイル名が食い違う manifest は読まない。
         XCTAssertThrowsError(try PeakData.parseManifest(body))
         XCTAssertThrowsError(try PeakData.parseManifest(manifestV6(), dataset: .gsiPeaks))
-        // 版 4・5 は osm-peaks しか無かったので、ほかの種類では読まない。
-        XCTAssertThrowsError(try PeakData.parseManifest(manifest(), dataset: .gsiPeaks))
-        let v5 = Data(String(decoding: manifestV5(), as: UTF8.self)
+        // 版 5 は osm-peaks しか無かったので、ほかの種類では読まない。
+        let v5 = Data(String(decoding: manifest(), as: UTF8.self)
             .replacingOccurrences(of: "osm-peaks.json.gz\",", with: "gsi-peaks.json.gz\",").utf8)
         XCTAssertThrowsError(try PeakData.parseManifest(v5, dataset: .gsiPeaks))
     }
@@ -212,14 +203,19 @@ final class PeakDataTests: XCTestCase {
             XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
         }
         XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 3)))
+        // 版 4 はもう読まない(配る道が無くなったため)。
+        XCTAssertThrowsError(try PeakData.parseManifest(manifestV4())) { error in
+            XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
+        }
+        XCTAssertThrowsError(try PeakData.parseManifest(manifest(schemaVersion: 4)))
     }
 
     func testRejectsUnknownDataSchemaVersion() {
-        XCTAssertThrowsError(try PeakData.parseManifest(manifestV5(dataSchemaVersion: "7"))) { error in
+        XCTAssertThrowsError(try PeakData.parseManifest(manifest(dataSchemaVersion: "7"))) { error in
             XCTAssertTrue((error as? PeakDataError)?.message.contains("アプリを更新") == true)
         }
         // データ本体の版が分からないときは、manifest の版から推測せずに断る。
-        XCTAssertThrowsError(try PeakData.parseManifest(manifestV5(dataSchemaVersion: "null")))
+        XCTAssertThrowsError(try PeakData.parseManifest(manifest(dataSchemaVersion: "null")))
     }
 
     func testParsesPointsV5() throws {
@@ -276,7 +272,7 @@ final class PeakDataTests: XCTestCase {
 
     func testReplacesV5DataWithV6Data() async throws {
         // 版 5 の山データを取り込んだ端末に、版 6 の山データが届いたときに入れ替わる。山は同じノード番号で引き継ぐ。
-        let source = FakeSource(manifest: manifestV5(), data: gzip)
+        let source = FakeSource(manifest: manifest(), data: gzip)
         let cache = MemoryCache()
         let updater = PeakDataUpdater(source: source, cache: cache)
         let installed = try await updater.update(installed: nil).installed
@@ -294,8 +290,8 @@ final class PeakDataTests: XCTestCase {
     }
 
     func testRejectsBrokenManifest() {
-        XCTAssertThrowsError(try PeakData.parseManifest(Data(#"{"schemaVersion":4"#.utf8)))
-        XCTAssertThrowsError(try PeakData.parseManifest(Data(#"{"schemaVersion":4,"version":"v1"}"#.utf8)))
+        XCTAssertThrowsError(try PeakData.parseManifest(Data(#"{"schemaVersion":5"#.utf8)))
+        XCTAssertThrowsError(try PeakData.parseManifest(Data(#"{"schemaVersion":5,"dataSchemaVersion":5,"fileName":"osm-peaks.json.gz","version":"v1"}"#.utf8)))
         XCTAssertThrowsError(try PeakData.parseManifest(manifest(downloadUrl: "http://example.com/a.gz")))
     }
 

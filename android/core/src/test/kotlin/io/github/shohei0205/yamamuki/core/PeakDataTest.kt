@@ -36,43 +36,41 @@ class PeakDataTest {
 
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    private fun manifest(version: String = "v1", data: ByteArray = gzip, schemaVersion: Int = 4) = """
-        {"schemaVersion":$schemaVersion,"version":"$version","downloadUrl":"https://example.com/japan-mountains.json.gz",
-         "fileName":"japan-mountains.json.gz","sha256":"${sha256(data).uppercase()}","sizeBytes":${data.size},
-         "uncompressedSizeBytes":${json.length},"mountainCount":2,"sourceTimestamp":"2026-09-30T20:21:22Z",
-         "latestMountainTimestamp":"2026-09-29T08:06:38Z","sourceUrl":"https://download.geofabrik.de/asia/japan-260929.osm.pbf",
+    // yamamuki-data の README.md の manifest 版 5 と同じ形。件数は pointCount、データ本体の版は dataSchemaVersion。
+    private fun manifest(
+        version: String = "v1",
+        data: ByteArray = gzip,
+        schemaVersion: Int = 5,
+        dataSchemaVersion: String = "5",
+        sourceTimestamp: String? = "2026-09-30T20:21:22Z",
+    ) = """
+        {"schemaVersion":$schemaVersion,"dataSchemaVersion":$dataSchemaVersion,"name":"山頂","version":"$version",
+         "fileName":"osm-peaks.json.gz","downloadUrl":"https://example.com/osm-peaks.json.gz",
+         "sha256":"${sha256(data).uppercase()}","sizeBytes":${data.size},"uncompressedSizeBytes":${json.length},"pointCount":2,
+         ${sourceTimestamp?.let { "\"sourceTimestamp\":\"$it\"," }.orEmpty()}
          "license":"ODbL-1.0","attribution":"© OpenStreetMap contributors"}
     """.trimIndent()
 
-    @Test
-    fun parsesManifest() {
-        val m = PeakData.parseManifest(manifest())
-        assertEquals("v1", m.version)
-        assertEquals("https://example.com/japan-mountains.json.gz", m.downloadUrl)
-        assertEquals(sha256(gzip), m.sha256, "16進数は小文字にそろえる")
-        assertEquals(gzip.size.toLong(), m.sizeBytes)
-        assertEquals(2, m.mountainCount)
-        assertEquals("2026-09-30T20:21:22Z", m.sourceTimestamp)
-    }
-
-    // yamamuki-data の README.md の manifest 版 5 と同じ形。件数は pointCount、データ本体の版は dataSchemaVersion。
-    private fun manifestV5(dataSchemaVersion: String = "5", sourceTimestamp: String? = "2026-09-30T20:21:22Z") = """
-        {"schemaVersion":5,"dataSchemaVersion":$dataSchemaVersion,"name":"山頂","version":"v1",
-         "fileName":"osm-peaks.json.gz","downloadUrl":"https://example.com/osm-peaks.json.gz",
-         "sha256":"${sha256(gzip)}","sizeBytes":${gzip.size},"uncompressedSizeBytes":${json.length},"pointCount":2,
-         ${sourceTimestamp?.let { "\"sourceTimestamp\":\"$it\"," }.orEmpty()}
+    // 版 4 の manifest(0.5.0 まで配っていた形)。件数は mountainCount で、データ本体の版は書かれていない。
+    private fun manifestV4() = """
+        {"schemaVersion":4,"version":"v1","downloadUrl":"https://example.com/japan-mountains.json.gz",
+         "fileName":"japan-mountains.json.gz","sha256":"${sha256(gzip)}","sizeBytes":${gzip.size},
+         "uncompressedSizeBytes":${json.length},"mountainCount":2,"sourceTimestamp":"2026-09-30T20:21:22Z",
          "license":"ODbL-1.0","attribution":"© OpenStreetMap contributors"}
     """.trimIndent()
 
     @Test
     fun parsesManifestV5() {
-        val m = PeakData.parseManifest(manifestV5())
+        val m = PeakData.parseManifest(manifest())
         assertEquals(5, m.schemaVersion)
+        assertEquals("v1", m.version)
         assertEquals("https://example.com/osm-peaks.json.gz", m.downloadUrl)
+        assertEquals(sha256(gzip), m.sha256, "16進数は小文字にそろえる")
+        assertEquals(gzip.size.toLong(), m.sizeBytes)
         assertEquals(2, m.mountainCount)
         assertEquals("2026-09-30T20:21:22Z", m.sourceTimestamp)
         // 版 5 では元データの日時を省略できる。
-        assertEquals("", PeakData.parseManifest(manifestV5(sourceTimestamp = null)).sourceTimestamp)
+        assertEquals("", PeakData.parseManifest(manifest(sourceTimestamp = null)).sourceTimestamp)
     }
 
     // yamamuki-data の formats/manifest.md の manifest 版 6 と同じ形。件数と出典は metadata にある。
@@ -133,20 +131,25 @@ class PeakDataTest {
         val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 7)) }
         assertTrue(e.message!!.contains("アプリを更新"))
         assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 3)) }
+        // 版 4 はもう読まない(配る道が無くなったため)。
+        assertTrue(assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV4()) }.message!!.contains("アプリを更新"))
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(schemaVersion = 4)) }
     }
 
     @Test
     fun rejectsUnknownDataSchemaVersion() {
-        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "7")) }
+        val e = assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(dataSchemaVersion = "7")) }
         assertTrue(e.message!!.contains("アプリを更新"))
         // データ本体の版が分からないときは、manifest の版から推測せずに断る。
-        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5(dataSchemaVersion = "null")) }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(dataSchemaVersion = "null")) }
     }
 
     @Test
     fun rejectsBrokenManifest() {
-        assertFailsWith<PeakDataException> { PeakData.parseManifest("""{"schemaVersion":4""") }
-        assertFailsWith<PeakDataException> { PeakData.parseManifest("""{"schemaVersion":4,"version":"v1"}""") }
+        assertFailsWith<PeakDataException> { PeakData.parseManifest("""{"schemaVersion":5""") }
+        assertFailsWith<PeakDataException> {
+            PeakData.parseManifest("""{"schemaVersion":5,"dataSchemaVersion":5,"fileName":"osm-peaks.json.gz","version":"v1"}""")
+        }
         assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest().replace("https://example.com", "http://example.com")) }
     }
 
@@ -272,7 +275,7 @@ class PeakDataTest {
     fun replacesV5DataWithV6Data() = runTest {
         // 版 5 の山データを取り込んだ端末に、版 6 の山データが届いたときに入れ替わる。山は同じノード番号で引き継ぐ。
         val cache = InMemoryMountainCache()
-        val source = FakeSource(manifestV5(), gzip)
+        val source = FakeSource(manifest(), gzip)
         val updater = PeakDataUpdater(source, cache)
         val installed = updater.update(null).installed
         assertEquals(setOf("osm:3403990450", "osm:12"), cache.mountains.keys)
@@ -608,14 +611,12 @@ class PeakDataTest {
     fun rejectsManifestOfOtherDataset() {
         // 版 5 以降は、データ本体のファイル名が osm-peaks.json.gz でなければ読まない(gsi-peaks などを取り違えないため)。
         assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6().replace("osm-peaks.json.gz\",", "gsi-peaks.json.gz\",")) }
-        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV5().replace("\"fileName\":\"osm-peaks.json.gz\",", "")) }
-        // 版 4 までは、ファイル名を見ない(japan-mountains.json.gz だった)。
-        assertEquals(2, PeakData.parseManifest(manifest()).mountainCount)
+        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest().replace("\"fileName\":\"osm-peaks.json.gz\",", "")) }
     }
 
     @Test
     fun catalogSourceFollowsCatalogAndSkipsSameManifest() = runTest {
-        val manifest = manifest(schemaVersion = 4)
+        val manifest = manifest()
         val requests = mutableListOf<String>()
         val engine = MockEngine { request ->
             val url = request.url.toString()
@@ -694,10 +695,9 @@ class PeakDataTest {
         // 種類とファイル名が食い違う manifest は読まない。
         assertFailsWith<PeakDataException> { PeakData.parseManifest(body) }
         assertFailsWith<PeakDataException> { PeakData.parseManifest(manifestV6(), PeakDataset.GSI_PEAKS) }
-        // 版 4・5 は osm-peaks しか無かったので、ほかの種類では読まない。
-        assertFailsWith<PeakDataException> { PeakData.parseManifest(manifest(), PeakDataset.GSI_PEAKS) }
+        // 版 5 は osm-peaks しか無かったので、ほかの種類では読まない。
         assertFailsWith<PeakDataException> {
-            PeakData.parseManifest(manifestV5().replace("osm-peaks.json.gz\",", "gsi-peaks.json.gz\","), PeakDataset.GSI_PEAKS)
+            PeakData.parseManifest(manifest().replace("osm-peaks.json.gz\",", "gsi-peaks.json.gz\","), PeakDataset.GSI_PEAKS)
         }
     }
 
