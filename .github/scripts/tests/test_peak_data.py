@@ -24,6 +24,8 @@ STABLE_NEW = "osm-peaks-20261101T032300Z-40000000000-1"
 DEV = "osm-peaks-dev-20261009T095556Z-37914319482-1"
 GSI_DEV = "gsi-peaks-dev-20261018T115950Z-39125416076-1"
 GSI_STABLE = "gsi-peaks-20261101T000000Z-40000000001-1"
+# yamamuki-data#97 からの試用版（Pre-release）。正式版と同じ形のタグで、正式公開しても同じタグのまま。
+TRIAL = "osm-peaks-20261111T230049Z-43034503942-2"
 
 
 def manifest_bytes(tag, count=14035, schema=5, data_schema=5):
@@ -52,7 +54,7 @@ def catalog(**datasets):
 
 
 class SiteTestCase(unittest.TestCase):
-    """一時フォルダに site/data/ を作り、カタログと current.json の stable が STABLE_OLD を指す状態から始める。"""
+    """一時フォルダに site/data/ を作り、カタログの stable が STABLE_OLD を指し、current.json は廃止済みの状態から始める。"""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -62,12 +64,13 @@ class SiteTestCase(unittest.TestCase):
         data = manifest_bytes(STABLE_OLD)
         pd.manifest_path(self.root, STABLE_OLD).write_bytes(data)
         pd.write_catalog(self.root, catalog(osm_peaks={"stable": pd.entry_for(STABLE_OLD, data)}))
-        pd.write_pointer(self.root, {"schemaVersion": 1, "stable": pd.entry_for(STABLE_OLD, data)})
+        pd.write_json(pd.pointer_path(self.root), pd.RETIRED_POINTER)
         self.releases = {
             STABLE_NEW: (manifest_bytes(STABLE_NEW, count=14100), {"html_url": "https://example.invalid/r", "body": ""}),
             DEV: (manifest_bytes(DEV, count=14038), {"prerelease": True, "html_url": "https://example.invalid/d"}),
             GSI_DEV: (manifest_bytes(GSI_DEV, count=17225, schema=6, data_schema=6), {"prerelease": True}),
             GSI_STABLE: (manifest_bytes(GSI_STABLE, count=17300, schema=6, data_schema=6), {}),
+            TRIAL: (manifest_bytes(TRIAL, count=14096, schema=6, data_schema=6), {"prerelease": True}),
         }
         patcher = mock.patch.object(pd, "release_manifest", side_effect=lambda tag: self.releases[tag])
         patcher.start()
@@ -129,25 +132,24 @@ class ValidateCatalogTest(unittest.TestCase):
                 pd.validate_catalog(value)
 
 
-class ValidatePointerTest(unittest.TestCase):
-    def test_accepts_only_stable(self):
-        self.assertEqual(STABLE_OLD, pd.validate_pointer({"schemaVersion": 1, "stable": entry(STABLE_OLD)}))
-
-    def test_rejects_dev_and_other_keys(self):
-        for pointer in ({"schemaVersion": 1, "dev": entry(DEV)},
-                        {"schemaVersion": 1, "stable": entry(STABLE_OLD), "dev": entry(DEV)},
-                        {"schemaVersion": 1, "stable": entry(DEV)},
-                        {"schemaVersion": 2, "stable": entry(STABLE_OLD)}):
+class ValidateRetiredPointerTest(unittest.TestCase):
+    def test_accepts_only_retired_content(self):
+        pd.validate_retired_pointer({"schemaVersion": 999})
+        for pointer in ({"schemaVersion": 1, "stable": entry(STABLE_OLD)},
+                        {"schemaVersion": 999, "stable": entry(STABLE_OLD)},
+                        {"schemaVersion": 1000}, []):
             with self.subTest(pointer=pointer), self.assertRaises(pd.PeakDataError):
-                pd.validate_pointer(pointer)
+                pd.validate_retired_pointer(pointer)
 
 
 class ValidateManifestTest(unittest.TestCase):
-    def test_stable_rejects_newer_format_but_dev_accepts(self):
-        data = manifest_bytes(DEV, schema=6, data_schema=6)
+    def test_stable_accepts_v5_and_v6_but_not_newer(self):
+        # 版 6 は 0.8.0 から読める。0.6.0・0.7.0 のサポートは終えたので stable にも使える。
+        self.assertEqual(6, pd.validate_manifest(manifest_bytes(STABLE_NEW, schema=6, data_schema=6),
+                                                 STABLE_NEW, "stable")["schemaVersion"])
+        self.assertEqual(5, pd.validate_manifest(manifest_bytes(STABLE_NEW), STABLE_NEW, "stable")["schemaVersion"])
         with self.assertRaises(pd.PeakDataError):
-            pd.validate_manifest(manifest_bytes(STABLE_NEW, schema=6, data_schema=6), STABLE_NEW, "stable")
-        self.assertEqual(6, pd.validate_manifest(data, DEV, "dev")["schemaVersion"])
+            pd.validate_manifest(manifest_bytes(STABLE_NEW, schema=7, data_schema=7), STABLE_NEW, "stable")
 
     def test_reads_count_of_v6_from_metadata(self):
         manifest = pd.validate_manifest(manifest_bytes(DEV, count=14038, schema=6, data_schema=6), DEV, "dev")
@@ -195,10 +197,10 @@ class SwapTest(SiteTestCase):
         data = pd.manifest_path(self.root, STABLE_NEW).read_bytes()
         self.assertEqual(self.releases[STABLE_NEW][0], data)
         self.assertEqual(pd.entry_for(STABLE_NEW, data), self.catalog()["datasets"]["osm-peaks"]["stable"])
-        # 0.6.0・0.7.0 が読む current.json の stable も同じ manifest にする。
-        self.assertEqual(hashlib.sha256(data).hexdigest(), self.pointer()["stable"]["manifestSha256"])
+        # 廃止した current.json は書き換えない。
+        self.assertEqual(pd.RETIRED_POINTER, self.pointer())
         self.assertIn("+65", "\n".join(result["body"]))
-        self.assertIn("current.json", "\n".join(result["body"]))
+        self.assertNotIn("current.json", "\n".join(result["body"]))
         # 前の版のコピーは残す。
         self.assertTrue(pd.manifest_path(self.root, STABLE_OLD).exists())
 
@@ -228,12 +230,6 @@ class SwapTest(SiteTestCase):
         self.assertTrue(pd.swap(self.root, "osm-peaks", "remove-dev", "", False)["changed"])
         self.assertEqual(["stable"], list(self.catalog()["datasets"]["osm-peaks"]))
 
-    def test_stable_fixes_pointer_even_when_catalog_is_already_there(self):
-        pd.swap(self.root, "osm-peaks", "stable", STABLE_NEW, False)
-        pd.write_pointer(self.root, {"schemaVersion": 1, "stable": entry(STABLE_OLD, pd.sha256(manifest_bytes(STABLE_OLD)))})
-        self.assertTrue(pd.swap(self.root, "osm-peaks", "stable", STABLE_NEW, False)["changed"])
-        self.assertEqual(self.catalog()["datasets"]["osm-peaks"]["stable"], self.pointer()["stable"])
-
     def test_works_without_pointer(self):
         pd.pointer_path(self.root).unlink()
         self.assertTrue(pd.swap(self.root, "osm-peaks", "stable", STABLE_NEW, False)["changed"])
@@ -247,7 +243,27 @@ class SwapTest(SiteTestCase):
     def test_latest_tag_is_used_when_tag_is_empty(self):
         with mock.patch.object(pd, "latest_tag", return_value=STABLE_NEW) as latest:
             pd.swap(self.root, "osm-peaks", "stable", "", False)
-        latest.assert_called_once_with("osm-peaks", "stable")
+        latest.assert_called_once_with("osm-peaks")
+
+    def test_dev_requires_tag(self):
+        # 試用版は採用しなかったものも Pre-release のまま残るので、dev は最新を選ばずタグの指定を求める。
+        for dataset in pd.DATASETS:
+            with self.subTest(dataset=dataset), mock.patch.object(pd, "latest_tag") as latest, \
+                    self.assertRaises(pd.PeakDataError):
+                pd.swap(self.root, dataset, "dev", "", False)
+            latest.assert_not_called()
+
+    def test_trial_release_goes_to_dev_then_stable_with_same_copy(self):
+        # 試用版（Pre-release）を dev で試し、正式公開のあと同じタグを stable にする。
+        pd.swap(self.root, "osm-peaks", "dev", TRIAL, False)
+        self.assertEqual(TRIAL, self.tags()["osm-peaks"]["dev"])
+        with self.assertRaises(pd.PeakDataError):
+            pd.swap(self.root, "osm-peaks", "stable", TRIAL, True)
+        self.releases[TRIAL] = (self.releases[TRIAL][0], {})
+        result = pd.swap(self.root, "osm-peaks", "stable", TRIAL, True)
+        self.assertTrue(result["changed"])
+        self.assertEqual({"osm-peaks": {"stable": TRIAL}}, self.tags())
+        self.assertEqual(pd.RETIRED_POINTER, self.pointer())
 
 
 class SwapGsiTest(SiteTestCase):
@@ -307,10 +323,11 @@ class SwapV6Test(SiteTestCase):
         self.assertIn("schemaVersion 6", body)
         self.assertEqual(DEV, self.tags()["osm-peaks"]["dev"])
 
-    def test_stable_still_refuses_v6(self):
-        self.releases[STABLE_NEW] = (manifest_bytes(STABLE_NEW, schema=6, data_schema=6), {})
-        with self.assertRaises(pd.PeakDataError):
-            pd.swap(self.root, "osm-peaks", "stable", STABLE_NEW, False)
+    def test_stable_accepts_v6(self):
+        self.releases[STABLE_NEW] = (manifest_bytes(STABLE_NEW, count=14096, schema=6, data_schema=6), {})
+        result = pd.swap(self.root, "osm-peaks", "stable", STABLE_NEW, False)
+        self.assertEqual(STABLE_NEW, self.tags()["osm-peaks"]["stable"])
+        self.assertIn("schemaVersion 6", "\n".join(result["body"]))
 
 
 class CheckTest(SiteTestCase):
@@ -332,11 +349,14 @@ class CheckTest(SiteTestCase):
         data = self.run_check()
         self.assertEqual([STABLE_OLD], [call.args[1] for call in data.call_args_list])
 
-    def test_fails_when_pointer_differs_from_catalog(self):
-        pd.swap(self.root, "osm-peaks", "stable", STABLE_NEW, False)
-        pd.write_pointer(self.root, {"schemaVersion": 1, "stable": entry(STABLE_OLD, pd.sha256(manifest_bytes(STABLE_OLD)))})
+    def test_fails_when_pointer_is_not_retired(self):
+        pd.write_json(pd.pointer_path(self.root), {"schemaVersion": 1, "stable": pd.entry_for(STABLE_OLD, manifest_bytes(STABLE_OLD))})
         with self.assertRaises(pd.PeakDataError):
             self.run_check()
+
+    def test_passes_without_pointer(self):
+        pd.pointer_path(self.root).unlink()
+        self.run_check()
 
     def test_compares_count_with_pointer_of_base_before_catalog(self):
         old = manifest_bytes(STABLE_OLD, count=20000)
@@ -379,21 +399,21 @@ class ReleasesTest(unittest.TestCase):
 
 
 class LatestTagTest(unittest.TestCase):
-    def test_picks_newest_of_the_channel(self):
+    def test_picks_newest_stable_release(self):
         listing = [
             {"tag_name": STABLE_OLD, "published_at": "2026-10-07T07:20:00Z"},
             {"tag_name": STABLE_NEW, "published_at": "2026-11-01T03:40:00Z"},
             {"tag_name": DEV, "prerelease": True, "published_at": "2026-12-01T00:00:00Z"},
+            {"tag_name": TRIAL, "prerelease": True, "published_at": "2026-12-01T00:00:00Z"},
             {"tag_name": "osm-peaks-20261201T000000Z-1-1", "draft": True, "published_at": None},
             {"tag_name": "peaks-20261007T084736Z-37595744056-1", "published_at": "2026-12-02T00:00:00Z"},
             {"tag_name": "gsi-peaks-20261202T000000Z-1-1", "published_at": "2026-12-03T00:00:00Z"},
             {"tag_name": "gsi-peaks-dev-20261202T000000Z-1-1", "prerelease": True, "published_at": "2026-12-03T00:00:00Z"},
         ]
         with mock.patch.object(pd, "releases", return_value=listing):
-            self.assertEqual(STABLE_NEW, pd.latest_tag("osm-peaks", "stable"))
-            self.assertEqual(DEV, pd.latest_tag("osm-peaks", "dev"))
-            self.assertEqual("gsi-peaks-20261202T000000Z-1-1", pd.latest_tag("gsi-peaks", "stable"))
-            self.assertEqual("gsi-peaks-dev-20261202T000000Z-1-1", pd.latest_tag("gsi-peaks", "dev"))
+            # 試用版（Pre-release）と下書きは選ばない。
+            self.assertEqual(STABLE_NEW, pd.latest_tag("osm-peaks"))
+            self.assertEqual("gsi-peaks-20261202T000000Z-1-1", pd.latest_tag("gsi-peaks"))
 
 
 class CheckHelpersTest(unittest.TestCase):

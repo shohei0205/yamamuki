@@ -69,6 +69,7 @@ Overpass を使っていたころのコード（`OverpassClient` など）は事
 - 次に、最新版の manifest を yamamuki-data の GitHub Pages に置き、データ本体は版ごとの Release に置く形にした（manifest の `downloadUrl`）。差し替えの途中で欠けず、古い manifest が返っても対応する本体は取れる。
 - 2026-10-07 に yamamuki-data の公開で配布版の manifest が消える事故（yamamuki-data #44）があり、0.6.0 からはアプリが読む版を yamamuki 側で決める形にした。yamamuki の Pages の参照先ファイル（0.6.0・0.7.0 は `site/data/osm-peaks/current.json`、0.8.0 からはカタログ `site/data/catalog.json`）が、yamamuki にコピーした Release の manifest を指す。yamamuki-data の正式版は Release を作るところまでで、Pages には置かない。
 - GitHub の定期実行（`schedule`）はデフォルトブランチ（main）のワークフローでしか動かない。dev にだけ書いても毎月の自動生成は動かない。
+  - 2026-11 に yamamuki-data は dev ブランチと OSM 山頂の毎月の定期生成をやめ、main だけで手動で生成するようにした（yamamuki-data#97）。生成した版は下書き → 試用公開（Pre-release）→ 正式公開の順に進め、`-dev-` の付くタグは作らない。
 
 ### アプリでの取り込み
 
