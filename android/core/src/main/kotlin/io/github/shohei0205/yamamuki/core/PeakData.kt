@@ -58,7 +58,7 @@ data class PeakManifest(
     val sha256: String,
     /** データ本体のバイト数。 */
     val sizeBytes: Long,
-    /** 収録した山の数。版 4 は mountainCount、版 5 は pointCount、版 6 は metadata.pointCount。 */
+    /** 収録した山の数。版 5 は pointCount、版 6 は metadata.pointCount。 */
     val mountainCount: Int,
     /**
      * 元にした OSM データの基準日時(UTC、例: 2026-09-30T20:21:22Z)。版 6 は metadata.sources の latestTimestamp のうち最も新しいもの。
@@ -245,11 +245,12 @@ object PeakData {
         MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { "%02x".format(it) }
 
     /**
-     * 読める manifest の形式の版。版 4 で downloadUrl が入った。版 5 で件数が pointCount になり、
+     * 読める manifest の形式の版。版 5 で件数が pointCount になり、
      * データ本体の版(dataSchemaVersion)が別に書かれるようになった。版 6 で件数と出典が metadata にまとまり、
      * 形式の名前(schemaFormat・dataSchemaFormat)が入った。
+     * 版 4 は 0.5.0 まで配っていた形で、もう配っていない(yamamuki のカタログにも版 4 の manifest は無い)ので読まない。
      */
-    val SUPPORTED_SCHEMA_VERSIONS = setOf(4, 5, 6)
+    val SUPPORTED_SCHEMA_VERSIONS = setOf(5, 6)
 
     /**
      * 読めるデータ本体の版(manifest 版 5 以降の dataSchemaVersion)。地点データ版 5 は、山ごとの項目(osmId・name・latitude・
@@ -291,32 +292,29 @@ object PeakData {
         if (schemaVersion !in SUPPORTED_SCHEMA_VERSIONS) {
             throw PeakDataException("このアプリが読めない形式の山データです(形式の版 $schemaVersion)。アプリを更新してください。")
         }
-        // 版 5 は、データ本体の版が分からなければ読めないものとして扱う(manifest の版から推測しない)。
-        if (schemaVersion >= 5) {
-            val dataSchemaVersion = (root["dataSchemaVersion"] as? Long)?.toInt()
-            if (dataSchemaVersion !in SUPPORTED_DATA_SCHEMA_VERSIONS) {
-                throw PeakDataException("このアプリが読めない形式の山データです(データの版 ${dataSchemaVersion ?: "不明"})。アプリを更新してください。")
-            }
+        // データ本体の版が分からなければ読めないものとして扱う(manifest の版から推測しない)。
+        val dataSchemaVersion = (root["dataSchemaVersion"] as? Long)?.toInt()
+        if (dataSchemaVersion !in SUPPORTED_DATA_SCHEMA_VERSIONS) {
+            throw PeakDataException("このアプリが読めない形式の山データです(データの版 ${dataSchemaVersion ?: "不明"})。アプリを更新してください。")
         }
         // 版 6 は、形式の名前が違う(別の種類のデータの)manifest を読まない。
         if (schemaVersion >= 6) {
             if (root["schemaFormat"] != MANIFEST_SCHEMA_FORMAT) throw PeakDataException("manifest の schemaFormat が $MANIFEST_SCHEMA_FORMAT ではありません")
             if (root["dataSchemaFormat"] != DATA_SCHEMA_FORMAT) throw PeakDataException("manifest の dataSchemaFormat が $DATA_SCHEMA_FORMAT ではありません")
         }
-        // 版 5 以降は、データの種類をデータ本体のファイル名で確かめる。ほかの種類の manifest を取り違えて読むと、
+        // データの種類をデータ本体のファイル名で確かめる。ほかの種類の manifest を取り違えて読むと、
         // 地点の ID の形が違うので 0 件になったり、ほかの種類の山が混ざったりするため。
         // 版 5 までは osm-peaks しか無かったので、ほかの種類では読まない。
         if (schemaVersion < 6 && dataset != PeakDataset.OSM_PEAKS) {
             throw PeakDataException("${dataset.id} の manifest の形式の版 $schemaVersion は読めません")
         }
-        if (schemaVersion >= 5 && root["fileName"] != dataset.fileName) {
+        if (root["fileName"] != dataset.fileName) {
             throw PeakDataException("manifest の fileName が ${dataset.fileName} ではありません(${root["fileName"] ?: "なし"})")
         }
         val mountainCount = when {
             schemaVersion >= 6 -> (root["metadata"] as? Map<*, *>)?.get("pointCount") as? Long
                 ?: throw PeakDataException("manifest の metadata.pointCount が整数ではありません")
-            schemaVersion == 5 -> long("pointCount")
-            else -> long("mountainCount")
+            else -> long("pointCount")
         }
         val manifest = PeakManifest(
             schemaVersion = schemaVersion,
@@ -327,8 +325,7 @@ object PeakData {
             mountainCount = mountainCount.toInt(),
             sourceTimestamp = when {
                 schemaVersion >= 6 -> latestTimestamp(root)
-                schemaVersion == 5 -> root["sourceTimestamp"] as? String ?: ""
-                else -> string("sourceTimestamp")
+                else -> root["sourceTimestamp"] as? String ?: ""
             },
             experimental = root["experimental"] == true,
         )
