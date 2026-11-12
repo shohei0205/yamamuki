@@ -503,7 +503,8 @@ final class PeakDataTests: XCTestCase {
     }
 
     func testRefetchesSameVersionWhenKeptGzIsMissing() async throws {
-        // gz か manifest が無い、SHA-256 が合わない、組が食い違う(gz が manifest の SHA-256 と合わない)。
+        // gz か manifest が無い、SHA-256 が合わない、組が食い違う(gz が manifest の SHA-256 と合わない)、
+        // 残した manifest がもう読まない版 4(SHA-256 は合う)。
         let other = Data([1, 2, 3])
         let zero = String(repeating: "0", count: 64)
         let cases: [(MemoryArchive, InstalledPeakData)] = [
@@ -513,6 +514,7 @@ final class PeakDataTests: XCTestCase {
             (kept(), oldInstalled(manifestSha256: zero)),
             (kept(), oldInstalled(manifestSha256: .some(nil))),
             (MemoryArchive(ArchivedPeakData(manifest: manifest(), data: other)), oldInstalled(sha256: sha256(other))),
+            (MemoryArchive(ArchivedPeakData(manifest: manifestV4(), data: gzip)), oldInstalled(manifestSha256: sha256(manifestV4()))),
         ]
         for (archive, installed) in cases {
             let source = FakeSource(manifest: manifest(), data: gzip)

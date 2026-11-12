@@ -496,8 +496,10 @@ class PeakDataTest {
 
     @Test
     fun refetchesSameVersionWhenKeptGzIsMissing() = runTest {
-        // gz か manifest が無い、SHA-256 が合わない、組が食い違う(gz が manifest の SHA-256 と合わない)。
+        // gz か manifest が無い、SHA-256 が合わない、組が食い違う(gz が manifest の SHA-256 と合わない)、
+        // 残した manifest がもう読まない版 4(SHA-256 は合う)。
         val other = byteArrayOf(1, 2, 3)
+        val v4 = manifestV4().toByteArray()
         for ((archive, installed) in listOf(
             InMemoryArchive() to oldInstalled(),
             kept() to oldInstalled(sha256 = "0".repeat(64)),
@@ -505,6 +507,7 @@ class PeakDataTest {
             kept() to oldInstalled(manifestSha256 = "0".repeat(64)),
             kept() to oldInstalled(manifestSha256 = null),
             InMemoryArchive(ArchivedPeakData(manifestBytes, other)) to oldInstalled(sha256 = sha256(other)),
+            InMemoryArchive(ArchivedPeakData(v4, gzip)) to oldInstalled(manifestSha256 = sha256(v4)),
         )) {
             val source = FakeSource(manifest(), gzip)
             val cache = InMemoryMountainCache()
