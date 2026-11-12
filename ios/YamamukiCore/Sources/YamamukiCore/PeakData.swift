@@ -137,15 +137,12 @@ public enum ManifestResponse: Sendable {
     case fetched(body: Data, etag: String?)
 }
 
-/// 山データをどこから読むか。ビルドの種類と、開発用のビルドの取得先の設定で決まる。
+/// 山データをどこから読むか。ビルドの種類で決まる。
 public enum PeakDataChannel: Sendable {
     /// 配布用のビルド: yamamuki のカタログ(catalog.json)の、その種類の stable が指す manifest。
     case stable
-    /// 開発用のビルドの既定: カタログの、その種類の dev が指す manifest。dev が無ければ stable。
+    /// 開発用のビルド: カタログの、その種類の dev が指す manifest。dev が無ければ stable。
     case dev
-    /// 開発用のビルドで取得先を dev にしたとき: osm-peaks は yamamuki-data の dev が公開する最新の manifest を直接。
-    /// ほかの種類は直接読む置き場所が無いので、`dev` と同じくカタログの dev を読む。
-    case dataDev
 }
 
 /// カタログ(catalog.json)に書いた、読む manifest の場所と SHA-256。
@@ -166,7 +163,7 @@ public enum PeakData {
     /// データの種類(datasets の osm-peaks・gsi-peaks)ごとに、stable(配布用)と dev(開発用、省略可能)の
     /// manifest の URL と SHA-256 が書いてある。このアプリが読むのは `PeakDataset` の種類だけ。
     /// 書き換えは「山データの差し替え PR を作る」ワークフローの PR で行う。
-    /// 0.7.0 までは site/data/osm-peaks/current.json を読んでいた(0.9.0 で廃止する予定)。
+    /// 0.7.0 までは site/data/osm-peaks/current.json を読んでいた(2026-11 に廃止し、版 999 だけのファイルにした)。
     public static let catalogUrl = URL(string: "https://shohei0205.github.io/yamamuki/data/catalog.json")!
 
     /// カタログと manifest のコピーを置く場所(yamamuki の Pages の data/)。
@@ -175,23 +172,11 @@ public enum PeakData {
     /// 読めるカタログの形式の版。
     public static let catalogSchemaVersion = 1
 
-    /// osm-peaks の開発版の最新版の manifest の URL。開発用のビルド(Android の debug、iOS の Debug)で、取得先を dev にしたときに直接読む
-    /// (`PeakDataChannel.dataDev`)。開発版が取れないときに正式版へ自動で切り替えることはしない(yamamuki-data の方針)。
-    /// yamamuki-data の dev が公開する置き場所(points/osm-peaks-dev/)。manifest の版は、yamamuki-data の dev に合わせて変わる
-    /// (2026-10-18 から版 6)。
-    public static let devManifestUrl = URL(string: "https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json")!
-
     /// `channel` から `dataset` の山データを読む取得元。
     public static func source(_ channel: PeakDataChannel, dataset: PeakDataset, session: URLSession = .shared,
                               userAgent: String, catalogCache: PeakCatalogCache? = nil) -> PeakDataSource {
-        switch channel {
-        case .stable:
-            return CatalogPeakDataSource(session: session, dataset: dataset, useDev: false, userAgent: userAgent, catalogCache: catalogCache)
-        case .dataDev where dataset == .osmPeaks:
-            return HTTPPeakDataSource(session: session, manifestUrl: devManifestUrl, userAgent: userAgent)
-        case .dev, .dataDev:
-            return CatalogPeakDataSource(session: session, dataset: dataset, useDev: true, userAgent: userAgent, catalogCache: catalogCache)
-        }
+        CatalogPeakDataSource(session: session, dataset: dataset, useDev: channel == .dev, userAgent: userAgent,
+                              catalogCache: catalogCache)
     }
 
     /// カタログを読み、`dataset` の読む manifest の場所を返す。`useDev` なら dev を、dev が無ければ stable を読む。
@@ -738,40 +723,6 @@ public actor PeakCatalogCache {
         let body = try await task.value
         entries[url] = (now, body)
         return body
-    }
-}
-
-/// HTTP で manifest を直接読んで、配信データを取得する。
-public struct HTTPPeakDataSource: PeakDataSource {
-    private let session: URLSession
-    private let manifestUrl: URL
-    private let userAgent: String
-
-    public init(session: URLSession = .shared, manifestUrl: URL, userAgent: String = "yamamuki-ios") {
-        self.session = session
-        self.manifestUrl = manifestUrl
-        self.userAgent = userAgent
-    }
-
-    public func fetchManifest(etag: String?) async throws -> ManifestResponse {
-        var request = URLRequest(url: manifestUrl)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        // URLSession の HTTP キャッシュが 304 を 200 に置き換えないよう、自分で ETag を送るときはキャッシュを使わない。
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
-        let (data, response) = try await session.data(for: request)
-        let http = response as? HTTPURLResponse
-        if http?.statusCode == 304 { return .notModified }
-        try PeakData.requireSuccess(http, manifestUrl)
-        return .fetched(body: data, etag: http?.value(forHTTPHeaderField: "ETag"))
-    }
-
-    public func fetchData(_ url: URL) async throws -> Data {
-        var request = URLRequest(url: url)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await session.data(for: request)
-        try PeakData.requireSuccess(response as? HTTPURLResponse, url)
-        return data
     }
 }
 

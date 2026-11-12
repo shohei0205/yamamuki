@@ -14,12 +14,10 @@
 - 読む manifest は yamamuki の Pages に置いたカタログ `catalog.json`（https://shohei0205.github.io/yamamuki/data/catalog.json ）の、設定の「山データ」で選んだ種類（`osm-peaks` か `gsi-peaks`）で決める（0.8.0 から。0.7.0 までは `osm-peaks/current.json` を読んでいた）。URL は core の `PeakData` にある。
   - アプリが知っているデータの種類は、core の `PeakDataset`（`osm-peaks`・`gsi-peaks`）だけ。カタログにほかの種類があっても読まない。manifest の版 5 以降では、`fileName` が種類と合わない（`osm-peaks` なら `osm-peaks.json.gz`、`gsi-peaks` なら `gsi-peaks.json.gz` でない）manifest は読まない。種類を取り違えて、保存済みの山を別の種類で置き換えないため。`gsi-peaks` は manifest の版 6 以降だけを読む。
   - 配布用のビルド(Android の release、iOS の Release)は、カタログのその種類の `stable` が指す manifest を読む。
-  - 開発用のビルド(Android の debug、iOS の Debug)は、既定ではカタログのその種類の `dev` が指す manifest を読む(`dev` が無ければ `stable`)。配布版の `stable` を変えずに、新しい版のデータを試せる。
-  - 開発用のビルドで取得先を `dev` にすると、`osm-peaks` は yamamuki-data の dev が公開する最新の開発版 `https://shohei0205.github.io/yamamuki-data/points/osm-peaks-dev/manifest.json` を直接読む（`gsi-peaks` はカタログの `dev` を読む）。画面からは切り替えられず、ビルドのときに選ぶ。
-    - Android: Gradle のプロパティ `peakDataSource=dev` を付ける(例: `./gradlew :app:installDebug -PpeakDataSource=dev`。`~/.gradle/gradle.properties` に書いてもよい。既定は `current`)。`android/app/build.gradle.kts` で `BuildConfig.PEAK_DATA_DEV` になる。
-    - iOS: ビルド設定 `PEAK_DATA_SOURCE` を `dev` にする(例: `xcodebuild ... PEAK_DATA_SOURCE=dev`。Xcode ではターゲットの Build Settings の User-Defined で変える。`xcodegen generate` で既定の `current` に戻る)。`ios/project.yml` で `PEAK_DATA_DEV` の条件が付く。
-  - 読み先を切り替えたビルドは、前の読み先の版と違えば取り直し、保存している山データを入れ替える。
-- カタログは確かめるたびに取り直す(1 KB ほど)。ただし、選択画面を開いたときのように種類ごとに続けて確かめるときは、1 分以内に取ったカタログを使い回す。指す manifest の SHA-256 が前回と同じなら、manifest は取り直さない。違えば manifest を取り、SHA-256 がカタログと合うかを確かめる。カタログが yamamuki の `<データの種類>/manifests/` 以外を指しているときは読まない。0.7.0 の `current.json` と同じく manifest の SHA-256 で比べるので、同じ manifest を指している間は、0.7.0 から上げても取り直さない。yamamuki-data の開発版を直接読むときは、manifest に前回の ETag を付けて問い合わせ、変わっていなければ何も受け取らない。
+  - 開発用のビルド(Android の debug、iOS の Debug)は、カタログのその種類の `dev` が指す manifest を読む(`dev` が無ければ `stable`)。配布版の `stable` を変えずに、新しい版のデータを試せる。新しい版を試す手順は [山データのカタログと差し替え](peak-data-catalog.md) の「新しいデータを試してから配布版に入れる」にある。
+    - 2026-11 まで、開発用のビルドには yamamuki-data の dev が公開する `points/osm-peaks-dev/manifest.json` を直接読む取得先（Android の `peakDataSource=dev`、iOS の `PEAK_DATA_SOURCE=dev`）もあった。yamamuki-data が dev ブランチをやめ、このファイルが更新されなくなったので廃止した（#206）。
+  - 配布用と開発用のビルドを入れ替えたときは、前の読み先の版と違えば取り直し、保存している山データを入れ替える。
+- カタログは確かめるたびに取り直す(1 KB ほど)。ただし、選択画面を開いたときのように種類ごとに続けて確かめるときは、1 分以内に取ったカタログを使い回す。指す manifest の SHA-256 が前回と同じなら、manifest は取り直さない。違えば manifest を取り、SHA-256 がカタログと合うかを確かめる。カタログが yamamuki の `<データの種類>/manifests/` 以外を指しているときは読まない。0.7.0 の `current.json` と同じく manifest の SHA-256 で比べるので、同じ manifest を指している間は、0.7.0 から上げても取り直さない。
 - 版が新しいときだけデータ本体(manifest の `downloadUrl`)を取得し、サイズと SHA-256 を確かめてからキャッシュに取り込む。失敗したときは保存済みのデータをそのまま使い、画面中央で知らせる(「再試行する」で取り直せる)。
 - 取得先のカタログと参照先ファイル（`site/data/`）の形と、差し替えの手順は [山データのカタログと差し替え](peak-data-catalog.md) にある。
 - 対応する manifest の形式は schemaVersion 4・5・6。版 5 以降では、データ本体の版(`dataSchemaVersion`)が 5 か 6 のときだけ取り込む。知らない版や、データ本体の版が書かれていないときは取り込まず、アプリの更新を促す。

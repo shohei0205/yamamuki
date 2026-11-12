@@ -11,8 +11,8 @@ import kotlin.test.assertTrue
 /**
  * yamamuki の Pages に置いた山データのカタログ(site/data/catalog.json)の、このアプリが読む種類(osm-peaks・gsi-peaks)が指す
  * manifest を、アプリの読み込み処理で読めるかを確かめる。差し替えの PR で、このアプリが読めない manifest を入れないため。
- * 0.6.0・0.7.0 が読む参照先ファイル(osm-peaks/current.json)は、このアプリが読まないので確かめない。
- * 形の細かい確認(コピーが Release と同じか、追加だけか、current.json がカタログと同じか)は .github/scripts/peak_data.py が行う。
+ * 0.6.0・0.7.0 が読んでいた参照先ファイル(osm-peaks/current.json)は、2026-11 に廃止し、このアプリも読まないので確かめない。
+ * 形の細かい確認(コピーが Release と同じか、追加だけか、current.json が廃止したときの中身のままか)は .github/scripts/peak_data.py が行う。
  * iOS の PeakDataCatalogTests.testSiteCatalogIsReadableByThisApp と同じ確認。
  */
 class SitePeakDataTest {

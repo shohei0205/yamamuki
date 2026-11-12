@@ -8,7 +8,6 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -547,29 +546,6 @@ class PeakDataTest {
         }
     }
 
-    @Test
-    fun httpSourceSendsEtagAndHandlesNotModified() = runTest {
-        val seen = mutableListOf<String?>()
-        val engine = MockEngine { request ->
-            seen += request.headers[HttpHeaders.IfNoneMatch]
-            when {
-                request.url.toString() == PeakData.DEV_MANIFEST_URL && request.headers[HttpHeaders.IfNoneMatch] == "\"e1\"" ->
-                    respond("", HttpStatusCode.NotModified)
-                request.url.toString() == PeakData.DEV_MANIFEST_URL ->
-                    respond(manifest(), headers = headersOf(HttpHeaders.ETag, "\"e1\""))
-                else -> respond(gzip)
-            }
-        }
-        val source = HttpPeakDataSource(HttpClient(engine), PeakData.DEV_MANIFEST_URL)
-
-        val fetched = source.fetchManifest(null)
-        assertIs<ManifestResponse.Fetched>(fetched)
-        assertEquals("\"e1\"", fetched.etag)
-        assertIs<ManifestResponse.NotModified>(source.fetchManifest("\"e1\""))
-        assertEquals(listOf(null, "\"e1\""), seen)
-        assertTrue(source.fetchData("https://example.com/japan-mountains.json.gz").contentEquals(gzip))
-    }
-
     private val stableUrl = PeakDataset.OSM_PEAKS.manifestUrlPrefix + "osm-peaks-20261007T071401Z-37585754546-1.json"
     private val devUrl = PeakDataset.OSM_PEAKS.manifestUrlPrefix + "osm-peaks-dev-20261010T022253Z-38016527834-1.json"
     private val gsiUrl = "https://shohei0205.github.io/yamamuki/data/gsi-peaks/manifests/gsi-peaks-dev-20261018T115950Z-39125416076-1.json"
@@ -752,23 +728,33 @@ class PeakDataTest {
     }
 
     @Test
-    fun dataDevChannelReadsCatalogForOtherDatasets() = runTest {
-        // 取得先を dev にした開発版でも、yamamuki-data の dev を直接読めるのは osm-peaks だけ。gsi-peaks はカタログの dev を読む。
-        val manifest = manifestV6(fileName = "gsi-peaks.json.gz")
+    fun devChannelReadsCatalogDevForEveryDataset() = runTest {
+        // 開発版のビルドは、どの種類もカタログの dev を読む(yamamuki-data の Pages を直接読まない)。
+        val osm = manifestV6()
+        val gsi = manifestV6(fileName = "gsi-peaks.json.gz")
         val requests = mutableListOf<String>()
         val engine = MockEngine { request ->
             val url = request.url.toString()
             requests += url
             when (url) {
-                PeakData.CATALOG_URL -> respond(catalog(gsi = channels(stable = null, dev = entry(gsiUrl, sha256(manifest.toByteArray())))))
-                gsiUrl -> respond(manifest)
+                PeakData.CATALOG_URL -> respond(
+                    catalog(
+                        stable = null,
+                        dev = entry(devUrl, sha256(osm.toByteArray())),
+                        gsi = channels(stable = null, dev = entry(gsiUrl, sha256(gsi.toByteArray()))),
+                    ),
+                )
+                devUrl -> respond(osm)
+                gsiUrl -> respond(gsi)
                 else -> respond("", HttpStatusCode.NotFound)
             }
         }
-        val source = PeakData.source(PeakDataChannel.DATA_DEV, PeakDataset.GSI_PEAKS, HttpClient(engine), userAgent = "test")
-        assertIs<ManifestResponse.Fetched>(source.fetchManifest(null))
-        assertEquals(listOf(PeakData.CATALOG_URL, gsiUrl), requests)
-        assertIs<HttpPeakDataSource>(PeakData.source(PeakDataChannel.DATA_DEV, PeakDataset.OSM_PEAKS, HttpClient(engine), "test"))
+        for ((dataset, url) in listOf(PeakDataset.OSM_PEAKS to devUrl, PeakDataset.GSI_PEAKS to gsiUrl)) {
+            requests.clear()
+            val source = PeakData.source(PeakDataChannel.DEV, dataset, HttpClient(engine), userAgent = "test")
+            assertIs<ManifestResponse.Fetched>(source.fetchManifest(null))
+            assertEquals(listOf(PeakData.CATALOG_URL, url), requests)
+        }
     }
 
     @Test

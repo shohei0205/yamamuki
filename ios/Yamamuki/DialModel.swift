@@ -174,11 +174,8 @@ final class DialModel: ObservableObject {
     /// これ以上移動したら、保存済みのデータを読み直す。
     private static let refetchDistanceKm = 1.0
 
-    /// 山データの読み先。Release はカタログの stable、Debug は既定でカタログの dev(無ければ stable)。
-    /// Debug のビルドで PEAK_DATA_SOURCE を dev にしたときだけ、project.yml で PEAK_DATA_DEV が付き、osm-peaks だけ yamamuki-data の開発版を直接読む。
-    #if PEAK_DATA_DEV
-    private static let peakDataChannel = PeakDataChannel.dataDev
-    #elseif DEBUG
+    /// 山データの読み先。Release はカタログの stable、Debug はカタログの dev(無ければ stable)。
+    #if DEBUG
     private static let peakDataChannel = PeakDataChannel.dev
     #else
     private static let peakDataChannel = PeakDataChannel.stable

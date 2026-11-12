@@ -139,17 +139,22 @@ final class PeakDataCatalogTests: XCTestCase {
                                                        useDev: false, dataset: .gsiPeaks))
     }
 
-    func testDataDevChannelReadsCatalogForOtherDatasets() async throws {
-        // 取得先を dev にした開発版でも、yamamuki-data の dev を直接読めるのは osm-peaks だけ。gsi-peaks はカタログの dev を読む。
-        let manifest = Data(#"{"schemaVersion":6}"#.utf8)
+    func testDevChannelReadsCatalogDevForEveryDataset() async throws {
+        // 開発版のビルドは、どの種類もカタログの dev を読む(yamamuki-data の Pages を直接読まない)。
+        let osm = Data(#"{"schemaVersion":6,"o":1}"#.utf8)
+        let gsi = Data(#"{"schemaVersion":6,"g":1}"#.utf8)
         StubProtocol.responses = [
-            PeakData.catalogUrl: (200, catalog(stable: entry(stableUrl, a64), gsi: channels(stable: nil, dev: entry(gsiUrl, PeakData.sha256Hex(manifest))))),
-            URL(string: gsiUrl)!: (200, manifest),
+            PeakData.catalogUrl: (200, catalog(stable: nil, dev: entry(devUrl, PeakData.sha256Hex(osm)),
+                                               gsi: channels(stable: nil, dev: entry(gsiUrl, PeakData.sha256Hex(gsi))))),
+            URL(string: devUrl)!: (200, osm),
+            URL(string: gsiUrl)!: (200, gsi),
         ]
-        let source = PeakData.source(.dataDev, dataset: .gsiPeaks, session: stubSession(), userAgent: "test")
-        guard case .fetched = try await source.fetchManifest(etag: nil) else { return XCTFail("manifest が返ってきませんでした") }
-        XCTAssertEqual(StubProtocol.requests, [PeakData.catalogUrl, URL(string: gsiUrl)!])
-        XCTAssertTrue(PeakData.source(.dataDev, dataset: .osmPeaks, session: stubSession(), userAgent: "test") is HTTPPeakDataSource)
+        for (dataset, url) in [(PeakDataset.osmPeaks, devUrl), (PeakDataset.gsiPeaks, gsiUrl)] {
+            StubProtocol.requests = []
+            let source = PeakData.source(.dev, dataset: dataset, session: stubSession(), userAgent: "test")
+            guard case .fetched = try await source.fetchManifest(etag: nil) else { return XCTFail("manifest が返ってきませんでした") }
+            XCTAssertEqual(StubProtocol.requests, [PeakData.catalogUrl, URL(string: url)!])
+        }
     }
 
     func testCatalogCacheSharesCatalogBetweenDatasets() async throws {
