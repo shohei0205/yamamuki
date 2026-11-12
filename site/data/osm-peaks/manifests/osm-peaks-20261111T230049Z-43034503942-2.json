@@ -1,0 +1,74 @@
+{
+  "schemaFormat": "yamamuki-manifest",
+  "schemaVersion": 6,
+  "dataSchemaVersion": 6,
+  "name": "山頂",
+  "version": "20261111T230049Z-43034503942-2",
+  "fileName": "osm-peaks.json.gz",
+  "downloadUrl": "https://github.com/shohei0205/yamamuki-data/releases/download/osm-peaks-20261111T230049Z-43034503942-2/osm-peaks.json.gz",
+  "sha256": "cfb1faf7dde24fe9313e51f9e5e4253b180bd57f7dda5b0abcd972e00ce9672c",
+  "sizeBytes": 477947,
+  "uncompressedSizeBytes": 4302630,
+  "dataTimestamp": "2026-11-11T23:01:14Z",
+  "licenseUrl": "https://github.com/shohei0205/yamamuki-data/releases/download/osm-peaks-20261111T230049Z-43034503942-2/LICENSE.txt",
+  "sourcePbfs": [
+    {
+      "url": "https://download.geofabrik.de/asia/japan-261110.osm.pbf",
+      "sizeBytes": 2573340200,
+      "md5": "2b234a3fb7f0da8d1220d115450a5483",
+      "sourceTimestamp": "2026-11-10T21:21:39Z"
+    },
+    {
+      "url": "https://download.geofabrik.de/russia/far-eastern-fed-district-261110.osm.pbf",
+      "sizeBytes": 398033231,
+      "md5": "48669931d8906ba875f47b7d8b13ee98",
+      "sourceTimestamp": "2026-11-10T21:21:39Z"
+    }
+  ],
+  "dataSchemaFormat": "yamamuki-points",
+  "metadata": {
+    "sources": [
+      {
+        "name": "OpenStreetMap（日本・Geofabrik 配布）",
+        "source": "https://download.geofabrik.de/asia/japan-261110.osm.pbf",
+        "license": "ODbL-1.0",
+        "attribution": "© OpenStreetMap contributors",
+        "latestTimestamp": "2026-11-09T01:17:28Z"
+      },
+      {
+        "name": "OpenStreetMap（ロシア極東連邦管区・Geofabrik 配布）",
+        "source": "https://download.geofabrik.de/russia/far-eastern-fed-district-261110.osm.pbf",
+        "license": "ODbL-1.0",
+        "attribution": "© OpenStreetMap contributors"
+      },
+      {
+        "name": "国土地理院",
+        "source": "国土地理院の地点原本 points/gsi-peaks/gsi-peaks-source.json。日本の主な山岳標高一覧 https://www.gsi.go.jp/KOKUJYOHO/MOUNTAIN/1003zan20260331.csv ; 最適化ベクトルタイル https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/optimal_bvmap-v1.pmtiles ; 自然地名 https://github.com/gsi-cyberjapan/experimental_pni",
+        "license": "PDL-1.0 https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html",
+        "attribution": "出典：国土地理院（日本の主な山岳標高一覧・最適化ベクトルタイル・自然地名）を加工して作成",
+        "changes": "国土地理院の地点の位置・名称・別名を使って対応する OSM ノードを選定し、GSI 版の採用地点・名称・読み・別名・配布除外を反映した。作成者がビューアーで手動調整した。国土地理院の資料を使って標高の一部を補正した。座標は OSM 原本を維持する。"
+      },
+      {
+        "name": "日本百名山",
+        "source": "Wikipedia「日本百名山」の「著書順の山の一覧」 https://ja.wikipedia.org/w/index.php?title=日本百名山#著書順の山の一覧",
+        "license": "CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/",
+        "attribution": "Wikipedia「日本百名山」の投稿者 https://ja.wikipedia.org/w/index.php?title=日本百名山&action=history",
+        "changes": "山名一覧を国土地理院の地点 ID に対応付けた採用地点を、OSM の名前・別名・位置と照合して OSM の地点 ID に対応付け、作成者がビューアーで採用地点・名称・読み・別名・タグ・配布除外を手動調整した。"
+      }
+    ],
+    "authors": [
+      {
+        "name": "The yamamuki Authors",
+        "role": "配布データの編集・加工",
+        "url": "https://github.com/shohei0205/yamamuki-data/blob/main/AUTHORS.md"
+      }
+    ],
+    "pointCount": 14096,
+    "tags": [
+      {
+        "name": "日本百名山",
+        "nameReading": "にほんひゃくめいざん"
+      }
+    ]
+  }
+}
