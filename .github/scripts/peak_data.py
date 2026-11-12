@@ -488,16 +488,11 @@ def manifest_changes(name_status):
 
 
 def base_stable_count(base):
-    """base の時点の osm-peaks の stable の件数。カタログが無ければ参照先ファイルから読む。どちらも無ければ None。"""
+    """base の時点の osm-peaks の stable の件数。base にカタログが無ければ None。"""
     try:
         tag = validate_catalog(json.loads(git("show", f"{base}:{(SITE_DATA_DIR / CATALOG_NAME).as_posix()}")))[APP_DATASET]["stable"]
     except subprocess.CalledProcessError:
-        try:
-            # カタログより前の current.json には dev もあったので、stable だけを読む。
-            pointer = json.loads(git("show", f"{base}:{(SITE_DATA_DIR / POINTER_DATASET / POINTER_NAME).as_posix()}"))
-            tag = validate_entry(pointer.get("stable"), POINTER_DATASET, "stable", "base の current.json")
-        except subprocess.CalledProcessError:
-            return None
+        return None
     return point_count(json.loads(git("show", f"{base}:{manifests_dir(APP_DATASET).as_posix()}/{tag}.json")))
 
 
@@ -553,7 +548,7 @@ def check(root, base, allow_count_drop):
 
     old = base_stable_count(base)
     if old is None:
-        notes.append("main にカタログも current.json もまだ無いので、件数の比較はしません。")
+        notes.append("main にカタログがまだ無いので、件数の比較はしません。")
     else:
         new = point_count(json.loads(local_manifest(root, tags[APP_DATASET]["stable"])))
         drop = count_drop(old, new)

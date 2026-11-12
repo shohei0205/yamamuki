@@ -331,7 +331,7 @@ class SwapV6Test(SiteTestCase):
 
 
 class CheckTest(SiteTestCase):
-    """check を、git と通信を差し替えて動かす。base にはカタログも current.json も無いことにする。"""
+    """check を、git と通信を差し替えて動かす。base にはカタログが無いことにする。"""
 
     def run_check(self):
         def git(*args):
@@ -358,10 +358,10 @@ class CheckTest(SiteTestCase):
         pd.pointer_path(self.root).unlink()
         self.run_check()
 
-    def test_compares_count_with_pointer_of_base_before_catalog(self):
+    def test_compares_count_with_catalog_of_base(self):
         old = manifest_bytes(STABLE_OLD, count=20000)
-        shown = {f"origin/main:site/data/osm-peaks/current.json":
-                 json.dumps({"schemaVersion": 1, "stable": entry(STABLE_OLD), "dev": entry(DEV)}),
+        shown = {"origin/main:site/data/catalog.json":
+                 json.dumps(catalog(osm_peaks={"stable": pd.entry_for(STABLE_OLD, old)})),
                  f"origin/main:site/data/osm-peaks/manifests/{STABLE_OLD}.json": old.decode()}
 
         def git(*args):
@@ -375,6 +375,19 @@ class CheckTest(SiteTestCase):
                 mock.patch("builtins.print"), self.assertRaises(pd.PeakDataError) as raised:
             pd.check(self.root, "origin/main", False)
         self.assertIn("1 件", str(raised.exception))
+
+    def test_does_not_read_count_from_pointer_of_base(self):
+        # base にカタログが無ければ、current.json があっても件数は比べない（カタログより前の形はもう読まない）。
+        shown = {"origin/main:site/data/osm-peaks/current.json":
+                 json.dumps({"schemaVersion": 1, "stable": entry(STABLE_OLD)})}
+
+        def git(*args):
+            if args[1] not in shown:
+                raise subprocess.CalledProcessError(128, "git")
+            return shown[args[1]]
+
+        with mock.patch.object(pd, "git", side_effect=git):
+            self.assertIsNone(pd.base_stable_count("origin/main"))
 
     def test_fails_when_sha256_differs(self):
         value = self.catalog()
