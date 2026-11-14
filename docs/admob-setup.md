@@ -13,7 +13,7 @@
 
 ## 1. AdMob のアカウントを作る
 
-- https://admob.google.com/ に Google アカウント（shohei0205@gmail.com など）でログインし、国（日本）・タイムゾーン・通貨（JPY）を選んで登録する。費用はかからない。
+- https://admob.google.com/ に Google アカウントでログインし、国（日本）・タイムゾーン・通貨（JPY）を選んで登録する。費用はかからない。
 - 「お支払い」で次を入れる。
   - 税務情報: 米国外の個人として W-8BEN を画面の質問に答えて出す（日本は米国との租税条約で源泉徴収 0%）。
   - 住所の確認: 収益が約 1,000 円になると PIN が郵送されるので、届いたら入力する。
@@ -59,17 +59,15 @@ ID を渡さないと Google のテスト用 ID を使い、「Test Ad」と書�
 ## 4. app-ads.txt を置く
 
 - AdMob の「アプリ」→「app-ads.txt」に出る 1 行（`google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0`）を、ストアに登録した「デベロッパーのウェブサイト」のドメイン直下に `app-ads.txt` として置く。
-- 今の GitHub Pages（`https://shohei0205.github.io/yamamuki/`）はドメイン直下ではないので、次のどれかが要る。
-  - リポジトリ `shohei0205/shohei0205.github.io` を作り、直下に `app-ads.txt` を置いて Pages を有効にする（`https://shohei0205.github.io/app-ads.txt` になる）。いちばん手軽。
-  - 独自ドメインを使う。
-- Google Play Console と App Store Connect のデベロッパーのウェブサイトを `https://shohei0205.github.io/` にする。
+- このリポジトリの GitHub Pages（`https://shohei0205.github.io/yamamuki/`）はドメイン直下ではないので、置き場所には使えない。
+- 置き場所のドメインは、Google Play Console と App Store Connect のデベロッパーのウェブサイトと同じにする。
 - AdMob が確認するまで 24 時間ほどかかる。置かないと広告の収益が大きく減ることがある。
 
 ## 5. プライバシーポリシーとストアの申告
 
 広告入りの版を公開する前に済ませる。
 
-- プライバシーポリシー（`site/privacy/index.html`）に、広告のために Google AdMob を使うこと、AdMob が広告 ID・IP アドレス・端末の情報などを集めること、Google のポリシーへのリンク（https://policies.google.com/technologies/partner-sites ）を書き足す。位置情報は広告に渡さないことも書く（まだ書いていない）。
+- プライバシーポリシー（`site/privacy/index.html`）に、広告のために Google AdMob を使うこと、AdMob が広告 ID・IP アドレス・端末の情報などを集めること、Google のポリシーへのリンク（https://policies.google.com/technologies/partner-sites ）を書き足す。位置情報は広告に渡さないことも書く。
 - Google Play Console
   - 「アプリのコンテンツ」→「広告」:「はい、広告が含まれています」。
   - 「広告 ID」: AdMob の SDK が広告 ID の権限（`AD_ID`）を足すので「はい」、目的は「広告またはマーケティング」。
