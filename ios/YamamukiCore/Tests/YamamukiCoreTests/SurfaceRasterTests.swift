@@ -74,46 +74,75 @@ final class SurfaceRasterTests: XCTestCase {
         }
     }
 
-    /// タイルの位置と画素の位置を色に書いた、見本のタイル。0xFF000000 | (x の下位 4 ビット, y の下位 4 ビット, 画素の列, 画素の行)。
-    private func probe(_ x: Int, _ y: Int, _ px: Int, _ py: Int) -> UInt32 {
-        UInt32(0xFF << 24 | (x & 0xF) << 20 | (y & 0xF) << 16 | px << 8 | py)
+    /// 緯度経度が、`frame` の一辺 `size` の画像のどの画素に当たるか(列, 行)。
+    private func pixelOf(_ frame: SurfaceFrame, _ size: Int, _ lat: Double, _ lon: Double) -> (i: Int, j: Int) {
+        let d = GeoMath.distanceKm(frame.centerLat, frame.centerLon, lat, lon)
+        let b = GeoMath.bearingDeg(frame.centerLat, frame.centerLon, lat, lon) * .pi / 180
+        let i = Int((d * sin(b) + frame.radiusKm) / (frame.radiusKm * 2) * Double(size))
+        let j = Int((frame.radiusKm - d * cos(b)) / (frame.radiusKm * 2) * Double(size))
+        return (i, j)
     }
 
-    func testRenderPutsNorthUpAndSamplesTheRightPixel() throws {
+    /// タイルごとに違う 1 色。
+    private func colorOf(_ tile: SurfaceTile) -> UInt32 {
+        UInt32(0xFF << 24 | (tile.x & 0xFF) << 16 | (tile.y & 0xFF) << 8 | 0x7F)
+    }
+
+    func testRenderPutsEachTileWhereItsPlaceIs() throws {
         let level = SurfaceLevel(z: 9, tilePixels: 16)
-        let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 30)
-        let size = 64
+        let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 80)
+        let size = 128
         var requested: [SurfaceTile] = []
         let image = try SurfaceRaster.render(frame, level: level, size: size) { tile in
             requested.append(tile)
-            return (0..<256).map { self.probe(tile.x, tile.y, $0 % 16, $0 / 16) }
+            return [UInt32](repeating: self.colorOf(tile), count: 256)
         }
         // 1 枚のタイルにつき 1 回だけ読む。
         XCTAssertEqual(Set(requested).count, requested.count)
         XCTAssertTrue(Set(requested).isSubset(of: Set(SurfaceRaster.tiles(frame, z: 9))))
+        // タイルの中央は、そのタイルの色になる。
+        var checked = 0
+        for tile in SurfaceRaster.tiles(frame, z: 9) {
+            let box = tile.bounds
+            let p = pixelOf(frame, size, (box.north + box.south) / 2, (box.west + box.east) / 2)
+            guard (0..<size).contains(p.i), (0..<size).contains(p.j) else { continue }
+            XCTAssertEqual(image[p.j * size + p.i], colorOf(tile), "tile \(tile)")
+            checked += 1
+        }
+        XCTAssertGreaterThanOrEqual(checked, 4)
+        // 中心は画像の中央、北は上、東は右。
+        let middle = pixelOf(frame, size, fujiLat, fujiLon)
+        XCTAssertEqual(middle.i, size / 2)
+        XCTAssertEqual(middle.j, size / 2)
+        let north = GeoMath.destination(fujiLat, fujiLon, distanceKm: 40, bearingDeg: 0)
+        XCTAssertLessThan(pixelOf(frame, size, north.lat, north.lon).j, size / 2)
+        let east = GeoMath.destination(fujiLat, fujiLon, distanceKm: 40, bearingDeg: 90)
+        XCTAssertGreaterThan(pixelOf(frame, size, east.lat, east.lon).i, size / 2)
+    }
 
-        func expected(_ lat: Double, _ lon: Double) -> UInt32 {
-            let tile = SurfaceTiles.tileAt(lat, lon, z: 9)
-            let px = Int((SurfaceTiles.worldU(lon) * 512 - Double(tile.x)) * 16)
-            let py = Int((SurfaceTiles.worldV(lat) * 512 - Double(tile.y)) * 16)
-            return probe(tile.x, tile.y, px, py)
+    func testRenderInterpolatesBetweenPixels() throws {
+        // 右へ行くほど青が濃くなるタイル(列 × 10)。画像を元の画素より細かく作ると、間の値で埋まる。
+        let level = SurfaceLevel(z: 9, tilePixels: 16)
+        let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 8)
+        let size = 96
+        let tile = SurfaceTiles.tileAt(fujiLat, fujiLon, z: 9)
+        let image = try SurfaceRaster.render(frame, level: level, size: size) { _ in
+            (0..<256).map { UInt32(0xFF << 24 | $0 % 16 * 10) }
         }
-        /// 画像の画素 (i, j) の中心の緯度経度。
-        func at(_ i: Int, _ j: Int) -> (lat: Double, lon: Double) {
-            let east = (Double(i) + 0.5) / Double(size) * 60 - 30
-            let north = 30 - (Double(j) + 0.5) / Double(size) * 60
-            return GeoMath.destination(fujiLat, fujiLon, distanceKm: hypot(east, north), bearingDeg: atan2(east, north) * 180 / .pi)
+        var blues = Set<Int>()
+        for i in 0..<size {
+            let east = (Double(i) + 0.5) / Double(size) * 16 - 8
+            let p = GeoMath.destination(fujiLat, fujiLon, distanceKm: abs(east), bearingDeg: east >= 0 ? 90 : 270)
+            guard SurfaceTiles.tileAt(p.lat, p.lon, z: 9) == tile else { continue }
+            let column = (SurfaceTiles.worldU(p.lon) * 512 - Double(tile.x)) * 16 - 0.5
+            guard column >= 0.5, column <= 14.5 else { continue }
+            let value = image[size / 2 * size + i]
+            XCTAssertEqual(Double(value & 0xFF), column * 10, accuracy: 2, "列 \(i)")
+            XCTAssertEqual(value >> 24, 0xFF)
+            blues.insert(Int(value & 0xFF))
         }
-        // 格子の点の間も、正確に求めた位置と同じ画素を写している(ずれても隣の画素まで)。
-        let samples = [(0, 0), (63, 0), (0, 63), (63, 63), (32, 32), (10, 50), (45, 7), (31, 33)]
-        let exact = samples.filter { i, j in
-            let p = at(i, j)
-            return image[j * size + i] == expected(p.lat, p.lon)
-        }.count
-        XCTAssertGreaterThanOrEqual(exact, samples.count - 1)
-        // 上の行ほど北、右の列ほど東。
-        XCTAssertGreaterThan(at(32, 0).lat, at(32, 63).lat)
-        XCTAssertGreaterThan(at(63, 32).lon, at(0, 32).lon)
+        // 元の 16 段より細かい値が出ている。
+        XCTAssertGreaterThan(blues.count, 20)
     }
 
     func testRenderLeavesMissingTilesTransparent() throws {
@@ -125,8 +154,21 @@ final class SurfaceRasterTests: XCTestCase {
         }
         XCTAssertEqual(image[16 * 32 + 16], 0xFF112233)
         XCTAssertTrue(image.contains(0))
-        XCTAssertTrue(image.allSatisfy { $0 == 0 || $0 == 0xFF112233 })
+        // データの無いタイルとの境目は透明度だけが変わり、色は混ざらない。
+        XCTAssertTrue(image.allSatisfy { $0 == 0 || $0 & 0xFFFFFF == 0x112233 })
         // 大きさの合わないタイルは受け取らない。
         XCTAssertThrowsError(try SurfaceRaster.render(frame, level: level, size: 32) { _ in [UInt32](repeating: 0, count: 10) })
+    }
+
+    func testBlendMixesByWeightAndIgnoresTransparentColors() {
+        let red: UInt32 = 0xFFFF0000
+        let blue: UInt32 = 0xFF0000FF
+        XCTAssertEqual(SurfaceRaster.blend(red, red, red, red, 100, 200), red)
+        XCTAssertEqual(SurfaceRaster.blend(red, blue, red, blue, 0, 0), red)
+        XCTAssertEqual(SurfaceRaster.blend(red, blue, red, blue, 128, 77), 0xFF800080)
+        XCTAssertEqual(SurfaceRaster.blend(red, red, blue, blue, 31, 128), 0xFF800080)
+        // 透明な画素の色(黒)は混ざらず、透明度だけが下がる。
+        XCTAssertEqual(SurfaceRaster.blend(red, 0, red, 0, 128, 0), 0x80FF0000)
+        XCTAssertEqual(SurfaceRaster.blend(0, 0, 0, 0x00FFFFFF, 128, 128), 0)
     }
 }

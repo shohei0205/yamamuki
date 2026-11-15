@@ -74,6 +74,26 @@ public enum SurfaceRaster {
         return coarseFirst.first { SurfaceTiles.metersPerPixel($0, lat: frame.centerLat) <= target } ?? coarseFirst.last
     }
 
+    /// 補間の重みを整数で持つときの 1.0。
+    private static let weightOne = 256
+
+    /// 左上・右上・左下・右下の 4 画素(0xAARRGGBB)を、右への重み `wx` と下への重み `wy`(0〜`weightOne`)で混ぜる。
+    /// 透明な画素の色が混ざらないよう、色は透明度を掛けてから混ぜる。整数で計算し、両 OS で同じ色にする。
+    static func blend(_ c00: UInt32, _ c10: UInt32, _ c01: UInt32, _ c11: UInt32, _ wx: Int, _ wy: Int) -> UInt32 {
+        if c00 == c10 && c00 == c01 && c00 == c11 { return c00 }
+        let colors = [Int(c00), Int(c10), Int(c01), Int(c11)]
+        let weights = [(weightOne - wx) * (weightOne - wy), wx * (weightOne - wy), (weightOne - wx) * wy, wx * wy]
+        let alphas = (0..<4).map { (colors[$0] >> 24 & 0xFF) * weights[$0] }
+        let alphaSum = alphas.reduce(0, +)
+        if alphaSum == 0 { return 0 }
+        let total = weightOne * weightOne
+        let alpha = (alphaSum + total / 2) / total
+        func channel(_ shift: Int) -> Int {
+            ((0..<4).reduce(0) { $0 + (colors[$1] >> shift & 0xFF) * alphas[$1] } + alphaSum / 2) / alphaSum
+        }
+        return UInt32(alpha << 24 | channel(16) << 16 | channel(8) << 8 | channel(0))
+    }
+
     /// `frame` の画像を作るのに要る、ズーム `z` のタイル。
     public static func tiles(_ frame: SurfaceFrame, z: Int) -> [SurfaceTile] {
         // 画像の角は、中心から半径の √2 倍の距離にある。
@@ -81,7 +101,8 @@ public enum SurfaceRaster {
         return SurfaceTiles.covering(box, z: z)
     }
 
-    /// `frame` の画像を作る。左上から行ごとに並べた一辺 `size` の画像で、1 画素は `tile` が返す値(0xAARRGGBB)をそのまま写す。
+    /// `frame` の画像を作る。左上から行ごとに並べた一辺 `size` の画像で、1 画素(0xAARRGGBB)は `tile` が返す画像の
+    /// 周りの 4 画素から滑らかに求める。
     ///
     /// - Parameter tile: `level` のタイルの画像(`SurfaceCompositor.compose` の結果。一辺は `SurfaceLevel.tilePixels`)。
     ///   データの無いタイルは nil を返す。その場所は透明(0)になる。1 枚のタイルにつき 1 回だけ呼ぶ。
@@ -111,9 +132,33 @@ public enum SurfaceRaster {
             }
         }
 
+        // タイルをまたいで、世界全体の画素の位置(列・行)から色を読む。データの無い場所は透明(0)。
         var loaded: [Int: [UInt32]?] = [:]
         var currentKey = -1
         var current: [UInt32]?
+        let worldPixels = (last + 1) * tilePixels
+        func pixel(_ gx: Int, _ gy: Int) throws -> UInt32 {
+            if gx < 0 || gy < 0 || gx >= worldPixels || gy >= worldPixels { return 0 }
+            let tx = gx / tilePixels
+            let ty = gy / tilePixels
+            let key = ty * (last + 1) + tx
+            if key != currentKey {
+                currentKey = key
+                if let known = loaded[key] {
+                    current = known
+                } else {
+                    let image = try tile(SurfaceTile(z: level.z, x: tx, y: ty))
+                    if let image, image.count != tilePixels * tilePixels {
+                        throw SurfaceDataError("タイルの画素数 \(image.count) が \(tilePixels * tilePixels) ではありません")
+                    }
+                    loaded[key] = .some(image)
+                    current = image
+                }
+            }
+            guard let image = current else { return 0 }
+            return image[(gy - ty * tilePixels) * tilePixels + (gx - tx * tilePixels)]
+        }
+
         for j in 0..<size {
             let b = j / grid
             let fy = (Double(j) + 0.5 - Double(b * grid)) / Double(grid)
@@ -123,29 +168,16 @@ public enum SurfaceRaster {
                 let n = b * nodes + a
                 let u = (us[n] * (1 - fx) + us[n + 1] * fx) * (1 - fy) + (us[n + nodes] * (1 - fx) + us[n + nodes + 1] * fx) * fy
                 let v = (vs[n] * (1 - fx) + vs[n + 1] * fx) * (1 - fy) + (vs[n + nodes] * (1 - fx) + vs[n + nodes + 1] * fx) * fy
-                let wx = u * tileCount
-                let wy = v * tileCount
-                let tx = Int(floor(wx))
-                let ty = Int(floor(wy))
-                if tx < 0 || tx > last || ty < 0 || ty > last { continue }
-                let key = ty * (last + 1) + tx
-                if key != currentKey {
-                    currentKey = key
-                    if let known = loaded[key] {
-                        current = known
-                    } else {
-                        let image = try tile(SurfaceTile(z: level.z, x: tx, y: ty))
-                        if let image, image.count != tilePixels * tilePixels {
-                            throw SurfaceDataError("タイルの画素数 \(image.count) が \(tilePixels * tilePixels) ではありません")
-                        }
-                        loaded[key] = .some(image)
-                        current = image
-                    }
-                }
-                guard let image = current else { continue }
-                let px = min(Int((wx - Double(tx)) * Double(tilePixels)), tilePixels - 1)
-                let py = min(Int((wy - Double(ty)) * Double(tilePixels)), tilePixels - 1)
-                out[j * size + i] = image[py * tilePixels + px]
+                // 画素の中心を基準に、周りの 4 画素から滑らかに求める(元の画素が四角く見えないように)。
+                let gx = u * Double(worldPixels) - 0.5
+                let gy = v * Double(worldPixels) - 0.5
+                let x0 = Int(floor(gx))
+                let y0 = Int(floor(gy))
+                let wx = Int((gx - Double(x0)) * Double(weightOne))
+                let wy = Int((gy - Double(y0)) * Double(weightOne))
+                out[j * size + i] = blend(
+                    try pixel(x0, y0), try pixel(x0 + 1, y0), try pixel(x0, y0 + 1), try pixel(x0 + 1, y0 + 1), wx, wy
+                )
             }
         }
         return out

@@ -73,6 +73,34 @@ object SurfaceRaster {
         return coarseFirst.firstOrNull { SurfaceTiles.metersPerPixel(it, frame.centerLat) <= target } ?: coarseFirst.lastOrNull()
     }
 
+    /** 補間の重みを整数で持つときの 1.0。 */
+    private const val WEIGHT_ONE = 256
+
+    /**
+     * 左上・右上・左下・右下の 4 画素(0xAARRGGBB)を、右への重み [wx] と下への重み [wy](0〜[WEIGHT_ONE])で混ぜる。
+     * 透明な画素の色が混ざらないよう、色は透明度を掛けてから混ぜる。整数で計算し、両 OS で同じ色にする。
+     */
+    internal fun blend(c00: Int, c10: Int, c01: Int, c11: Int, wx: Int, wy: Int): Int {
+        if (c00 == c10 && c00 == c01 && c00 == c11) return c00
+        val w00 = (WEIGHT_ONE - wx) * (WEIGHT_ONE - wy)
+        val w10 = wx * (WEIGHT_ONE - wy)
+        val w01 = (WEIGHT_ONE - wx) * wy
+        val w11 = wx * wy
+        val a00 = (c00 ushr 24).toLong() * w00
+        val a10 = (c10 ushr 24).toLong() * w10
+        val a01 = (c01 ushr 24).toLong() * w01
+        val a11 = (c11 ushr 24).toLong() * w11
+        val alphaSum = a00 + a10 + a01 + a11
+        if (alphaSum == 0L) return 0
+        val total = WEIGHT_ONE.toLong() * WEIGHT_ONE
+        val alpha = ((alphaSum + total / 2) / total).toInt()
+        fun channel(shift: Int): Int = ((
+            (c00 shr shift and 0xFF) * a00 + (c10 shr shift and 0xFF) * a10 +
+                (c01 shr shift and 0xFF) * a01 + (c11 shr shift and 0xFF) * a11 + alphaSum / 2
+            ) / alphaSum).toInt()
+        return (alpha shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+    }
+
     /** [frame] の画像を作るのに要る、ズーム [z] のタイル。 */
     fun tiles(frame: SurfaceFrame, z: Int): List<SurfaceTile> {
         // 画像の角は、中心から半径の √2 倍の距離にある。
@@ -81,7 +109,8 @@ object SurfaceRaster {
     }
 
     /**
-     * [frame] の画像を作る。左上から行ごとに並べた一辺 [size] の画像で、1 画素は [tile] が返す値(0xAARRGGBB)をそのまま写す。
+     * [frame] の画像を作る。左上から行ごとに並べた一辺 [size] の画像で、1 画素(0xAARRGGBB)は [tile] が返す画像の
+     * 周りの 4 画素から滑らかに求める。
      *
      * @param tile [level] のタイルの画像([SurfaceCompositor.compose] の結果。一辺は [SurfaceLevel.tilePixels])。
      *   データの無いタイルは null を返す。その場所は透明(0)になる。1 枚のタイルにつき 1 回だけ呼ぶ。
@@ -110,9 +139,33 @@ object SurfaceRaster {
             }
         }
 
+        // タイルをまたいで、世界全体の画素の位置(列・行)から色を読む。データの無い場所は透明(0)。
         val loaded = HashMap<Long, IntArray?>()
         var currentKey = -1L
         var current: IntArray? = null
+        val worldPixels = (last + 1L) * tilePixels
+        fun pixel(gx: Long, gy: Long): Int {
+            if (gx < 0 || gy < 0 || gx >= worldPixels || gy >= worldPixels) return 0
+            val tx = (gx / tilePixels).toInt()
+            val ty = (gy / tilePixels).toInt()
+            val key = ty.toLong() * (last + 1L) + tx
+            if (key != currentKey) {
+                currentKey = key
+                current = if (loaded.containsKey(key)) {
+                    loaded[key]
+                } else {
+                    val image = tile(SurfaceTile(level.z, tx, ty))
+                    require(image == null || image.size == tilePixels * tilePixels) {
+                        "タイルの画素数 ${image?.size} が ${tilePixels * tilePixels} ではありません"
+                    }
+                    loaded[key] = image
+                    image
+                }
+            }
+            val image = current ?: return 0
+            return image[(gy - ty.toLong() * tilePixels).toInt() * tilePixels + (gx - tx.toLong() * tilePixels).toInt()]
+        }
+
         for (j in 0 until size) {
             val b = j / GRID
             val fy = (j + 0.5 - b * GRID) / GRID
@@ -122,29 +175,16 @@ object SurfaceRaster {
                 val n = b * nodes + a
                 val u = (us[n] * (1 - fx) + us[n + 1] * fx) * (1 - fy) + (us[n + nodes] * (1 - fx) + us[n + nodes + 1] * fx) * fy
                 val v = (vs[n] * (1 - fx) + vs[n + 1] * fx) * (1 - fy) + (vs[n + nodes] * (1 - fx) + vs[n + nodes + 1] * fx) * fy
-                val wx = u * tileCount
-                val wy = v * tileCount
-                val tx = floor(wx).toInt()
-                val ty = floor(wy).toInt()
-                if (tx < 0 || tx > last || ty < 0 || ty > last) continue
-                val key = ty.toLong() * (last + 1L) + tx
-                if (key != currentKey) {
-                    currentKey = key
-                    current = if (loaded.containsKey(key)) {
-                        loaded[key]
-                    } else {
-                        val image = tile(SurfaceTile(level.z, tx, ty))
-                        require(image == null || image.size == tilePixels * tilePixels) {
-                            "タイルの画素数 ${image?.size} が ${tilePixels * tilePixels} ではありません"
-                        }
-                        loaded[key] = image
-                        image
-                    }
-                }
-                val image = current ?: continue
-                val px = ((wx - tx) * tilePixels).toInt().coerceAtMost(tilePixels - 1)
-                val py = ((wy - ty) * tilePixels).toInt().coerceAtMost(tilePixels - 1)
-                out[j * size + i] = image[py * tilePixels + px]
+                // 画素の中心を基準に、周りの 4 画素から滑らかに求める(元の画素が四角く見えないように)。
+                val gx = u * worldPixels - 0.5
+                val gy = v * worldPixels - 0.5
+                val x0 = floor(gx).toLong()
+                val y0 = floor(gy).toLong()
+                val wx = ((gx - x0) * WEIGHT_ONE).toInt()
+                val wy = ((gy - y0) * WEIGHT_ONE).toInt()
+                out[j * size + i] = blend(
+                    pixel(x0, y0), pixel(x0 + 1, y0), pixel(x0, y0 + 1), pixel(x0 + 1, y0 + 1), wx, wy,
+                )
             }
         }
         return out

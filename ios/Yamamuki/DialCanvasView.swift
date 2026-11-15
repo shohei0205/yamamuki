@@ -84,6 +84,10 @@ struct DialCanvasView: View, Animatable {
     var viewFanAlpha: Double
     /// 画面下端の余白(ホームインジケーターなど)の高さ。視野の扇の外側の暗さだけを、ここまで描き足す。
     var bottomBleed: CGFloat = 0
+    /// 背景に貼る地表(森林・水域・陰影)の画像。地表を表示しないときと、まだ画像が無いときは nil。
+    var surface: SurfaceLayerImage?
+    /// 地表を表示している。距離の帯の色分けを地表に重ねず、同心円の線だけにする。
+    var surfaceShown = false
     let onPan: (Double, Double, Double) -> Void
     let onTransform: (Double, Double, PlanOffset, PlanOffset, Double) -> Void
     let onMountainTap: (NearbyMountain) -> Void
@@ -150,7 +154,10 @@ struct DialCanvasView: View, Animatable {
         var groundContext = ctx
         let groundTop = headerHeight + tapeHeight
         groundContext.clip(to: Path(CGRect(x: 0, y: groundTop, width: size.width, height: max(0, size.height + bottomBleed - groundTop))))
-        if pxPerKm > 0 {
+        if pxPerKm > 0, let surface, let observerLocation {
+            drawSurface(groundContext, surface: surface, observer: observer, pxPerKm: pxPerKm, location: observerLocation)
+        }
+        if pxPerKm > 0, !surfaceShown {
             drawGroundBands(groundContext, observer: observer, pxPerKm: pxPerKm)
         }
         if viewFanAlpha > 0 {
@@ -203,6 +210,20 @@ struct DialCanvasView: View, Animatable {
         rotated.rotate(by: .degrees(Heading.delta(headingDeg, compassHeading)))
         rotated.translateBy(x: -center.x, y: -center.y)
         return rotated
+    }
+
+    /// 地表の画像を地面に貼る。画像は北が上なので、画像の中心を山と同じ計算(現在地からの距離と方位)で画面に置き、
+    /// 端末の向きの分だけ回す。
+    private func drawSurface(_ ctx: GraphicsContext, surface: SurfaceLayerImage, observer: CGPoint, pxPerKm: CGFloat, location: GeoPoint) {
+        let frame = surface.frame
+        let distanceKm = GeoMath.distanceKm(location.latitude, location.longitude, frame.centerLat, frame.centerLon)
+        let bearingDeg = GeoMath.bearingDeg(location.latitude, location.longitude, frame.centerLat, frame.centerLon)
+        let o = DialGeometry.project(distanceKm: distanceKm, bearingDeg: bearingDeg, headingDeg: headingDeg)
+        let half = CGFloat(frame.radiusKm) * pxPerKm
+        var ctx = ctx
+        ctx.translateBy(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
+        ctx.rotate(by: .degrees(-headingDeg))
+        ctx.draw(surface.image, in: CGRect(x: -half, y: -half, width: half * 2, height: half * 2))
     }
 
     /// 距離の円の間を、現在地に近いほど濃い淡い色で塗り分ける(groundBands)。遠い帯から順に重ねる。

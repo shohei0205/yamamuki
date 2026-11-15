@@ -80,48 +80,71 @@ class SurfaceRasterTest {
         }
     }
 
-    /** タイルの位置と画素の位置を色に書いた、見本のタイル。0xFF000000 | (x の下位 4 ビット, y の下位 4 ビット, 画素の列, 画素の行)。 */
-    private fun probeTile(tile: SurfaceTile, pixels: Int) = IntArray(pixels * pixels) { index ->
-        (0xFF shl 24) or ((tile.x and 0xF) shl 20) or ((tile.y and 0xF) shl 16) or ((index % pixels) shl 8) or (index / pixels)
+    /** 緯度経度が、[frame] の一辺 [size] の画像のどの画素に当たるか(列, 行)。 */
+    private fun pixelOf(frame: SurfaceFrame, size: Int, lat: Double, lon: Double): Pair<Int, Int> {
+        val d = GeoMath.distanceKm(frame.centerLat, frame.centerLon, lat, lon)
+        val b = Math.toRadians(GeoMath.bearingDeg(frame.centerLat, frame.centerLon, lat, lon))
+        val i = ((d * kotlin.math.sin(b) + frame.radiusKm) / (frame.radiusKm * 2) * size).toInt()
+        val j = ((frame.radiusKm - d * kotlin.math.cos(b)) / (frame.radiusKm * 2) * size).toInt()
+        return i to j
     }
 
+    /** タイルごとに違う 1 色。 */
+    private fun colorOf(tile: SurfaceTile) = (0xFF shl 24) or ((tile.x and 0xFF) shl 16) or ((tile.y and 0xFF) shl 8) or 0x7F
+
     @Test
-    fun renderPutsNorthUpAndSamplesTheRightPixel() {
+    fun renderPutsEachTileWhereItsPlaceIs() {
         val level = SurfaceLevel(9, 16)
-        val frame = SurfaceFrame(fujiLat, fujiLon, 30.0)
-        val size = 64
+        val frame = SurfaceFrame(fujiLat, fujiLon, 80.0)
+        val size = 128
         val requested = mutableListOf<SurfaceTile>()
         val image = SurfaceRaster.render(frame, level, size) { tile ->
             requested += tile
-            probeTile(tile, level.tilePixels)
+            IntArray(256) { colorOf(tile) }
         }
         // 1 枚のタイルにつき 1 回だけ読む。
         assertEquals(requested.size, requested.toSet().size)
         assertTrue(requested.toSet().all { it in SurfaceRaster.tiles(frame, 9).toSet() })
+        // タイルの中央は、そのタイルの色になる。
+        var checked = 0
+        for (tile in SurfaceRaster.tiles(frame, 9)) {
+            val box = tile.bounds
+            val (i, j) = pixelOf(frame, size, (box.north + box.south) / 2, (box.west + box.east) / 2)
+            if (i !in 0 until size || j !in 0 until size) continue
+            assertEquals(colorOf(tile), image[j * size + i], "tile $tile")
+            checked++
+        }
+        assertTrue(checked >= 4, "確かめたタイル $checked 枚")
+        // 中心は画像の中央、北は上、東は右。
+        assertEquals(size / 2 to size / 2, pixelOf(frame, size, fujiLat, fujiLon))
+        val (northLat, northLon) = GeoMath.destination(fujiLat, fujiLon, 40.0, 0.0)
+        assertTrue(pixelOf(frame, size, northLat, northLon).second < size / 2)
+        val (eastLat, eastLon) = GeoMath.destination(fujiLat, fujiLon, 40.0, 90.0)
+        assertTrue(pixelOf(frame, size, eastLat, eastLon).first > size / 2)
+    }
 
-        fun expected(lat: Double, lon: Double): Int {
-            val tile = SurfaceTiles.tileAt(lat, lon, 9)
-            val px = ((SurfaceTiles.worldU(lon) * 512 - tile.x) * 16).toInt()
-            val py = ((SurfaceTiles.worldV(lat) * 512 - tile.y) * 16).toInt()
-            return (0xFF shl 24) or ((tile.x and 0xF) shl 20) or ((tile.y and 0xF) shl 16) or (px shl 8) or py
+    @Test
+    fun renderInterpolatesBetweenPixels() {
+        // 右へ行くほど青が濃くなるタイル(列 × 10)。画像を元の画素より細かく作ると、間の値で埋まる。
+        val level = SurfaceLevel(9, 16)
+        val frame = SurfaceFrame(fujiLat, fujiLon, 8.0)
+        val size = 96
+        val tile = SurfaceTiles.tileAt(fujiLat, fujiLon, 9)
+        val image = SurfaceRaster.render(frame, level, size) { IntArray(256) { index -> (0xFF shl 24) or (index % 16 * 10) } }
+        val blues = mutableSetOf<Int>()
+        for (i in 0 until size) {
+            val east = (i + 0.5) / size * 16.0 - 8.0
+            val (lat, lon) = GeoMath.destination(fujiLat, fujiLon, kotlin.math.abs(east), if (east >= 0) 90.0 else 270.0)
+            if (SurfaceTiles.tileAt(lat, lon, 9) != tile) continue
+            val column = (SurfaceTiles.worldU(lon) * 512 - tile.x) * 16 - 0.5
+            if (column < 0.5 || column > 14.5) continue
+            val blue = image[size / 2 * size + i] and 0xFF
+            assertEquals(column * 10, blue.toDouble(), 2.0, "列 $i")
+            assertEquals(0xFF, image[size / 2 * size + i] ushr 24)
+            blues += blue
         }
-        /** 画像の画素 (i, j) の中心の、中心からの東と北への距離(km)。 */
-        fun at(i: Int, j: Int): Pair<Double, Double> {
-            val east = (i + 0.5) / size * 60.0 - 30.0
-            val north = 30.0 - (j + 0.5) / size * 60.0
-            return GeoMath.destination(fujiLat, fujiLon, kotlin.math.hypot(east, north), Math.toDegrees(kotlin.math.atan2(east, north)))
-        }
-        // 格子の点の間も、正確に求めた位置と同じ画素を写している(ずれても隣の画素まで)。
-        var exact = 0
-        val samples = listOf(0 to 0, 63 to 0, 0 to 63, 63 to 63, 32 to 32, 10 to 50, 45 to 7, 31 to 33)
-        for ((i, j) in samples) {
-            val (lat, lon) = at(i, j)
-            if (image[j * size + i] == expected(lat, lon)) exact++
-        }
-        assertTrue(exact >= samples.size - 1, "一致した画素 $exact / ${samples.size}")
-        // 上の行ほど北、右の列ほど東。
-        assertTrue(at(32, 0).first > at(32, 63).first)
-        assertTrue(at(63, 32).second > at(0, 32).second)
+        // 元の 16 段より細かい値が出ている。
+        assertTrue(blues.size > 20, "青の値 ${blues.size} 種類")
     }
 
     @Test
@@ -132,8 +155,22 @@ class SurfaceRasterTest {
         val image = SurfaceRaster.render(frame, level, 32) { tile -> if (tile == center) IntArray(64) { 0xFF112233.toInt() } else null }
         assertEquals(0xFF112233.toInt(), image[16 * 32 + 16])
         assertTrue(image.any { it == 0 })
-        assertTrue(image.all { it == 0 || it == 0xFF112233.toInt() })
+        // データの無いタイルとの境目は透明度だけが変わり、色は混ざらない。
+        assertTrue(image.all { it == 0 || it and 0xFFFFFF == 0x112233 })
         // 大きさの合わないタイルは受け取らない。
         assertFailsWith<IllegalArgumentException> { SurfaceRaster.render(frame, level, 32) { IntArray(10) } }
+    }
+
+    @Test
+    fun blendMixesByWeightAndIgnoresTransparentColors() {
+        val red = 0xFFFF0000.toInt()
+        val blue = 0xFF0000FF.toInt()
+        assertEquals(red, SurfaceRaster.blend(red, red, red, red, 100, 200))
+        assertEquals(red, SurfaceRaster.blend(red, blue, red, blue, 0, 0))
+        assertEquals(0xFF800080.toInt(), SurfaceRaster.blend(red, blue, red, blue, 128, 77))
+        assertEquals(0xFF800080.toInt(), SurfaceRaster.blend(red, red, blue, blue, 31, 128))
+        // 透明な画素の色(黒)は混ざらず、透明度だけが下がる。
+        assertEquals(0x80FF0000.toInt(), SurfaceRaster.blend(red, 0, red, 0, 128, 0))
+        assertEquals(0, SurfaceRaster.blend(0, 0, 0, 0x00FFFFFF, 128, 128))
     }
 }
