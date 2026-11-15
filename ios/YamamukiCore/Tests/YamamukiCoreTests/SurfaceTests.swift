@@ -201,7 +201,7 @@ final class SurfaceTests: XCTestCase {
         let m = try parse(manifest())
         XCTAssertEqual(m.version, "20261112T164326Z-43261736372-1")
         XCTAssertEqual(m.releaseDate, "2026/11/12")
-        XCTAssertTrue(m.downloadUrl.hasSuffix("/esa-worldcover-z9.sqlite3"))
+        XCTAssertTrue(m.downloadUrl.absoluteString.hasSuffix("/esa-worldcover-z9.sqlite3"))
         XCTAssertEqual(m.sha256, "457d6881fcd48010a22908484b80da6c054fca35573184a3d940e2bbf4532ea0")
         XCTAssertEqual(m.sizeBytes, 17_572_352)
         XCTAssertEqual(m.datasetId, "esa-worldcover-japan")

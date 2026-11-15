@@ -21,7 +21,7 @@ public struct SurfaceManifest: Equatable, Sendable {
     /// データの版。生成時の UTC 日時と Actions の実行 ID をつないだ文字列。
     public let version: String
     /// データ本体(SQLite)の URL。
-    public let downloadUrl: String
+    public let downloadUrl: URL
     /// データ本体の SHA-256(小文字の16進数)。
     public let sha256: String
     /// データ本体のバイト数。
@@ -31,7 +31,7 @@ public struct SurfaceManifest: Equatable, Sendable {
     /// 試験版のデータ(experimental が true)。
     public let experimental: Bool
 
-    public init(version: String, downloadUrl: String, sha256: String, sizeBytes: Int, datasetId: String, experimental: Bool = false) {
+    public init(version: String, downloadUrl: URL, sha256: String, sizeBytes: Int, datasetId: String, experimental: Bool = false) {
         self.version = version
         self.downloadUrl = downloadUrl
         self.sha256 = sha256
@@ -118,15 +118,17 @@ public enum SurfaceData {
             throw SurfaceDataError("manifest の地表のデータセットに id がありません")
         }
 
+        guard let downloadUrl = URL(string: try string("downloadUrl")), downloadUrl.scheme == "https" else {
+            throw SurfaceDataError("manifest の downloadUrl が https ではありません")
+        }
         let manifest = SurfaceManifest(
             version: try string("version"),
-            downloadUrl: try string("downloadUrl"),
+            downloadUrl: downloadUrl,
             sha256: try string("sha256").lowercased(),
             sizeBytes: try int("sizeBytes"),
             datasetId: datasetId,
             experimental: root["experimental"] as? Bool == true
         )
-        guard manifest.downloadUrl.hasPrefix("https://") else { throw SurfaceDataError("manifest の downloadUrl が https ではありません") }
         guard manifest.sha256.count == 64, manifest.sha256.allSatisfy({ $0.isASCII && ($0.isNumber || ("a"..."f").contains($0)) }) else {
             throw SurfaceDataError("manifest の sha256 が SHA-256 の形ではありません")
         }
