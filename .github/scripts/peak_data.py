@@ -17,6 +17,9 @@ site/data/osm-peaks/current.json は 0.6.0・0.7.0 が読んでいた参照先�
   verify-live  公開中のカタログ・廃止した参照先ファイル・manifest が git の内容と同じかを確かめる（Pages の公開のあと）
   watch        公開中のカタログからたどれる manifest とデータ本体が取れて中身が合うかを確かめる（毎日の見張り）
 
+地表データ（方位盤の背景に描く森林・水域・陰影の SQLite。SURFACE_DATASETS）もカタログに入れられる。
+swap は山データだけを扱うので、地表データの行と manifest のコピーは手で足し、check・verify-live・watch で確かめる。
+
 標準ライブラリだけで動く。yamamuki-data は公開リポジトリなので、読むのに特別な権限は要らない
 （GH_TOKEN があれば API の回数制限を避けるために使う）。
 """
@@ -55,6 +58,19 @@ CHANNELS = ("stable", "dev")
 DATASETS = ("osm-peaks", "gsi-peaks")
 APP_DATASET = "osm-peaks"
 DATASET_LABELS = {"osm-peaks": "山データ", "gsi-peaks": "国土地理院の山データ（gsi-peaks）"}
+
+# 地表データ（方位盤の背景）。yamamuki-data は 1 つの Release に収録ズームの違う SQLite を添付するので、
+# カタログの種類は配布ファイルごとに分ける。release は Release のタグの頭、file はデータ本体のファイル名。
+# manifest のコピーは site/data/<種類>/manifests/<Release のタグ>.json に置く（元は Release の <file の拡張子抜き>.manifest.json）。
+# タグに dev の印は無く、試用版は Pre-release で見分ける。stable には Pre-release を書けない。
+SURFACE_DATASETS = {
+    "esa-worldcover-z9": {"release": "esa-worldcover", "file": "esa-worldcover-z9.sqlite3"},
+}
+SURFACE_TAG = re.compile(r"(?P<release>[a-z]+(?:-[a-z]+)*?)-\d{8}T\d{6}Z-\d+-\d+")
+SURFACE_DATA_SCHEMA_FORMAT = "yamamuki-sqlite"
+SURFACE_CONTAINER_VERSION = 1
+SURFACE_FORMAT_VERSION = 1
+MAX_SURFACE_BYTES = 100_000_000
 
 # 配布用（stable）の osm-peaks に書いてよい manifest の形式。配布中のアプリが読める版だけにする。
 # 新しい形式は dev で試し、読めるアプリが行き渡ってから、ここに足して stable に使う。
@@ -123,15 +139,50 @@ def releases(max_pages=50):
     raise PeakDataError(f"yamamuki-data の Release が {max_pages * 100} 件を超えていて、すべてを読めません")
 
 
-def release_manifest(tag):
-    """Release の manifest.json のバイト列と、Release の情報を返す。"""
+def release_asset(tag, name):
+    """Release に添付されたファイル name のバイト列と、Release の情報を返す。"""
     info = release(tag)
     if info.get("draft"):
         raise PeakDataError(f"{tag} は下書きの Release です")
-    assets = [a for a in info.get("assets", []) if a.get("name") == "manifest.json"]
+    assets = [a for a in info.get("assets", []) if a.get("name") == name]
     if len(assets) != 1:
-        raise PeakDataError(f"{tag} の Release に manifest.json がありません")
+        raise PeakDataError(f"{tag} の Release に {name} がありません")
     return http_get(assets[0]["browser_download_url"]), info
+
+
+def release_manifest(tag):
+    """Release の manifest.json のバイト列と、Release の情報を返す。"""
+    return release_asset(tag, "manifest.json")
+
+
+def surface_manifest_name(dataset):
+    """地表データの Release に添付された、その種類の manifest のファイル名。"""
+    return SURFACE_DATASETS[dataset]["file"].rsplit(".", 1)[0] + ".manifest.json"
+
+
+def surface_release_manifest(tag, dataset):
+    """地表データの Release の、その種類の manifest のバイト列と、Release の情報を返す。"""
+    return release_asset(tag, surface_manifest_name(dataset))
+
+
+def http_sha256(url, max_bytes):
+    """url の中身を少しずつ読み、（大きさ, SHA-256）を返す。max_bytes を超えたら打ち切る。"""
+    digest = hashlib.sha256()
+    size = 0
+    request = urllib.request.Request(url, headers={"User-Agent": "yamamuki-peak-data"})
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            while True:
+                chunk = response.read(1 << 20)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > max_bytes:
+                    raise PeakDataError(f"{max_bytes} バイトより大きいので、読むのをやめました: {url}")
+                digest.update(chunk)
+    except urllib.error.URLError as e:
+        raise PeakDataError(f"取得できません: {url}（{e}）") from e
+    return size, digest.hexdigest()
 
 
 # ---- 形の確認 ------------------------------------------------------------
@@ -148,11 +199,21 @@ def manifest_url_prefix(dataset):
     return f"{PAGES_DATA_BASE}{dataset}/{MANIFESTS_NAME}/"
 
 
+def is_surface_tag(tag, dataset):
+    """tag が、地表データ dataset を添付する Release のタグの形か。"""
+    match = SURFACE_TAG.fullmatch(tag)
+    return bool(match) and match["release"] == SURFACE_DATASETS[dataset]["release"]
+
+
 def tag_from_manifest_url(url, dataset):
     prefix = manifest_url_prefix(dataset)
     if not isinstance(url, str) or not url.startswith(prefix) or not url.endswith(".json"):
         raise PeakDataError(f"manifestUrl が {prefix} の中のファイルを指していません: {url}")
     tag = url[len(prefix):-len(".json")]
+    if dataset in SURFACE_DATASETS:
+        if not is_surface_tag(tag, dataset):
+            raise PeakDataError(f"manifestUrl のファイル名が {SURFACE_DATASETS[dataset]['release']} の Release のタグの形ではありません: {url}")
+        return tag
     if parse_tag(tag) is None or parse_tag(tag)[0] != dataset:
         raise PeakDataError(f"manifestUrl のファイル名が {dataset} の Release のタグの形ではありません: {url}")
     return tag
@@ -165,7 +226,7 @@ def validate_entry(entry, dataset, channel, where):
     if not re.fullmatch(r"[0-9a-f]{64}", str(entry["manifestSha256"])):
         raise PeakDataError(f"{where} の {channel} の manifestSha256 が SHA-256 の形ではありません")
     tag = tag_from_manifest_url(entry["manifestUrl"], dataset)
-    if channel == "stable" and parse_tag(tag)[1] != "stable":
+    if dataset not in SURFACE_DATASETS and channel == "stable" and parse_tag(tag)[1] != "stable":
         raise PeakDataError(f"{where} の stable には正式版の manifest だけを書けます: {tag}")
     return tag
 
@@ -182,13 +243,13 @@ def validate_catalog(catalog):
     datasets = catalog.get("datasets")
     if not isinstance(datasets, dict):
         raise PeakDataError("catalog.json に datasets がありません")
-    unknown = set(datasets) - set(DATASETS)
+    unknown = set(datasets) - set(DATASETS) - set(SURFACE_DATASETS)
     if unknown:
         raise PeakDataError(f"catalog.json に知らないデータの種類があります: {', '.join(sorted(unknown))}")
     if APP_DATASET not in datasets:
         raise PeakDataError(f"catalog.json に {APP_DATASET} がありません")
     tags = {}
-    for dataset in DATASETS:
+    for dataset in (*DATASETS, *SURFACE_DATASETS):
         if dataset not in datasets:
             continue
         channels = datasets[dataset]
@@ -257,6 +318,53 @@ def validate_manifest(data, tag, channel):
     return manifest
 
 
+def validate_surface_manifest(data, tag, dataset):
+    """地表データ dataset の manifest を、アプリが読むときと同じ決まりで確かめ、読んだ内容を返す。"""
+    try:
+        manifest = json.loads(data)
+    except ValueError as e:
+        raise PeakDataError(f"{tag} の {dataset} の manifest を JSON として読めません") from e
+    if not isinstance(manifest, dict):
+        raise PeakDataError(f"{tag} の {dataset} の manifest がオブジェクトではありません")
+    where = f"{tag} の {dataset} の manifest"
+    if manifest.get("schemaVersion") != 6 or manifest.get("schemaFormat") != MANIFEST_SCHEMA_FORMAT:
+        raise PeakDataError(f"{where} は版 6 の {MANIFEST_SCHEMA_FORMAT} にしてください")
+    if manifest.get("dataSchemaFormat") != SURFACE_DATA_SCHEMA_FORMAT:
+        raise PeakDataError(f"{where} の dataSchemaFormat が {SURFACE_DATA_SCHEMA_FORMAT} ではありません")
+    if manifest.get("dataSchemaVersion") != SURFACE_CONTAINER_VERSION:
+        raise PeakDataError(f"{where} の dataSchemaVersion が {SURFACE_CONTAINER_VERSION} ではありません")
+    for key, kind in (("version", str), ("fileName", str), ("downloadUrl", str), ("sha256", str), ("sizeBytes", int)):
+        if not isinstance(manifest.get(key), kind) or isinstance(manifest.get(key), bool):
+            raise PeakDataError(f"{where} の {key} がないか、形が違います")
+    spec = SURFACE_DATASETS[dataset]
+    if f"{spec['release']}-{manifest['version']}" != tag:
+        raise PeakDataError(f"{where} の version（{manifest['version']}）がタグと合いません")
+    # アプリは収録ズームの違うファイルを取り違えないように、manifest の fileName で種類を確かめる。
+    if manifest["fileName"] != spec["file"]:
+        raise PeakDataError(f"{where} の fileName（{manifest['fileName']}）が {spec['file']} ではありません")
+    if manifest["downloadUrl"] != f"{DOWNLOAD_PREFIX}{tag}/{spec['file']}":
+        raise PeakDataError(f"{where} の downloadUrl が同じ Release の {spec['file']} を指していません")
+    if not re.fullmatch(r"[0-9a-f]{64}", manifest["sha256"]):
+        raise PeakDataError(f"{where} の sha256 が SHA-256 の形ではありません")
+    if not 0 < manifest["sizeBytes"] <= MAX_SURFACE_BYTES:
+        raise PeakDataError(f"{where} の sizeBytes（{manifest['sizeBytes']}）は受け取れません")
+    datasets = manifest.get("datasets")
+    surfaces = [d for d in datasets if isinstance(d, dict) and d.get("kind") == "surface"] if isinstance(datasets, list) else []
+    if len(surfaces) != 1 or surfaces[0].get("formatVersion") != SURFACE_FORMAT_VERSION or not surfaces[0].get("id"):
+        raise PeakDataError(f"{where} の datasets が、形式の版 {SURFACE_FORMAT_VERSION} の地表のデータセット 1 つではありません")
+    return manifest
+
+
+def check_surface_data(manifest, tag):
+    """地表データの本体（SQLite）を取り、大きさと SHA-256 を確かめる。"""
+    size, digest = http_sha256(manifest["downloadUrl"], MAX_SURFACE_BYTES)
+    if size != manifest["sizeBytes"]:
+        raise PeakDataError(f"{tag} の {manifest['fileName']} の大きさが合いません（{size} バイト、manifest では {manifest['sizeBytes']} バイト）")
+    if digest != manifest["sha256"]:
+        raise PeakDataError(f"{tag} の {manifest['fileName']} の SHA-256 が合いません")
+    return size
+
+
 def is_v6(manifest):
     """版 6 以降の manifest か。版 6 で件数と出典が metadata にまとまった。"""
     schema = manifest.get("schemaVersion")
@@ -315,8 +423,9 @@ def manifests_dir(dataset):
     return SITE_DATA_DIR / dataset / MANIFESTS_NAME
 
 
-def manifest_path(root, tag):
-    return root / manifests_dir(parse_tag(tag)[0]) / f"{tag}.json"
+def manifest_path(root, tag, dataset=None):
+    """manifest のコピーの場所。地表データはタグから種類が決まらないので、dataset を渡す。"""
+    return root / manifests_dir(dataset or parse_tag(tag)[0]) / f"{tag}.json"
 
 
 def write_json(path, value):
@@ -329,7 +438,7 @@ def read_catalog(root):
 
 def write_catalog(root, catalog):
     datasets = {}
-    for dataset in DATASETS:
+    for dataset in (*DATASETS, *SURFACE_DATASETS):
         channels = catalog["datasets"].get(dataset)
         if channels:
             datasets[dataset] = {channel: channels[channel] for channel in CHANNELS if channel in channels}
@@ -346,8 +455,8 @@ def entry_for(tag, data):
     return {"manifestUrl": f"{manifest_url_prefix(parse_tag(tag)[0])}{tag}.json", "manifestSha256": sha256(data)}
 
 
-def local_manifest(root, tag):
-    path = manifest_path(root, tag)
+def local_manifest(root, tag, dataset=None):
+    path = manifest_path(root, tag, dataset)
     if not path.exists():
         raise PeakDataError(f"{path.relative_to(root)} がありません")
     return path.read_bytes()
@@ -512,11 +621,23 @@ def check(root, base, allow_count_drop):
 
     for dataset, channels in tags.items():
         for channel, tag in channels.items():
-            data = attempt(local_manifest, root, tag)
+            data = attempt(local_manifest, root, tag, dataset)
             if data is None:
                 continue
             if sha256(data) != catalog["datasets"][dataset][channel]["manifestSha256"]:
                 problems.append(f"catalog.json の {dataset} の {channel} の manifestSha256 が {tag}.json の SHA-256 と合いません")
+            if dataset in SURFACE_DATASETS:
+                manifest = attempt(validate_surface_manifest, data, tag, dataset)
+                if manifest is None:
+                    continue
+                # 配布用のビルドに、試用版（Pre-release）を読ませない。
+                original = attempt(surface_release_manifest, tag, dataset)
+                if original is not None and channel == "stable" and original[1].get("prerelease"):
+                    problems.append(f"{tag} はプレリリースなので、{dataset} の stable には使えません")
+                size = attempt(check_surface_data, manifest, tag)
+                if size is not None:
+                    notes.append(f"{dataset} の {channel}: {tag}（データ本体は {size:,} バイト）")
+                continue
             manifest = attempt(validate_manifest, data, tag, channel)
             if manifest is None:
                 continue
@@ -537,6 +658,15 @@ def check(root, base, allow_count_drop):
         problems.append(f"manifests/ の既存のファイルは書き換え・削除できません（追加だけ）: {change}")
     for path in added:
         tag = Path(path).stem
+        dataset = Path(path).parent.parent.name
+        if dataset in SURFACE_DATASETS:
+            if not is_surface_tag(tag, dataset):
+                problems.append(f"manifests/ に、そのデータの Release のタグの形ではない名前のファイルがあります: {path}")
+                continue
+            original = attempt(surface_release_manifest, tag, dataset)
+            if original is not None and original[0] != (root / path).read_bytes():
+                problems.append(f"{path} が Release {tag} の {surface_manifest_name(dataset)} と 1 バイト以上違います")
+            continue
         parsed = parse_tag(tag)
         if parsed is None or Path(path).parent != manifests_dir(parsed[0]):
             problems.append(f"manifests/ に、そのデータの Release のタグの形ではない名前のファイルがあります: {path}")
@@ -572,13 +702,13 @@ def verify_live(root, attempts, interval):
     """公開中のカタログ・廃止した参照先ファイルと、カタログが指す manifest が git の内容と同じになるまで、何度か取り直す。"""
     catalog_bytes = catalog_path(root).read_bytes()
     expected = {f"{PAGES_DATA_BASE}{CATALOG_NAME}": catalog_bytes}
-    tags = [tag for channels in validate_catalog(json.loads(catalog_bytes)).values() for tag in channels.values()]
+    tags = [(dataset, tag) for dataset, channels in validate_catalog(json.loads(catalog_bytes)).items() for tag in channels.values()]
     pointer = read_pointer(root)
     if pointer is not None:
         validate_retired_pointer(pointer)
         expected[f"{PAGES_DATA_BASE}{POINTER_DATASET}/{POINTER_NAME}"] = pointer_path(root).read_bytes()
-    for tag in tags:
-        expected[f"{manifest_url_prefix(parse_tag(tag)[0])}{tag}.json"] = local_manifest(root, tag)
+    for dataset, tag in tags:
+        expected[f"{manifest_url_prefix(dataset)}{tag}.json"] = local_manifest(root, tag, dataset)
     mismatched = []
     for attempt in range(attempts):
         mismatched = []
@@ -614,6 +744,11 @@ def watch():
                 data = http_get(entry["manifestUrl"])
                 if sha256(data) != entry["manifestSha256"]:
                     raise PeakDataError(f"公開中の {tag}.json の SHA-256 が catalog.json と合いません")
+                if dataset in SURFACE_DATASETS:
+                    # 地表データの本体は大きい（17 MB 以上）ので、毎日の見張りでは manifest までにする。
+                    validate_surface_manifest(data, tag, dataset)
+                    print(f"確認: {dataset} の {channel}: {tag} の manifest を取得できました。")
+                    continue
                 manifest = validate_manifest(data, tag, channel)
                 if dataset == APP_DATASET:
                     count = check_data(manifest, tag)

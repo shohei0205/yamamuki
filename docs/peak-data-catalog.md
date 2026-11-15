@@ -26,3 +26,14 @@ yamamuki-data は 2026-11 から、生成した版を下書き（Draft）→ 試
 4. 問題がなければ、yamamuki-data で「共通：Pre-release を正式公開」を実行する。
 5. 「山データの差し替え PR を作る」を、操作 `stable`、同じタグで実行する（必要なら「開発用アプリも配布用と同じ山データに戻す」にチェックする）。manifest のコピーは 2 と同じファイルを使う。
 6. 問題があったときは 4 以降を行わない（試用版は Pre-release のまま残る）。カタログの `dev` は、別の版に向け直すか、操作 `remove-dev` で外す。
+
+## 地表データ
+
+方位盤の背景に使う地表データ（森林・水域・陰影の画像タイルを収めた SQLite）も、同じカタログに入れる。
+
+- カタログの種類は配布ファイルごとに分ける（今は `esa-worldcover-z9` だけ）。yamamuki-data は 1 つの Release（タグ `esa-worldcover-<版>`）に、収録ズームの違う SQLite と、それぞれの manifest（`esa-worldcover-z9.manifest.json` など）を添付する。
+- manifest のコピーは `site/data/esa-worldcover-z9/manifests/<Release のタグ>.json` に、書き換えずに置く。カタログの `manifestUrl` はこのコピーを指す。
+- 地表データのタグには開発版の印が無い。試用版は Pre-release で見分け、`dev` には Pre-release も置ける。`stable` には正式版（Pre-release でない Release）だけを置ける。
+- 「山データの差し替え PR を作る」ワークフローは山データだけを扱う。地表データは、コピーを置いてカタログの行を手で書き換える PR を作る。`manifestSha256` はコピーの SHA-256（`shasum -a 256`）。
+- PR の CI「山データの確認」は、manifest がアプリの読める形か（版 6、`yamamuki-sqlite`、`fileName` が種類と合う、地表のデータセットが 1 つ）、コピーが Release と同じか、データ本体（約 17 MB）の大きさと SHA-256、`stable` が Pre-release でないかを確かめる。「山データの見張り」は manifest までを確かめ、データ本体は取らない。
+- 地表データを読むのは、地表の機能を入れた版のアプリだけ。それより前の版のアプリは、カタログの知らない種類を読み飛ばす。

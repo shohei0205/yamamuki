@@ -1,0 +1,74 @@
+{
+  "dataSchemaFormat": "yamamuki-sqlite",
+  "dataSchemaVersion": 1,
+  "dataTimestamp": "2026-11-10T03:22:17Z",
+  "datasets": [
+    {
+      "dataVersion": "20261112T164326Z-43261736372-1",
+      "formatVersion": 1,
+      "id": "esa-worldcover-japan",
+      "kind": "surface",
+      "metadata": {
+        "authors": [
+          {
+            "name": "The yamamuki Authors",
+            "role": "配布データの編集・加工",
+            "url": "https://github.com/shohei0205/yamamuki-data/blob/main/AUTHORS.md"
+          }
+        ],
+        "sources": [
+          {
+            "attribution": "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium",
+            "changes": "分類・補完・ノイズ除去・縮小を行い、森林と水域の画像タイルに加工",
+            "license": "CC BY 4.0 https://creativecommons.org/licenses/by/4.0/",
+            "name": "ESA WorldCover 2021",
+            "source": "https://esa-worldcover.org/en/data-access"
+          },
+          {
+            "attribution": "地理院タイル（標高タイル）を加工して作成",
+            "changes": "標高タイルを地表分類の補助判定と陰影の生成に使用",
+            "license": "国土地理院コンテンツ利用規約 https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html",
+            "name": "国土地理院の標高タイル（DEM10B）",
+            "source": "https://maps.gsi.go.jp/development/ichiran.html"
+          }
+        ]
+      },
+      "title": "日本全国の地表（ESA WorldCover 2021）"
+    }
+  ],
+  "downloadUrl": "https://github.com/shohei0205/yamamuki-data/releases/download/esa-worldcover-20261112T164326Z-43261736372-1/esa-worldcover-z9.sqlite3",
+  "fileName": "esa-worldcover-z9.sqlite3",
+  "metadata": {
+    "authors": [
+      {
+        "name": "The yamamuki Authors",
+        "role": "配布データの編集・加工",
+        "url": "https://github.com/shohei0205/yamamuki-data/blob/main/AUTHORS.md"
+      }
+    ],
+    "sources": [
+      {
+        "attribution": "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium",
+        "changes": "分類・補完・ノイズ除去・縮小を行い、森林と水域の画像タイルに加工",
+        "license": "CC BY 4.0 https://creativecommons.org/licenses/by/4.0/",
+        "name": "ESA WorldCover 2021",
+        "source": "https://esa-worldcover.org/en/data-access"
+      },
+      {
+        "attribution": "地理院タイル（標高タイル）を加工して作成",
+        "changes": "標高タイルを地表分類の補助判定と陰影の生成に使用",
+        "license": "国土地理院コンテンツ利用規約 https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html",
+        "name": "国土地理院の標高タイル（DEM10B）",
+        "source": "https://maps.gsi.go.jp/development/ichiran.html"
+      }
+    ]
+  },
+  "name": "日本全国の地表（ESA WorldCover 2021）",
+  "schemaFormat": "yamamuki-manifest",
+  "schemaVersion": 6,
+  "sha256": "457d6881fcd48010a22908484b80da6c054fca35573184a3d940e2bbf4532ea0",
+  "sizeBytes": 17572352,
+  "uncompressedSizeBytes": 17572352,
+  "version": "20261112T164326Z-43261736372-1",
+  "licenseUrl": "https://github.com/shohei0205/yamamuki-data/releases/download/esa-worldcover-20261112T164326Z-43261736372-1/LICENSE.txt"
+}
