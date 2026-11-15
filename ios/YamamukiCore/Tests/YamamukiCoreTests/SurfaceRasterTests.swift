@@ -85,7 +85,11 @@ final class SurfaceRasterTests: XCTestCase {
 
     /// タイルごとに違う 1 色。
     private func colorOf(_ tile: SurfaceTile) -> UInt32 {
-        UInt32(0xFF << 24 | (tile.x & 0xFF) << 16 | (tile.y & 0xFF) << 8 | 0x7F)
+        // 古い Xcode では 1 つの式にすると型を決めきれないので、成分ごとに分ける。
+        let red = UInt32(tile.x & 0xFF) << 16
+        let green = UInt32(tile.y & 0xFF) << 8
+        let opaque: UInt32 = 0xFF00_0000
+        return opaque | red | green | 0x7F
     }
 
     func testRenderPutsEachTileWhereItsPlaceIs() throws {
@@ -126,9 +130,12 @@ final class SurfaceRasterTests: XCTestCase {
         let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 8)
         let size = 96
         let tile = SurfaceTiles.tileAt(fujiLat, fujiLon, z: 9)
-        let image = try SurfaceRaster.render(frame, level: level, size: size) { _ in
-            (0..<256).map { UInt32(0xFF << 24 | $0 % 16 * 10) }
+        let opaque: UInt32 = 0xFF00_0000
+        let gradient: [UInt32] = (0..<256).map { (index: Int) -> UInt32 in
+            let blue = UInt32(index % 16 * 10)
+            return opaque | blue
         }
+        let image = try SurfaceRaster.render(frame, level: level, size: size) { _ in gradient }
         var blues = Set<Int>()
         for i in 0..<size {
             let east = (Double(i) + 0.5) / Double(size) * 16 - 8
