@@ -44,6 +44,22 @@ public struct SurfaceManifest: Equatable, Sendable {
     public var releaseDate: String? { PeakData.releaseDate(version) }
 }
 
+/// 受け取った SQLite から読んだ、コンテナの目印と収録内容。
+public struct SurfaceContainerInfo: Equatable, Sendable {
+    /// PRAGMA application_id。
+    public let applicationId: Int
+    /// PRAGMA user_version。
+    public let containerVersion: Int
+    /// manifest に書かれた地表のデータセットの、ズームの段の数(`SurfaceData.levelCountSql`)。
+    public let levelCount: Int
+
+    public init(applicationId: Int, containerVersion: Int, levelCount: Int) {
+        self.applicationId = applicationId
+        self.containerVersion = containerVersion
+        self.levelCount = levelCount
+    }
+}
+
 /// 地表データが壊れている、または読めない形式だった。
 public struct SurfaceDataError: Error, CustomStringConvertible, Equatable {
     public let message: String
@@ -72,6 +88,24 @@ public enum SurfaceData {
 
     /// これより大きいデータは受け取らない。ズーム 9 までの版は約 17 MB、ズーム 10 までの版は約 42 MB。
     public static let maxSizeBytes = 100_000_000
+
+    /// `requireContainer` に渡す、ズームの段の数を数える SQL。引数は順に、データセットの ID・種類(`datasetKind`)・
+    /// 地表の形式の版(`surfaceFormatVersion`)。
+    public static let levelCountSql =
+        "SELECT COUNT(*) FROM surface_levels AS l JOIN datasets AS d USING(dataset_key) "
+        + "WHERE d.id = ? AND d.kind = ? AND d.format_version = ?"
+
+    /// 受け取った SQLite から読んだ値で、`manifest` の地表データを収録した山むきの SQLite コンテナかを確かめる。
+    /// SQLite を開いて値を読むのはアプリ側で、SQLite として読めなかったときは `container` に nil を渡す。
+    /// 違えば `SurfaceDataError` を投げる。
+    public static func requireContainer(_ container: SurfaceContainerInfo?, manifest: SurfaceManifest) throws {
+        guard let container else { throw SurfaceDataError("地表データを SQLite として読めません") }
+        guard container.applicationId == containerApplicationId else { throw SurfaceDataError("山むきの SQLite ではありません") }
+        guard container.containerVersion == containerVersion else {
+            throw SurfaceDataError("このアプリが読めない形式の地表データです(データの版 \(container.containerVersion))。アプリを更新してください。")
+        }
+        guard container.levelCount > 0 else { throw SurfaceDataError("地表のデータセット \(manifest.datasetId) がありません") }
+    }
 
     /// `dataset` の manifest を読む。山データなど、ほかの種類の manifest は読まない。
     public static func parseManifest(_ body: Data, dataset: SurfaceDataset) throws -> SurfaceManifest {

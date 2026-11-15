@@ -13,6 +13,8 @@ private let maxPeaksStep = 5
 struct SettingsView: View {
     @ObservedObject var model: DialModel
     @Environment(\.dismiss) private var dismiss
+    /// 「地表を表示」をオンにしたときに、山データの選択画面を開く。
+    @State private var showPeakDataList = false
 
     var body: some View {
         let settings = model.settings
@@ -71,6 +73,9 @@ struct SettingsView: View {
                         // 6 つ並ぶと「10km」が収まらないので、単位は見出しに出す。
                         label: { "\($0)" }
                     ) { v in model.updateSettings { $0.initialRangeKm = v } }
+                    if Features.surface {
+                        SurfaceSwitchRow(model: model, surface: model.surface, openPeakDataList: { showPeakDataList = true })
+                    }
                 }
 
                 Section(Strings.text("settings_section_battery")) {
@@ -129,6 +134,15 @@ struct SettingsView: View {
                     }
                 }
             }
+            // 「地表を表示」から開く選択画面へのリンク。一覧の中の行は、画面の外にあるあいだは開けないので、一覧の外に置く。
+            .background(
+                NavigationLink(isActive: $showPeakDataList) {
+                    PeakDataListView(model: model)
+                } label: {
+                    EmptyView()
+                }
+                .hidden()
+            )
             .navigationTitle(Strings.text("settings_title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -212,6 +226,28 @@ private struct Choice<T: Hashable>: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+        }
+    }
+}
+
+/// 「地表を表示」の行。地表データをまだ取得していなければ、オンにせずに選択画面を開いてダウンロードできるようにする。
+private struct SurfaceSwitchRow: View {
+    @ObservedObject var model: DialModel
+    @ObservedObject var surface: SurfaceDataModel
+    let openPeakDataList: () -> Void
+
+    var body: some View {
+        let installed = surface.installed(model.settings.surfaceDataset)
+        SwitchRow(
+            title: Strings.text("settings_show_surface"),
+            description: Strings.text("settings_show_surface_description"),
+            isOn: model.settings.showSurface && installed
+        ) { v in
+            if v && !installed {
+                openPeakDataList()
+            } else {
+                model.updateSettings { $0.showSurface = v }
+            }
         }
     }
 }

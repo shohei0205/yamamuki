@@ -470,6 +470,7 @@ fun DialScreen(
                 onClosePeakDataList = viewModel::closePeakDataList,
                 onChoosePeakData = viewModel::choosePeakData,
                 onDeletePeakData = viewModel::deletePeakData,
+                surface = if (Features.SURFACE) viewModel<SurfaceDataViewModel>() else null,
             )
         }
 

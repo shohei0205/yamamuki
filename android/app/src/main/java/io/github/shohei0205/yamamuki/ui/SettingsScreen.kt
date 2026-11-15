@@ -35,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,6 +90,8 @@ fun SettingsScreen(
     onClosePeakDataList: () -> Unit = {},
     onChoosePeakData: (PeakDataset) -> Unit = {},
     onDeletePeakData: (PeakDataset) -> Unit = {},
+    /** 地表データ(方位盤の背景)。出さないとき([Features.SURFACE] が false)は null。 */
+    surface: SurfaceDataViewModel? = null,
 ) {
     BackHandler(onBack = onClose)
     LaunchedEffect(Unit) { onOpen() }
@@ -159,6 +162,22 @@ fun SettingsScreen(
                 label = { "$it" },
                 onSelect = { v -> onSettingsChange { it.copy(initialRangeKm = v) } },
             )
+            if (surface != null) {
+                val surfaceState by surface.state.collectAsStateWithLifecycle()
+                SwitchRow(
+                    title = stringResource(R.string.settings_show_surface),
+                    description = stringResource(R.string.settings_show_surface_description),
+                    checked = settings.showSurface && surfaceState.installed(settings.surfaceDataset),
+                    onChange = { v ->
+                        // 地表データをまだ取得していなければ、オンにせずに選択画面を開いてダウンロードできるようにする。
+                        if (v && !surfaceState.installed(settings.surfaceDataset)) {
+                            onOpenPeakDataList()
+                        } else {
+                            onSettingsChange { it.copy(showSurface = v) }
+                        }
+                    },
+                )
+            }
 
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_battery))
@@ -220,11 +239,19 @@ fun SettingsScreen(
             onChoose = onChoosePeakData,
             onDelete = onDeletePeakData,
             onBack = onClosePeakDataList,
+            surface = surface,
+            selectedSurface = settings.surfaceDataset,
         )
     }
 
     if (showCredits) {
-        CreditsScreen(dataset = settings.peakDataset, peakData = peakData, loadCredits = loadCredits, onBack = { showCredits = false })
+        CreditsScreen(
+            dataset = settings.peakDataset,
+            peakData = peakData,
+            loadCredits = loadCredits,
+            onBack = { showCredits = false },
+            loadSurfaceCredits = surface?.let { it::credits },
+        )
     }
     }
 }

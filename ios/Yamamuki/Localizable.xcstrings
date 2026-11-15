@@ -507,6 +507,17 @@
         }
       }
     },
+    "credits_section_surface": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データ"
+          }
+        }
+      }
+    },
     "credits_source": {
       "extractionState": "manual",
       "localizations": {
@@ -2059,6 +2070,28 @@
         }
       }
     },
+    "settings_show_surface": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表を表示"
+          }
+        }
+      }
+    },
+    "settings_show_surface_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方位盤の背景に森林・水域・陰影を表示します。地表データのダウンロードが必要です。"
+          }
+        }
+      }
+    },
     "settings_text_size": {
       "extractionState": "manual",
       "localizations": {
@@ -2132,6 +2165,193 @@
           "stringUnit": {
             "state": "translated",
             "value": "バージョン %1$@"
+          }
+        }
+      }
+    },
+    "surface_data_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用可能な地表データを確認しています…"
+          }
+        }
+      }
+    },
+    "surface_data_delete_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端末に保存した地表データを削除します。必要な場合は後で再度ダウンロードできます。"
+          }
+        }
+      }
+    },
+    "surface_data_delete_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」の地表データを削除しますか？"
+          }
+        }
+      }
+    },
+    "surface_data_error_invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データを取り込めませんでした。\n%1$@"
+          }
+        }
+      }
+    },
+    "surface_data_error_network": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通信に失敗しました。通信できる場所で再度お試しください。"
+          }
+        }
+      }
+    },
+    "surface_data_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データをダウンロードできませんでした"
+          }
+        }
+      }
+    },
+    "surface_data_fetching": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取得中… %1$ld％"
+          }
+        }
+      }
+    },
+    "surface_data_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用できる地表データはありません。"
+          }
+        }
+      }
+    },
+    "surface_data_offer_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」の地表データをダウンロードします。保存後は圏外でも利用できます。\n%2$@\n今すぐダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "surface_data_offer_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データのダウンロード"
+          }
+        }
+      }
+    },
+    "surface_data_section_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方位盤の背景に表示する森林・水域・陰影のデータです。設定の「地表を表示」で表示を切り替えます。"
+          }
+        }
+      }
+    },
+    "surface_data_section_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データ"
+          }
+        }
+      }
+    },
+    "surface_data_summary_available": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リリース：%1$@・約 %2$@"
+          }
+        }
+      }
+    },
+    "surface_data_summary_installed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リリース：%1$@・取得日 %2$@・約 %3$@"
+          }
+        }
+      }
+    },
+    "surface_data_summary_installed_no_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取得日 %1$@・約 %2$@"
+          }
+        }
+      }
+    },
+    "surface_data_update": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
+          }
+        }
+      }
+    },
+    "surface_dataset_esa_worldcover_z9": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ESA WorldCover（標準）"
           }
         }
       }

@@ -29,6 +29,10 @@ struct Settings: Codable, Equatable {
     var autoCheckPeakData = false
     /// 方位盤・検索・出典に使う山データの種類。設定の「山データ」で選ぶ。
     var peakDataset = PeakDataset.default
+    /// 方位盤の背景に地表(森林・水域・陰影)を描く。地表データを取得していないあいだは描かない。
+    var showSurface = false
+    /// 方位盤の背景に使う地表データの種類。山データの選択画面で選ぶ。
+    var surfaceDataset = SurfaceDataset.allCases[0]
 
     static let textScales = [0.85, 1.0, 1.2, 1.4]
     static let initialRangesKm = [5, 10, 15, 20, 30, 50]
@@ -54,6 +58,8 @@ struct Settings: Codable, Equatable {
         autoCheckPeakData = try c.decodeIfPresent(Bool.self, forKey: .autoCheckPeakData) ?? d.autoCheckPeakData
         // 知らない種類(新しい版のアプリで選んだもの)なら、既定に戻す。
         peakDataset = (try? c.decodeIfPresent(PeakDataset.self, forKey: .peakDataset)) ?? d.peakDataset
+        showSurface = try c.decodeIfPresent(Bool.self, forKey: .showSurface) ?? d.showSurface
+        surfaceDataset = (try? c.decodeIfPresent(SurfaceDataset.self, forKey: .surfaceDataset)) ?? d.surfaceDataset
     }
 }
 

@@ -156,6 +156,17 @@ final class DialModel: ObservableObject {
     /// 山データの事前ダウンロード。画面を閉じても続くよう、ここで持つ。
     let areaDownload: AreaDownloadModel
     private let settingsStore = SettingsStore()
+    private let surfaceUserAgent: String
+    private let surfaceCatalogCache: PeakCatalogCache
+
+    /// 地表データ(方位盤の背景)の確認・ダウンロード・削除。設定画面を開くまでは作らない。
+    @MainActor private(set) lazy var surface = SurfaceDataModel(
+        useDev: Self.peakDataChannel == .dev,
+        userAgent: surfaceUserAgent,
+        catalogCache: surfaceCatalogCache,
+        selected: { [weak self] in self?.settings.surfaceDataset ?? SurfaceDataset.allCases[0] },
+        updateSettings: { [weak self] transform in self?.updateSettings(transform) }
+    )
     private let locationService = LocationService()
     private let networkMonitor = NetworkMonitor()
     private var peaks: [Mountain] = []
@@ -217,6 +228,8 @@ final class DialModel: ObservableObject {
         areaDownload = AreaDownloadModel(repository: repositories[.osmPeaks]!, cache: caches[.osmPeaks]!)
         settings = saved
         rangeKm = Double(saved.initialRangeKm)
+        surfaceUserAgent = userAgent
+        surfaceCatalogCache = catalogCache
         authorization = locationService.authorization
         locationService.apply(saved.sensorPrecision)
 
