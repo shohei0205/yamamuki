@@ -18,6 +18,12 @@
         "manifestUrl": "https://shohei0205.github.io/yamamuki/data/esa-worldcover-z9/manifests/esa-worldcover-20261112T164326Z-43261736372-1.json",
         "manifestSha256": "16caf88981faae8d92252b9ec9733db23758d06c706c573bfaf0ef28132e66dc"
       }
+    },
+    "esa-worldcover-z10": {
+      "dev": {
+        "manifestUrl": "https://shohei0205.github.io/yamamuki/data/esa-worldcover-z10/manifests/esa-worldcover-20261112T164326Z-43261736372-1.json",
+        "manifestSha256": "2683f2d4a5b449207f58fbe13c020e01bc547eb06bb7b12342ce7deaed47f76d"
+      }
     }
   }
 }

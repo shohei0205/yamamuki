@@ -65,6 +65,7 @@ DATASET_LABELS = {"osm-peaks": "山データ", "gsi-peaks": "国土地理院の�
 # タグに dev の印は無く、試用版は Pre-release で見分ける。stable には Pre-release を書けない。
 SURFACE_DATASETS = {
     "esa-worldcover-z9": {"release": "esa-worldcover", "file": "esa-worldcover-z9.sqlite3"},
+    "esa-worldcover-z10": {"release": "esa-worldcover", "file": "esa-worldcover-z10.sqlite3"},
 }
 SURFACE_TAG = re.compile(r"(?P<release>[a-z]+(?:-[a-z]+)*?)-\d{8}T\d{6}Z-\d+-\d+")
 SURFACE_DATA_SCHEMA_FORMAT = "yamamuki-sqlite"
