@@ -97,6 +97,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.shohei0205.yamamuki.Features
+import io.github.shohei0205.yamamuki.YamamukiApp
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.ads.AdBanner
 import io.github.shohei0205.yamamuki.core.DialGeometry
@@ -289,6 +290,19 @@ fun DialScreen(
                 }
             },
     ) {
+        // 設定で地表を表示にしていて、その地表データを取得済みなら、背景に貼る画像を作る。
+        val surfaceViewModel: SurfaceDataViewModel? = if (Features.SURFACE) viewModel() else null
+        val surfaceState = surfaceViewModel?.state?.collectAsStateWithLifecycle()?.value
+        val surfaceDataset = state.settings.surfaceDataset
+        val surfaceInstalled = surfaceState?.entries?.firstOrNull { it.dataset == surfaceDataset }?.installed
+            ?.takeIf { state.settings.showSurface }
+        val surfaceImage = rememberSurfaceImage(
+            file = remember(surfaceDataset) { (context.applicationContext as YamamukiApp).surfaceDataStores.of(surfaceDataset).files.database },
+            installed = surfaceInstalled,
+            centerLat = state.location?.latitude,
+            centerLon = state.location?.longitude,
+            rangeKm = state.rangeKm,
+        )
         DialCanvas(
             headingDeg = heading ?: 0.0,
             compassHeadingDeg = compassHeading ?: heading ?: 0.0,
@@ -312,14 +326,16 @@ fun DialScreen(
             longitude = location?.longitude,
             viewportLatitude = state.location?.latitude,
             viewportLongitude = state.location?.longitude,
+            surface = surfaceImage,
+            surfaceShown = surfaceInstalled != null,
         )
         // 配布版では、ヘッダーの中央にバナー広告(320×50)を出す。広告を入れないビルドでは何も出さない(build.gradle.kts の ads)。
         AdBanner(Modifier.align(Alignment.TopCenter).padding(top = ((DialGeometry.HEADER_HEIGHT_DP - 50) / 2).dp))
-        Text(
-            stringResource(state.settings.peakDataset.attribution),
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
-        )
+        Column(Modifier.align(Alignment.BottomEnd).padding(8.dp), horizontalAlignment = Alignment.End) {
+            // 地表を表示しているあいだは、地表データの出典も添える。
+            if (surfaceInstalled != null) Text(stringResource(R.string.surface_attribution), style = MaterialTheme.typography.labelSmall)
+            Text(stringResource(state.settings.peakDataset.attribution), style = MaterialTheme.typography.labelSmall)
+        }
 
         if (!hasPermission) {
             PermissionRequest(

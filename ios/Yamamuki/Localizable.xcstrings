@@ -2169,6 +2169,17 @@
         }
       }
     },
+    "surface_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "© ESA WorldCover project 2021・地理院タイルを加工"
+          }
+        }
+      }
+    },
     "surface_data_checking": {
       "extractionState": "manual",
       "localizations": {

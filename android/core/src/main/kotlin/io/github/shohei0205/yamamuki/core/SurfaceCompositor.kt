@@ -37,7 +37,15 @@ data class SurfacePalette(
     val ground: Int,
     val forest: Int,
     val water: Int,
-)
+) {
+    companion object {
+        /**
+         * 方位盤の背景に使う配色。地面は方位盤の地面と同じクリーム色で、森林と水域は山のアイコンや山名の札が
+         * 埋もれないように淡くする。
+         */
+        val DIAL = SurfacePalette(ground = 0xFFF4D8, forest = 0xC5DDA8, water = 0xA8D4EE)
+    }
+}
 
 /** 陰影の掛け方。陰影の画素が [neutral] のとき明るさを変えず、差に [strength] を掛けた分だけ明るく・暗くする。 */
 data class SurfaceShade(val neutral: Int, val strength: Double) {

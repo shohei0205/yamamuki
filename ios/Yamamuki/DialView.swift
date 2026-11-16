@@ -11,6 +11,8 @@ struct DialView: View {
     @ObservedObject var model: DialModel
 
     @Environment(\.scenePhase) private var scenePhase
+    /// 背景に貼る地表の画像。
+    @StateObject private var surfaceLayer = SurfaceLayerModel()
     /// 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     @State private var selectedId: String?
     @State private var showSettings = false
@@ -26,6 +28,9 @@ struct DialView: View {
         GeometryReader { geometry in
             ZStack {
                 dialGround.ignoresSafeArea()
+                if Features.surface {
+                    SurfaceLayerDriver(model: model, surface: model.surface, layer: surfaceLayer)
+                }
                 // ステータスバーの裏は、ヘッダーの空の上端と同じ色で塗り、空がつながって見えるようにする。
                 VStack(spacing: 0) {
                     headerSkyTop.frame(height: geometry.safeAreaInsets.top)
@@ -53,6 +58,8 @@ struct DialView: View {
                     // 視野の扇は、現在地に戻り終えてから出す。
                     viewFanAlpha: model.exploring ? 0 : 1,
                     bottomBleed: geometry.safeAreaInsets.bottom,
+                    surface: surfaceLayer.image,
+                    surfaceShown: surfaceLayer.shown,
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
                     onMountainTap: {
@@ -203,9 +210,13 @@ struct DialView: View {
                                 : model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
                             .padding(.trailing, 8)
 
-                            Text(model.dataset.attribution)
-                                .font(.caption2)
-                                .foregroundStyle(.black)
+                            VStack(alignment: .trailing, spacing: 0) {
+                                // 地表を表示しているあいだは、地表データの出典も添える。
+                                if surfaceLayer.shown { Text(Strings.text("surface_attribution")) }
+                                Text(model.dataset.attribution)
+                            }
+                            .font(.caption2)
+                            .foregroundStyle(.black)
                         }
                     }
                     .padding(8)

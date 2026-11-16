@@ -74,6 +74,9 @@ final class SurfaceDataModel: ObservableObject {
         entries = installedEntries()
     }
 
+    /// `dataset` のデータ本体(SQLite)の場所。
+    func databaseFile(_ dataset: SurfaceDataset) -> URL { stores[dataset]!.files.database }
+
     /// `dataset` を取得済みか。
     func installed(_ dataset: SurfaceDataset) -> Bool {
         entries.contains { $0.dataset == dataset && $0.installed != nil }

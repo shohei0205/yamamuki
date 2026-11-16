@@ -38,6 +38,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
+import io.github.shohei0205.yamamuki.core.GeoMath
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
@@ -168,6 +170,10 @@ fun DialCanvas(
     viewFanAlpha: Float = 1f,
     /** 画面下端の余白(ジェスチャーバーなど)の高さ。視野の扇の外側の暗さだけを、ここまで描き足す。 */
     bottomBleed: Dp = 0.dp,
+    /** 背景に貼る地表(森林・水域・陰影)の画像。地表を表示しないときと、まだ画像が無いときは null。 */
+    surface: SurfaceImage? = null,
+    /** 地表を表示している。距離の帯の色分けを地表に重ねず、同心円の線だけにする。 */
+    surfaceShown: Boolean = false,
 ) {
     val styles = remember(textScale) { DialTextStyles(textScale) }
     val texts = rememberDialTexts()
@@ -210,7 +216,10 @@ fun DialCanvas(
         val observerRotation = Heading.delta(headingDeg, compassHeadingDeg).toFloat()
         // 距離の帯と視野の扇は、画面下端の余白まで描く。
         clipRect(top = headerHeight + tapeHeight, bottom = size.height + bottomBleed.toPx()) {
-            if (pxPerKm > 0f) drawGroundBands(observer, pxPerKm, rangeKm)
+            if (pxPerKm > 0f && surface != null && latitude != null && longitude != null) {
+                drawSurface(surface, observer, pxPerKm, headingDeg, latitude, longitude)
+            }
+            if (pxPerKm > 0f && !surfaceShown) drawGroundBands(observer, pxPerKm, rangeKm)
             if (viewFanAlpha > 0f) {
                 // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
                 drawViewFan(observer, viewFanAlpha)
@@ -256,6 +265,34 @@ fun DialCanvas(
                 }
             }
         }
+    }
+}
+
+/**
+ * 地表の画像を地面に貼る。画像は北が上なので、画像の中心を山と同じ計算(現在地からの距離と方位)で画面に置き、
+ * 端末の向きの分だけ回す。
+ */
+private fun DrawScope.drawSurface(
+    surface: SurfaceImage,
+    observer: Offset,
+    pxPerKm: Float,
+    headingDeg: Double,
+    latitude: Double,
+    longitude: Double,
+) {
+    val frame = surface.frame
+    val distanceKm = GeoMath.distanceKm(latitude, longitude, frame.centerLat, frame.centerLon)
+    val bearingDeg = GeoMath.bearingDeg(latitude, longitude, frame.centerLat, frame.centerLon)
+    val o = DialGeometry.project(distanceKm, bearingDeg, headingDeg)
+    val center = Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
+    val half = (frame.radiusKm * pxPerKm).toFloat()
+    rotate(-headingDeg.toFloat(), pivot = center) {
+        drawImage(
+            surface.bitmap,
+            dstOffset = IntOffset((center.x - half).roundToInt(), (center.y - half).roundToInt()),
+            dstSize = IntSize((half * 2).roundToInt(), (half * 2).roundToInt()),
+            filterQuality = FilterQuality.Medium,
+        )
     }
 }
 

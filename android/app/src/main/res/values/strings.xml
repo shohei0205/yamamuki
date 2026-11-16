@@ -234,4 +234,5 @@
     <string name="settings_show_surface">地表を表示</string>
     <string name="settings_show_surface_description">方位盤の背景に森林・水域・陰影を表示します。地表データのダウンロードが必要です。</string>
     <string name="credits_section_surface">地表データ</string>
+    <string name="surface_attribution">© ESA WorldCover project 2021・地理院タイルを加工</string>
 </resources>
