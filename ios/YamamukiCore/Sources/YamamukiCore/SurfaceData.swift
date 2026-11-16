@@ -9,6 +9,9 @@ public enum SurfaceDataset: String, CaseIterable, Codable, Sendable {
     /// ESA WorldCover 2021 の森林・水域と、国土地理院の標高タイルから作った陰影。ズーム 5〜9(約 17 MB)。
     case esaWorldcoverZ9 = "esa-worldcover-z9"
 
+    /// `esaWorldcoverZ9` と同じ地表で、ズーム 5〜10(約 42 MB)まで収める。拡大したときに細かく見える。
+    case esaWorldcoverZ10 = "esa-worldcover-z10"
+
     /// カタログでの名前(datasets のキー)。
     public var id: String { rawValue }
 

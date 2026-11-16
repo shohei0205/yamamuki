@@ -9,6 +9,7 @@ extension SurfaceDataset {
     var label: String {
         switch self {
         case .esaWorldcoverZ9: return Strings.text("surface_dataset_esa_worldcover_z9")
+        case .esaWorldcoverZ10: return Strings.text("surface_dataset_esa_worldcover_z10")
         }
     }
 }

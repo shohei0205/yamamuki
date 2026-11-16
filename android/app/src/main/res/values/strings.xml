@@ -217,6 +217,7 @@
     <string name="surface_data_section_title">地表データ</string>
     <string name="surface_data_section_description">方位盤の背景に表示する森林・水域・陰影のデータです。設定の「地表を表示」で表示を切り替えます。</string>
     <string name="surface_dataset_esa_worldcover_z9">ESA WorldCover（標準）</string>
+    <string name="surface_dataset_esa_worldcover_z10">ESA WorldCover（高精細）</string>
     <string name="surface_data_summary_installed">リリース：%1$s・取得日 %2$s・約 %3$s</string>
     <string name="surface_data_summary_installed_no_release">取得日 %1$s・約 %2$s</string>
     <string name="surface_data_summary_available">リリース：%1$s・約 %2$s</string>

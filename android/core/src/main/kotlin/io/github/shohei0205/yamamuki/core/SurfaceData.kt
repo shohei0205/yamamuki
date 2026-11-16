@@ -10,6 +10,9 @@ package io.github.shohei0205.yamamuki.core
 enum class SurfaceDataset(val id: String) {
     /** ESA WorldCover 2021 の森林・水域と、国土地理院の標高タイルから作った陰影。ズーム 5〜9(約 17 MB)。 */
     ESA_WORLDCOVER_Z9("esa-worldcover-z9"),
+
+    /** [ESA_WORLDCOVER_Z9] と同じ地表で、ズーム 5〜10(約 42 MB)まで収める。拡大したときに細かく見える。 */
+    ESA_WORLDCOVER_Z10("esa-worldcover-z10"),
     ;
 
     /** データ本体のファイル名(manifest の fileName)。 */

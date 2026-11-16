@@ -2356,6 +2356,17 @@
         }
       }
     },
+    "surface_dataset_esa_worldcover_z10": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ESA WorldCover（高精細）"
+          }
+        }
+      }
+    },
     "surface_dataset_esa_worldcover_z9": {
       "extractionState": "manual",
       "localizations": {
