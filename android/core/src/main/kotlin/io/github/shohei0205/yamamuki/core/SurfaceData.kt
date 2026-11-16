@@ -40,6 +40,16 @@ data class SurfaceManifest(
     val releaseDate: String? get() = PeakData.releaseDate(version)
 }
 
+/** 受け取った SQLite から読んだ、コンテナの目印と収録内容。 */
+data class SurfaceContainerInfo(
+    /** PRAGMA application_id。 */
+    val applicationId: Long,
+    /** PRAGMA user_version。 */
+    val containerVersion: Long,
+    /** manifest に書かれた地表のデータセットの、ズームの段の数([SurfaceData.LEVEL_COUNT_SQL])。 */
+    val levelCount: Long,
+)
+
 /** 地表データが壊れている、または読めない形式だった。 */
 class SurfaceDataException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -66,6 +76,28 @@ object SurfaceData {
     const val MAX_SIZE_BYTES = 100_000_000L
 
     private val SHA256_HEX = Regex("[0-9a-f]{64}")
+
+    /**
+     * 受け取った SQLite から読んだ値で、[manifest] の地表データを収録した山むきの SQLite コンテナかを確かめる。
+     * SQLite を開いて値を読むのはアプリ側で、SQLite として読めなかったときは [container] に null を渡す。
+     * 違えば [SurfaceDataException] を投げる。
+     */
+    fun requireContainer(container: SurfaceContainerInfo?, manifest: SurfaceManifest) {
+        if (container == null) throw SurfaceDataException("地表データを SQLite として読めません")
+        if (container.applicationId != CONTAINER_APPLICATION_ID.toLong()) throw SurfaceDataException("山むきの SQLite ではありません")
+        if (container.containerVersion != CONTAINER_VERSION.toLong()) {
+            throw SurfaceDataException("このアプリが読めない形式の地表データです(データの版 ${container.containerVersion})。アプリを更新してください。")
+        }
+        if (container.levelCount <= 0) throw SurfaceDataException("地表のデータセット ${manifest.datasetId} がありません")
+    }
+
+    /**
+     * [requireContainer] に渡す、ズームの段の数を数える SQL。引数は順に、データセットの ID・種類([DATASET_KIND])・
+     * 地表の形式の版([SURFACE_FORMAT_VERSION])。
+     */
+    const val LEVEL_COUNT_SQL =
+        "SELECT COUNT(*) FROM surface_levels AS l JOIN datasets AS d USING(dataset_key) " +
+            "WHERE d.id = ? AND d.kind = ? AND d.format_version = ?"
 
     /** [dataset] の manifest を読む。山データなど、ほかの種類の manifest は読まない。 */
     fun parseManifest(body: String, dataset: SurfaceDataset): SurfaceManifest {

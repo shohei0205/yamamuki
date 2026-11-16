@@ -66,8 +66,11 @@ fun CreditsScreen(
     loadCredits: suspend () -> PeakDataCredits?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 取得済みの地表データ(方位盤の背景)の出典を、端末に残した manifest から読む。地表データを出さないときは null。 */
+    loadSurfaceCredits: (suspend () -> PeakDataCredits?)? = null,
 ) {
     BackHandler(onBack = onBack)
+    val surfaceCredits by produceState<PeakDataCredits?>(null, loadSurfaceCredits) { value = loadSurfaceCredits?.invoke() }
     // 山データを取り直したら読み直す。
     val load by produceState<CreditsLoad>(CreditsLoad.Loading, dataset, peakData) {
         value = CreditsLoad.Loaded(if (peakData == null) null else loadCredits())
@@ -122,6 +125,22 @@ fun CreditsScreen(
                     items = listOf(R.string.credits_attribution to "${stringResource(dataset.creditsAttribution)} ${dataset.copyrightUrl}"),
                 )
                 Note(stringResource(if (peakData == null) R.string.credits_not_installed else R.string.credits_missing))
+            }
+            // 地表データは、取得しているときだけ出典を並べる。
+            surfaceCredits?.let { surface ->
+                SectionTitle(stringResource(R.string.credits_section_surface))
+                surface.releaseDate?.let { CreditsCard(title = null, items = listOf(R.string.credits_release to it)) }
+                surface.supplements.forEach { s ->
+                    CreditsCard(
+                        title = s.id,
+                        items = listOf(
+                            R.string.credits_source to s.source,
+                            R.string.credits_license to s.license,
+                            R.string.credits_attribution to s.attribution,
+                            R.string.credits_changes to s.changes,
+                        ),
+                    )
+                }
             }
         }
     }

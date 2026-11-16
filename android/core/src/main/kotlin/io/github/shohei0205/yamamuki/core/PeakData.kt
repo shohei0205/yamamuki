@@ -177,7 +177,16 @@ object PeakData {
         val datasets = catalogDatasets(body)
         val id = dataset.id
         val entries = datasets[id] as? Map<*, *> ?: throw PeakDataException("山データのカタログに $id がありません")
-        return pointer(entries, dataset, useDev)
+        return pointer(entries, id, dataset.manifestUrlPrefix, useDev)
+    }
+
+    /**
+     * カタログを読み、種類 [id] の読む manifest の場所を返す。山データ以外(地表データ)の種類にも使う。
+     * カタログにその種類が無ければ null。manifest は [manifestUrlPrefix] の下に置いたものだけを読む。
+     */
+    internal fun catalogPointer(body: String, id: String, manifestUrlPrefix: String, useDev: Boolean): PeakDataPointer? {
+        val entries = catalogDatasets(body)[id] as? Map<*, *> ?: return null
+        return pointer(entries, id, manifestUrlPrefix, useDev)
     }
 
     /** カタログの datasets。 */
@@ -195,11 +204,9 @@ object PeakData {
     }
 
     /** カタログの 1 つの種類([entries])から、読む manifest の場所を選ぶ。 */
-    private fun pointer(entries: Map<*, *>, dataset: PeakDataset, useDev: Boolean): PeakDataPointer {
-        val id = dataset.id
+    private fun pointer(entries: Map<*, *>, id: String, prefix: String, useDev: Boolean): PeakDataPointer {
         val channel = if (useDev && entries["dev"] != null) "dev" else "stable"
         val entry = entries[channel] as? Map<*, *> ?: throw PeakDataException("山データのカタログの $id に $channel がありません")
-        val prefix = dataset.manifestUrlPrefix
         val url = entry["manifestUrl"] as? String
         if (url == null || !url.startsWith(prefix) || !MANIFEST_NAME.matches(url.removePrefix(prefix))) {
             throw PeakDataException("山データのカタログの $id の $channel が、決まった置き場所の manifest を指していません")
@@ -640,7 +647,7 @@ class PeakCatalogCache(
 }
 
 /** 成功(2xx)の応答ならそのまま返す。それ以外は、[url] のファイル名を添えて [PeakDataException] にする。 */
-private fun HttpResponse.requireSuccess(url: String): HttpResponse {
+internal fun HttpResponse.requireSuccess(url: String): HttpResponse {
     if (!status.isSuccess()) {
         throw PeakDataException("サーバーが HTTP ${status.value} を返しました(${url.substringAfterLast('/')})。")
     }

@@ -182,6 +182,15 @@ public enum PeakData {
     /// カタログを読み、`dataset` の読む manifest の場所を返す。`useDev` なら dev を、dev が無ければ stable を読む。
     /// ほかの種類のデータは見ない。よその URL を指していたり、SHA-256 の形がおかしかったりしたら読まない。
     public static func parseCatalog(_ body: Data, useDev: Bool, dataset: PeakDataset = .osmPeaks) throws -> PeakDataPointer {
+        guard let pointer = try catalogPointer(body, id: dataset.id, manifestUrlPrefix: dataset.manifestUrlPrefix, useDev: useDev) else {
+            throw PeakDataError("山データのカタログに \(dataset.id) がありません")
+        }
+        return pointer
+    }
+
+    /// カタログを読み、種類 `id` の読む manifest の場所を返す。山データ以外(地表データ)の種類にも使う。
+    /// カタログにその種類が無ければ nil。manifest は `manifestUrlPrefix` の下に置いたものだけを読む。
+    static func catalogPointer(_ body: Data, id: String, manifestUrlPrefix prefix: String, useDev: Bool) throws -> PeakDataPointer? {
         guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
             throw PeakDataError("山データのカタログを読めません")
         }
@@ -192,15 +201,11 @@ public enum PeakData {
         guard let datasets = root["datasets"] as? [String: Any] else {
             throw PeakDataError("山データのカタログに datasets がありません")
         }
-        let id = dataset.id
-        guard let channels = datasets[id] as? [String: Any] else {
-            throw PeakDataError("山データのカタログに \(id) がありません")
-        }
+        guard let channels = datasets[id] as? [String: Any] else { return nil }
         let channel = useDev && channels["dev"] != nil && !(channels["dev"] is NSNull) ? "dev" : "stable"
         guard let entry = channels[channel] as? [String: Any] else {
             throw PeakDataError("山データのカタログの \(id) に \(channel) がありません")
         }
-        let prefix = dataset.manifestUrlPrefix
         guard let url = entry["manifestUrl"] as? String, url.hasPrefix(prefix),
               isManifestName(String(url.dropFirst(prefix.count))), let manifestUrl = URL(string: url) else {
             throw PeakDataError("山データのカタログの \(id) の \(channel) が、決まった置き場所の manifest を指していません")

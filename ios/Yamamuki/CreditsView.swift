@@ -18,6 +18,8 @@ struct CreditsView: View {
     }
 
     @State private var load = Load.loading
+    /// 取得済みの地表データ(方位盤の背景)の出典。取得していなければ nil。
+    @State private var surfaceCredits: PeakDataCredits?
 
     var body: some View {
         Form {
@@ -66,12 +68,30 @@ struct CreditsView: View {
                     Text(Strings.text(model.peakData == nil ? "credits_not_installed" : "credits_missing"))
                 }
             }
+            // 地表データは、取得しているときだけ出典を並べる。
+            if let surfaceCredits {
+                Section(Strings.text("credits_section_surface")) {
+                    CreditsItems(items: [CreditsItem(Strings.text("credits_release"), surfaceCredits.releaseDate)])
+                }
+                ForEach(surfaceCredits.supplements, id: \.id) { source in
+                    Section {
+                        Text(source.id).font(.headline)
+                        CreditsItems(items: [
+                            CreditsItem(Strings.text("credits_source"), source.source),
+                            CreditsItem(Strings.text("credits_license"), source.license),
+                            CreditsItem(Strings.text("credits_attribution"), source.attribution),
+                            CreditsItem(Strings.text("credits_changes"), source.changes),
+                        ])
+                    }
+                }
+            }
         }
         .navigationTitle(Strings.text("settings_credits"))
         .navigationBarTitleDisplayMode(.inline)
         // 山データを取り直したら読み直す。
         .task(id: model.peakData) {
             load = .loaded(model.peakData == nil ? nil : await model.peakDataCredits())
+            if Features.surface { surfaceCredits = model.surface.credits() }
         }
     }
 }

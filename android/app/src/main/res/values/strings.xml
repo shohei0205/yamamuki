@@ -212,4 +212,26 @@
     <string name="search_scope">検索範囲：%1$s</string>
     <string name="search_scope_separator">、</string>
     <string name="search_result_direction">%1$s %2$s</string>
+
+    <!-- 地表データ(方位盤の背景) -->
+    <string name="surface_data_section_title">地表データ</string>
+    <string name="surface_data_section_description">方位盤の背景に表示する森林・水域・陰影のデータです。設定の「地表を表示」で表示を切り替えます。</string>
+    <string name="surface_dataset_esa_worldcover_z9">ESA WorldCover（標準）</string>
+    <string name="surface_data_summary_installed">リリース：%1$s・取得日 %2$s・約 %3$s</string>
+    <string name="surface_data_summary_installed_no_release">取得日 %1$s・約 %2$s</string>
+    <string name="surface_data_summary_available">リリース：%1$s・約 %2$s</string>
+    <string name="surface_data_checking">利用可能な地表データを確認しています…</string>
+    <string name="surface_data_none">利用できる地表データはありません。</string>
+    <string name="surface_data_update">更新</string>
+    <string name="surface_data_fetching">取得中… %1$d％</string>
+    <string name="surface_data_offer_title">地表データのダウンロード</string>
+    <string name="surface_data_offer_message">「%1$s」の地表データをダウンロードします。保存後は圏外でも利用できます。\n%2$s\n今すぐダウンロードしますか？</string>
+    <string name="surface_data_delete_title">「%1$s」の地表データを削除しますか？</string>
+    <string name="surface_data_delete_message">端末に保存した地表データを削除します。必要な場合は後で再度ダウンロードできます。</string>
+    <string name="surface_data_error_title">地表データをダウンロードできませんでした</string>
+    <string name="surface_data_error_invalid">地表データを取り込めませんでした。\n%1$s</string>
+    <string name="surface_data_error_network">通信に失敗しました。通信できる場所で再度お試しください。</string>
+    <string name="settings_show_surface">地表を表示</string>
+    <string name="settings_show_surface_description">方位盤の背景に森林・水域・陰影を表示します。地表データのダウンロードが必要です。</string>
+    <string name="credits_section_surface">地表データ</string>
 </resources>

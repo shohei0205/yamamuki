@@ -12,4 +12,10 @@ object Features {
      * 全国の山データを yamamuki-data からまとめて取得するようにしたので、止めている。
      */
     const val AREA_DOWNLOAD = false
+
+    /**
+     * 方位盤の背景に地表データ(森林・水域・陰影)を描く(山データの選択画面の「地表データ」、設定の「地表を表示」、出典)。
+     * yamamuki-data が地表データを正式に公開するまでは、開発用のビルドだけで出す。
+     */
+    val SURFACE = BuildConfig.DEBUG
 }

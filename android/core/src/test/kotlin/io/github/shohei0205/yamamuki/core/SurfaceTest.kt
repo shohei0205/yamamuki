@@ -258,6 +258,19 @@ class SurfaceTest {
     }
 
     @Test
+    fun containerMustHoldTheSurfaceDataset() {
+        val m = parse(manifest())
+        fun info(applicationId: Long = 0x594D4442, containerVersion: Long = 1, levelCount: Long = 5) =
+            SurfaceContainerInfo(applicationId, containerVersion, levelCount)
+        SurfaceData.requireContainer(info(), m)
+        // SQLite として読めなかった。
+        assertFailsWith<SurfaceDataException> { SurfaceData.requireContainer(null, m) }
+        assertFailsWith<SurfaceDataException> { SurfaceData.requireContainer(info(applicationId = 0), m) }
+        assertFailsWith<SurfaceDataException> { SurfaceData.requireContainer(info(containerVersion = 2), m) }
+        assertFailsWith<SurfaceDataException> { SurfaceData.requireContainer(info(levelCount = 0), m) }
+    }
+
+    @Test
     fun datasetIsFoundById() {
         assertEquals(SurfaceDataset.ESA_WORLDCOVER_Z9, SurfaceDataset.of("esa-worldcover-z9"))
         assertEquals("esa-worldcover-z9.sqlite3", SurfaceDataset.ESA_WORLDCOVER_Z9.fileName)

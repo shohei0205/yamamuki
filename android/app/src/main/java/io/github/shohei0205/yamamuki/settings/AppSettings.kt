@@ -12,6 +12,7 @@ import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.data.PeakDataStore
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.PeakDataset
+import io.github.shohei0205.yamamuki.core.SurfaceDataset
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +45,10 @@ data class Settings(
     val autoCheckPeakData: Boolean = false,
     /** 方位盤・検索・出典に使う山データの種類。設定の「山データ」で選ぶ。 */
     val peakDataset: PeakDataset = PeakDataset.DEFAULT,
+    /** 方位盤の背景に地表(森林・水域・陰影)を描く。地表データを取得していないあいだは描かない。 */
+    val showSurface: Boolean = false,
+    /** 方位盤の背景に使う地表データの種類。山データの選択画面で選ぶ。 */
+    val surfaceDataset: SurfaceDataset = SurfaceDataset.entries.first(),
 ) {
     companion object {
         val TEXT_SCALES = listOf(0.85f, 1.0f, 1.2f, 1.4f)
@@ -100,6 +105,8 @@ class AppSettings(private val context: Context) {
             .putStringSet(KEY_PEAK_GROUPS, next.peakGroups)
             .putBoolean(KEY_AUTO_CHECK_PEAK_DATA, next.autoCheckPeakData)
             .putString(KEY_PEAK_DATASET, next.peakDataset.id)
+            .putBoolean(KEY_SHOW_SURFACE, next.showSurface)
+            .putString(KEY_SURFACE_DATASET, next.surfaceDataset.id)
             .apply()
         firstLaunchPrefs.edit().putBoolean(KEY_PEAK_DATA_ASKED, next.peakDataAsked).apply()
     }
@@ -139,6 +146,8 @@ class AppSettings(private val context: Context) {
             autoCheckPeakData = prefs.getBoolean(KEY_AUTO_CHECK_PEAK_DATA, d.autoCheckPeakData),
             // 知らない種類(新しい版のアプリで選んだもの)なら、既定に戻す。
             peakDataset = PeakDataset.of(prefs.getString(KEY_PEAK_DATASET, null)) ?: d.peakDataset,
+            showSurface = prefs.getBoolean(KEY_SHOW_SURFACE, d.showSurface),
+            surfaceDataset = SurfaceDataset.of(prefs.getString(KEY_SURFACE_DATASET, null)) ?: d.surfaceDataset,
         )
     }
 
@@ -159,5 +168,7 @@ class AppSettings(private val context: Context) {
         private const val KEY_PEAK_GROUPS = "peak_groups"
         private const val KEY_AUTO_CHECK_PEAK_DATA = "auto_check_peak_data"
         private const val KEY_PEAK_DATASET = "peak_dataset"
+        private const val KEY_SHOW_SURFACE = "show_surface"
+        private const val KEY_SURFACE_DATASET = "surface_dataset"
     }
 }
