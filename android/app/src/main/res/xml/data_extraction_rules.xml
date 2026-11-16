@@ -15,6 +15,8 @@
         <exclude domain="sharedpref" path="peak_data_gsi-peaks.xml" />
         <exclude domain="sharedpref" path="surface_data_esa-worldcover-z9.xml" />
         <exclude domain="sharedpref" path="surface_data_esa-worldcover-z10.xml" />
+        <exclude domain="sharedpref" path="surface_data_esa-worldcover-z11.xml" />
+        <exclude domain="sharedpref" path="surface_data_esa-worldcover-z12.xml" />
         <exclude domain="sharedpref" path="first_launch.xml" />
     </cloud-backup>
 </data-extraction-rules>

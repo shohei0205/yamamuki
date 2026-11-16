@@ -74,9 +74,6 @@ struct PeakDataListView: View {
                     if list.offline { Text(Strings.text("peak_data_list_offline")) }
                 }
             }
-            if Features.surface {
-                SurfaceDataSection(surface: model.surface, selected: model.settings.surfaceDataset)
-            }
         }
         .navigationTitle(Strings.text("peak_data_list_title"))
         .navigationBarTitleDisplayMode(.inline)

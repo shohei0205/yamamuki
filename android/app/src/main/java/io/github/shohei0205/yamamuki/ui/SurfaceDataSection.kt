@@ -45,10 +45,12 @@ val SurfaceDataset.label: Int
     get() = when (this) {
         SurfaceDataset.ESA_WORLDCOVER_Z9 -> R.string.surface_dataset_esa_worldcover_z9
         SurfaceDataset.ESA_WORLDCOVER_Z10 -> R.string.surface_dataset_esa_worldcover_z10
+        SurfaceDataset.ESA_WORLDCOVER_Z11 -> R.string.surface_dataset_esa_worldcover_z11
+        SurfaceDataset.ESA_WORLDCOVER_Z12 -> R.string.surface_dataset_esa_worldcover_z12
     }
 
 /**
- * 山データの選択画面の「地表データ」の節。取得済みの種類と、カタログで取得できる種類を並べる。
+ * 地表データの選択画面([SurfaceDataScreen])の中身。取得済みの種類と、カタログで取得できる種類を並べる。
  * 選ぶとその種類を使い(取得していなければダウンロードするかを聞く)、取得済みの種類は更新と削除ができる。
  * 方位盤に描くかどうかは、設定の「地表を表示」で切り替える。
  */
@@ -64,8 +66,6 @@ fun SurfaceDataSection(
 ) {
     var deleting by remember { mutableStateOf<SurfaceDataset?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        HorizontalDivider()
-        Text(stringResource(R.string.surface_data_section_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         Text(stringResource(R.string.surface_data_section_description), style = MaterialTheme.typography.bodySmall)
         if (state.checking) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

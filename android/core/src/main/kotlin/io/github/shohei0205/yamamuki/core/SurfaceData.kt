@@ -13,6 +13,12 @@ enum class SurfaceDataset(val id: String) {
 
     /** [ESA_WORLDCOVER_Z9] と同じ地表で、ズーム 5〜10(約 42 MB)まで収める。拡大したときに細かく見える。 */
     ESA_WORLDCOVER_Z10("esa-worldcover-z10"),
+
+    /** 同じ地表で、ズーム 5〜11(約 127 MB)まで収める。 */
+    ESA_WORLDCOVER_Z11("esa-worldcover-z11"),
+
+    /** 同じ地表で、ズーム 5〜12(約 390 MB)まで収める。 */
+    ESA_WORLDCOVER_Z12("esa-worldcover-z12"),
     ;
 
     /** データ本体のファイル名(manifest の fileName)。 */
@@ -76,7 +82,7 @@ object SurfaceData {
     const val SURFACE_FORMAT_VERSION = 1
 
     /** これより大きいデータは受け取らない。ズーム 9 までの版は約 17 MB、ズーム 10 までの版は約 42 MB。 */
-    const val MAX_SIZE_BYTES = 100_000_000L
+    const val MAX_SIZE_BYTES = 500_000_000L
 
     private val SHA256_HEX = Regex("[0-9a-f]{64}")
 
