@@ -7,14 +7,16 @@ import ImageIO
 import SQLite3
 import YamamukiCore
 
-/// 端末に置いた地表データの SQLite から、タイルを読んで 1 枚の色の画像にする。
-/// 森林・陰影・水域の画像(WebP か PNG)を復号し、core の `SurfaceCompositor` で合成する。
+/// 端末に置いた地表データの SQLite から、タイルの森林・水域の濃さを読む。
+/// 森林・水域の画像(WebP か PNG)を復号して濃さにし、色にする処理は core の `SurfaceRaster.render` に任せる。
+/// 陰影のレイヤーは、設定で陰影を表示にしているときだけ読む。
 /// SQLite は読み取り専用で開く。呼び出しは 1 つのスレッドから順に行う(`SurfaceLayerRenderer` の中だけで使う)。
 final class SurfaceTileSource {
     private var db: OpaquePointer?
     private var datasetKey = -1
     private var layerKeys: [SurfaceLayerKind: Int] = [:]
-    private var shade: SurfaceShade?
+    /// 陰影のレイヤーの設定。無いか読めなければ nil。
+    private(set) var shade: SurfaceShade?
 
     /// 収録されたズームの段。森林・陰影・水域のどのレイヤーにもある段だけ。
     private(set) var levels: [SurfaceLevel] = []
@@ -49,16 +51,13 @@ final class SurfaceTileSource {
         sqlite3_close(db)
     }
 
-    /// `tile` の森林・陰影・水域を `palette` の色で合成した画像(一辺は `level` の tilePixels、1 画素は 0xAARRGGBB)。
-    /// どのレイヤーにもそのタイルが無ければ nil。
-    func tile(_ tile: SurfaceTile, level: SurfaceLevel, palette: SurfacePalette) -> [UInt32]? {
+    /// `tile` の森林・水域の濃さ(一辺は `level` の tilePixels、1 画素 1 バイト)。`hillshade` が true なら陰影も読む。
+    /// 森林にも水域にもそのタイルが無ければ nil。
+    func tile(_ tile: SurfaceTile, level: SurfaceLevel, hillshade: Bool) -> SurfaceRaster.TileLayers? {
         let forest = mask(.forest, tile, level)
-        let hillshade = mask(.hillshade, tile, level)
         let water = mask(.water, tile, level)
         if forest == nil && water == nil { return nil }
-        return try? SurfaceCompositor.compose(
-            tilePixels: level.tilePixels, forest: forest, hillshade: hillshade, water: water, palette: palette, shade: shade
-        )
+        return SurfaceRaster.TileLayers(forest: forest, hillshade: hillshade ? mask(.hillshade, tile, level) : nil, water: water)
     }
 
     /// `kind` のレイヤーの `tile` を復号した、1 画素 1 バイトの濃さ。タイルが無い、復号できない、大きさが合わないときは nil。

@@ -17,19 +17,21 @@ struct SurfaceLayerImage {
 private actor SurfaceLayerRenderer {
     private let file: URL
     private let datasetId: String
+    private let hillshade: Bool
     private var source: SurfaceTileSource?
 
-    init(file: URL, datasetId: String) {
+    init(file: URL, datasetId: String, hillshade: Bool) {
         self.file = file
         self.datasetId = datasetId
+        self.hillshade = hillshade
     }
 
     func render(_ frame: SurfaceFrame) -> CGImage? {
         if source == nil { source = SurfaceTileSource(file: file, datasetId: datasetId) }
         guard let source, let level = SurfaceRaster.chooseLevel(source.levels, frame: frame) else { return nil }
         let size = SurfaceRaster.size
-        guard var pixels = try? SurfaceRaster.render(frame, level: level, size: size, tile: { tile in
-            source.tile(tile, level: level, palette: .dial)
+        guard var pixels = try? SurfaceRaster.render(frame, level: level, palette: .dial, shade: hillshade ? source.shade : nil, size: size, tile: { tile in
+            source.tile(tile, level: level, hillshade: hillshade)
         }) else { return nil }
         // CGImage は色に透明度を掛けた形で持つ。半透明なのはデータの無い場所との境目だけ。
         for index in pixels.indices {
@@ -70,6 +72,8 @@ final class SurfaceLayerModel: ObservableObject {
         var centerLat: Double?
         var centerLon: Double?
         var rangeKm: Double
+        /// 陰影も重ねる。
+        var hillshade = false
     }
 
     private var renderer: SurfaceLayerRenderer?
@@ -81,13 +85,13 @@ final class SurfaceLayerModel: ObservableObject {
 
     /// 画面の状態が変わるたびに呼ぶ。作り直す必要があれば、少し待ってから作る。呼び出し元のタスクが取り消されたらやめる。
     func update(_ request: Request) async {
-        let key = [request.file?.path, request.datasetId, request.version]
+        let key = [request.file?.path, request.datasetId, request.version, request.hillshade ? "hillshade" : nil]
         if key != rendererKey {
             // 地表データを取り直したら、新しいファイルを開き直す。地表を表示しなくなったら、画像も捨てる。
             rendererKey = key
             image = nil
             if let file = request.file, let datasetId = request.datasetId {
-                renderer = SurfaceLayerRenderer(file: file, datasetId: datasetId)
+                renderer = SurfaceLayerRenderer(file: file, datasetId: datasetId, hillshade: request.hillshade)
             } else {
                 renderer = nil
             }
@@ -132,7 +136,8 @@ struct SurfaceLayerDriver: View {
             version: installed?.version,
             centerLat: model.location?.latitude,
             centerLon: model.location?.longitude,
-            rangeKm: model.rangeKm
+            rangeKm: model.rangeKm,
+            hillshade: model.settings.showHillshade
         )
     }
 }

@@ -89,8 +89,17 @@ class SurfaceRasterTest {
         return i to j
     }
 
-    /** タイルごとに違う 1 色。 */
-    private fun colorOf(tile: SurfaceTile) = (0xFF shl 24) or ((tile.x and 0xFF) shl 16) or ((tile.y and 0xFF) shl 8) or 0x7F
+    /** 森林の濃さがそのまま灰色の明るさになる配色(地面は黒、森林は白)。水域は青。 */
+    private val gray = SurfacePalette(ground = 0x000000, forest = 0xFFFFFF, water = 0x0000FF)
+
+    /** 森林の濃さだけを持つタイル。 */
+    private fun forestTile(pixels: Int, value: (Int) -> Int) =
+        SurfaceRaster.TileLayers(ByteArray(pixels * pixels) { value(it).toByte() }, null, null)
+
+    /** タイルごとに違う濃さ(20〜219)。 */
+    private fun valueOf(tile: SurfaceTile) = 20 + (tile.x * 7 + tile.y * 13) % 200
+
+    private fun grayOf(value: Int) = (0xFF shl 24) or (value shl 16) or (value shl 8) or value
 
     @Test
     fun renderPutsEachTileWhereItsPlaceIs() {
@@ -98,20 +107,20 @@ class SurfaceRasterTest {
         val frame = SurfaceFrame(fujiLat, fujiLon, 80.0)
         val size = 128
         val requested = mutableListOf<SurfaceTile>()
-        val image = SurfaceRaster.render(frame, level, size) { tile ->
+        val image = SurfaceRaster.render(frame, level, gray, null, size, sharpen = false) { tile ->
             requested += tile
-            IntArray(256) { colorOf(tile) }
+            forestTile(16) { valueOf(tile) }
         }
         // 1 枚のタイルにつき 1 回だけ読む。
         assertEquals(requested.size, requested.toSet().size)
         assertTrue(requested.toSet().all { it in SurfaceRaster.tiles(frame, 9).toSet() })
-        // タイルの中央は、そのタイルの色になる。
+        // タイルの中央は、そのタイルの濃さになる。
         var checked = 0
         for (tile in SurfaceRaster.tiles(frame, 9)) {
             val box = tile.bounds
             val (i, j) = pixelOf(frame, size, (box.north + box.south) / 2, (box.west + box.east) / 2)
             if (i !in 0 until size || j !in 0 until size) continue
-            assertEquals(colorOf(tile), image[j * size + i], "tile $tile")
+            assertEquals(grayOf(valueOf(tile)), image[j * size + i], "tile $tile")
             checked++
         }
         assertTrue(checked >= 4, "確かめたタイル $checked 枚")
@@ -125,26 +134,26 @@ class SurfaceRasterTest {
 
     @Test
     fun renderInterpolatesBetweenPixels() {
-        // 右へ行くほど青が濃くなるタイル(列 × 10)。画像を元の画素より細かく作ると、間の値で埋まる。
+        // 右へ行くほど濃くなるタイル(列 × 10)。画像を元の画素より細かく作ると、間の値で埋まる。
         val level = SurfaceLevel(9, 16)
         val frame = SurfaceFrame(fujiLat, fujiLon, 8.0)
         val size = 96
         val tile = SurfaceTiles.tileAt(fujiLat, fujiLon, 9)
-        val image = SurfaceRaster.render(frame, level, size) { IntArray(256) { index -> (0xFF shl 24) or (index % 16 * 10) } }
-        val blues = mutableSetOf<Int>()
+        val image = SurfaceRaster.render(frame, level, gray, null, size, sharpen = false) { forestTile(16) { index -> index % 16 * 10 } }
+        val values = mutableSetOf<Int>()
         for (i in 0 until size) {
             val east = (i + 0.5) / size * 16.0 - 8.0
             val (lat, lon) = GeoMath.destination(fujiLat, fujiLon, kotlin.math.abs(east), if (east >= 0) 90.0 else 270.0)
             if (SurfaceTiles.tileAt(lat, lon, 9) != tile) continue
             val column = (SurfaceTiles.worldU(lon) * 512 - tile.x) * 16 - 0.5
             if (column < 0.5 || column > 14.5) continue
-            val blue = image[size / 2 * size + i] and 0xFF
-            assertEquals(column * 10, blue.toDouble(), 2.0, "列 $i")
+            val value = image[size / 2 * size + i] and 0xFF
+            assertEquals(column * 10, value.toDouble(), 2.0, "列 $i")
             assertEquals(0xFF, image[size / 2 * size + i] ushr 24)
-            blues += blue
+            values += value
         }
         // 元の 16 段より細かい値が出ている。
-        assertTrue(blues.size > 20, "青の値 ${blues.size} 種類")
+        assertTrue(values.size > 20, "濃さの値 ${values.size} 種類")
     }
 
     @Test
@@ -152,25 +161,83 @@ class SurfaceRasterTest {
         val level = SurfaceLevel(9, 8)
         val frame = SurfaceFrame(fujiLat, fujiLon, 40.0)
         val center = SurfaceTiles.tileAt(fujiLat, fujiLon, 9)
-        val image = SurfaceRaster.render(frame, level, 32) { tile -> if (tile == center) IntArray(64) { 0xFF112233.toInt() } else null }
+        val palette = SurfacePalette(ground = 0x445566, forest = 0x112233, water = 0x0000FF)
+        val image = SurfaceRaster.render(frame, level, palette, null, 32) { tile -> if (tile == center) forestTile(8) { 255 } else null }
         assertEquals(0xFF112233.toInt(), image[16 * 32 + 16])
         assertTrue(image.any { it == 0 })
         // データの無いタイルとの境目は透明度だけが変わり、色は混ざらない。
         assertTrue(image.all { it == 0 || it and 0xFFFFFF == 0x112233 })
         // 大きさの合わないタイルは受け取らない。
-        assertFailsWith<IllegalArgumentException> { SurfaceRaster.render(frame, level, 32) { IntArray(10) } }
+        assertFailsWith<IllegalArgumentException> {
+            SurfaceRaster.render(frame, level, palette, null, 32) { SurfaceRaster.TileLayers(ByteArray(10), null, null) }
+        }
     }
 
     @Test
-    fun blendMixesByWeightAndIgnoresTransparentColors() {
-        val red = 0xFFFF0000.toInt()
-        val blue = 0xFF0000FF.toInt()
-        assertEquals(red, SurfaceRaster.blend(red, red, red, red, 100, 200))
-        assertEquals(red, SurfaceRaster.blend(red, blue, red, blue, 0, 0))
-        assertEquals(0xFF800080.toInt(), SurfaceRaster.blend(red, blue, red, blue, 128, 77))
-        assertEquals(0xFF800080.toInt(), SurfaceRaster.blend(red, red, blue, blue, 31, 128))
-        // 透明な画素の色(黒)は混ざらず、透明度だけが下がる。
-        assertEquals(0x80FF0000.toInt(), SurfaceRaster.blend(red, 0, red, 0, 128, 0))
-        assertEquals(0, SurfaceRaster.blend(0, 0, 0, 0x00FFFFFF, 128, 128))
+    fun sharpeningNarrowsTheEdgeOfAMagnifiedMask() {
+        // 左半分が森林、右半分が森林なしのタイル。元の 1 画素が画像の十画素ほどに拡大される。
+        val level = SurfaceLevel(9, 16)
+        val frame = SurfaceFrame(fujiLat, fujiLon, 40.0)
+        val size = 192
+        val edge = { _: SurfaceTile -> forestTile(16) { index -> if (index % 16 < 8) 255 else 0 } }
+        val soft = SurfaceRaster.render(frame, level, gray, null, size, sharpen = false, tile = edge)
+        val sharp = SurfaceRaster.render(frame, level, gray, null, size, sharpen = true, tile = edge)
+        fun middle(image: IntArray) = (0 until size).count { (image[size / 2 * size + it] and 0xFF) in 30..225 }
+        assertTrue(middle(soft) >= 8, "補間だけの境目 ${middle(soft)} 画素")
+        assertTrue(middle(sharp) * 3 < middle(soft), "鋭くした境目 ${middle(sharp)} 画素、補間だけ ${middle(soft)} 画素")
+        // 森林と森林なしの面積はほぼ変わらない。
+        fun forestShare(image: IntArray) = image.count { (it and 0xFF) >= 128 }
+        assertEquals(forestShare(soft).toDouble(), forestShare(sharp).toDouble(), size * size * 0.02)
+        // 拡大しないとき(画像のほうが粗いとき)は補間のまま。
+        val coarse = SurfaceFrame(fujiLat, fujiLon, 4000.0)
+        assertEquals(1.0, SurfaceRaster.magnification(coarse, level, size))
+        assertTrue(SurfaceRaster.magnification(frame, level, size) > 4.0)
+    }
+
+    @Test
+    fun sharpeningKeepsAThinWater() {
+        // 1 画素だけの細い水域(濃さ 100)。補間のままだと薄い線になるが、鋭くすると消えずにはっきり残る。
+        val level = SurfaceLevel(9, 16)
+        val frame = SurfaceFrame(fujiLat, fujiLon, 40.0)
+        val size = 192
+        val river = { _: SurfaceTile ->
+            SurfaceRaster.TileLayers(
+                ByteArray(256) { 0 },
+                null,
+                ByteArray(256) { if (it % 16 == 8) 100 else 0 },
+            )
+        }
+        fun maxBlue(image: IntArray) = image.maxOf { it and 0xFF }
+        assertTrue(maxBlue(SurfaceRaster.render(frame, level, gray, null, size, sharpen = false, tile = river)) <= 110)
+        assertTrue(maxBlue(SurfaceRaster.render(frame, level, gray, null, size, sharpen = true, tile = river)) >= 200)
+    }
+
+    @Test
+    fun noWaterStaysClearAtAnyMagnification() {
+        // 水域が無い(濃さ 0)場所と、ごく薄い場所(濃さ 8)は、拡大の倍率が小さくても青くならない。
+        val level = SurfaceLevel(9, 16)
+        val size = 192
+        for (radius in listOf(30.0, 80.0, 150.0, 250.0, 400.0)) {
+            val frame = SurfaceFrame(fujiLat, fujiLon, radius)
+            for (faint in listOf(0, 8)) {
+                val tile = { _: SurfaceTile -> SurfaceRaster.TileLayers(ByteArray(256), null, ByteArray(256) { faint.toByte() }) }
+                val image = SurfaceRaster.render(frame, level, gray, null, size, sharpen = true, tile = tile)
+                assertTrue(image.all { it and 0xFF <= 8 }, "半径 $radius km、濃さ $faint で青い画素がある(倍率 ${SurfaceRaster.magnification(frame, level, size)})")
+            }
+        }
+    }
+
+    @Test
+    fun sharpeningKeepsAFaintRiverVisible() {
+        // データの中で薄く入っている川(濃さ 50、約 0.2)も、補間のままより濃く、途切れずに見える。
+        val level = SurfaceLevel(9, 16)
+        val frame = SurfaceFrame(fujiLat, fujiLon, 40.0)
+        val size = 192
+        val river = { _: SurfaceTile ->
+            SurfaceRaster.TileLayers(ByteArray(256), null, ByteArray(256) { if (it % 16 == 8) 50 else 0 })
+        }
+        fun maxBlue(image: IntArray) = image.maxOf { it and 0xFF }
+        assertTrue(maxBlue(SurfaceRaster.render(frame, level, gray, null, size, sharpen = false, tile = river)) <= 60)
+        assertTrue(maxBlue(SurfaceRaster.render(frame, level, gray, null, size, sharpen = true, tile = river)) >= 120)
     }
 }

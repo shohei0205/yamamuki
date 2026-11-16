@@ -108,52 +108,71 @@ object SurfaceCompositor {
         for ((name, layer) in listOf("forest" to forest, "hillshade" to hillshade, "water" to water)) {
             require(layer == null || layer.size == count) { "$name の画素数 ${layer?.size} が $count ではありません" }
         }
-        val gains = if (hillshade != null && shade != null) gainTable(shade) else null
-        val groundR = palette.ground shr 16 and 0xFF
-        val groundG = palette.ground shr 8 and 0xFF
-        val groundB = palette.ground and 0xFF
-        val forestR = palette.forest shr 16 and 0xFF
-        val forestG = palette.forest shr 8 and 0xFF
-        val forestB = palette.forest and 0xFF
-        val waterR = palette.water shr 16 and 0xFF
-        val waterG = palette.water shr 8 and 0xFF
-        val waterB = palette.water and 0xFF
-
-        val out = IntArray(count)
-        for (i in 0 until count) {
-            var a = 0
-            var r = 0
-            var g = 0
-            var b = 0
-            if (forest != null) {
-                val m = forest[i].toInt() and 0xFF
-                a = 255
-                r = mix(groundR, forestR, m)
-                g = mix(groundG, forestG, m)
-                b = mix(groundB, forestB, m)
-                if (gains != null && hillshade != null) {
-                    val gain = gains[hillshade[i].toInt() and 0xFF]
-                    r = scale(r, gain)
-                    g = scale(g, gain)
-                    b = scale(b, gain)
-                }
-            }
-            if (water != null) {
-                val m = water[i].toInt() and 0xFF
-                if (a == 255) {
-                    r = mix(r, waterR, m)
-                    g = mix(g, waterG, m)
-                    b = mix(b, waterB, m)
-                } else if (m > 0) {
-                    a = m
-                    r = waterR
-                    g = waterG
-                    b = waterB
-                }
-            }
-            out[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        val painter = Painter(palette, if (hillshade != null) shade else null)
+        val ground = if (forest != null) 255 else 0
+        return IntArray(count) { i ->
+            painter.paint(
+                ground = ground,
+                forest = forest?.let { it[i].toInt() and 0xFF } ?: 0,
+                hillshade = hillshade?.let { it[i].toInt() and 0xFF } ?: painter.neutral,
+                water = water?.let { it[i].toInt() and 0xFF } ?: 0,
+            )
         }
-        return out
+    }
+
+    /**
+     * 1 画素ぶんの濃さから色を決める。[compose] と、輪郭を鋭くしながら画像を作る [SurfaceRaster.render] が使う。
+     * [shade] が null なら、陰影で明るさを変えない。
+     */
+    class Painter(palette: SurfacePalette, shade: SurfaceShade?) {
+        private val gains = shade?.let { gainTable(it) }
+
+        /** 陰影の画素の、明るさを変えない値。陰影が無い画素に使う。 */
+        val neutral: Int = shade?.neutral ?: 128
+
+        private val groundR = palette.ground shr 16 and 0xFF
+        private val groundG = palette.ground shr 8 and 0xFF
+        private val groundB = palette.ground and 0xFF
+        private val forestR = palette.forest shr 16 and 0xFF
+        private val forestG = palette.forest shr 8 and 0xFF
+        private val forestB = palette.forest and 0xFF
+        private val waterR = palette.water shr 16 and 0xFF
+        private val waterG = palette.water shr 8 and 0xFF
+        private val waterB = palette.water and 0xFF
+
+        /**
+         * 森林の濃さ [forest] で地面の色から森林の色へ塗り、陰影 [hillshade] で明るさを変え、その上に水域の色を濃さ [water] の
+         * 分だけ重ねる。水域の色には陰影を掛けない。[ground] は地面を塗る範囲の濃さ(0〜255。森林のレイヤーがある場所は 255)。
+         * 地面が無く水域も無い画素は透明(0)。地面が無く水域だけがあるときは、水域の色を濃さの分の透明度で返す。
+         * 返す色は 0xAARRGGBB(色に透明度を掛けていない)。
+         */
+        fun paint(ground: Int, forest: Int, hillshade: Int, water: Int): Int {
+            if (ground == 0 && water == 0) return 0
+            var gr = 0
+            var gg = 0
+            var gb = 0
+            if (ground > 0) {
+                gr = mix(groundR, forestR, forest)
+                gg = mix(groundG, forestG, forest)
+                gb = mix(groundB, forestB, forest)
+                if (gains != null) {
+                    val gain = gains[hillshade]
+                    gr = scale(gr, gain)
+                    gg = scale(gg, gain)
+                    gb = scale(gb, gain)
+                }
+            }
+            if (water == 0) return (ground shl 24) or (gr shl 16) or (gg shl 8) or gb
+            if (ground == 255) {
+                return (255 shl 24) or (mix(gr, waterR, water) shl 16) or (mix(gg, waterG, water) shl 8) or mix(gb, waterB, water)
+            }
+            // 地面が部分的にしか無いところ(データの端)は、水域の下に地面を透かして重ねる。
+            val alpha = (water * 255 + ground * (255 - water) + 127) / 255
+            val denominator = alpha.toLong() * 255
+            fun over(waterChannel: Int, groundChannel: Int): Int =
+                ((waterChannel.toLong() * water * 255 + groundChannel.toLong() * ground * (255 - water) + denominator / 2) / denominator).toInt()
+            return (alpha shl 24) or (over(waterR, gr) shl 16) or (over(waterG, gg) shl 8) or over(waterB, gb)
+        }
     }
 
     /** 陰影の画素の値ごとの、明るさの倍率([GAIN_ONE] が 1.0)。 */

@@ -2070,6 +2070,28 @@
         }
       }
     },
+    "settings_show_hillshade": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陰影を表示"
+          }
+        }
+      }
+    },
+    "settings_show_hillshade_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表の背景に、地形の起伏の陰影を重ねます。「地表を表示」がオンのときに働きます。"
+          }
+        }
+      }
+    },
     "settings_show_surface": {
       "extractionState": "manual",
       "localizations": {
@@ -2087,7 +2109,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位盤の背景に森林・水域・陰影を表示します。地表データのダウンロードが必要です。"
+            "value": "方位盤の背景に森林・水域を表示します。地表データのダウンロードが必要です。"
           }
         }
       }

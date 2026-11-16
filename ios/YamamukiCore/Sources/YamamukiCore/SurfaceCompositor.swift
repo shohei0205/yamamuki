@@ -98,56 +98,77 @@ public enum SurfaceCompositor {
                 throw SurfaceDataError("\(name) の画素数 \(layer.count) が \(count) ではありません")
             }
         }
-        let gains: [Int]? = if hillshade != nil, let shade { gainTable(shade) } else { nil }
-        let groundR = palette.ground >> 16 & 0xFF
-        let groundG = palette.ground >> 8 & 0xFF
-        let groundB = palette.ground & 0xFF
-        let forestR = palette.forest >> 16 & 0xFF
-        let forestG = palette.forest >> 8 & 0xFF
-        let forestB = palette.forest & 0xFF
-        let waterR = palette.water >> 16 & 0xFF
-        let waterG = palette.water >> 8 & 0xFF
-        let waterB = palette.water & 0xFF
-
+        let painter = Painter(palette: palette, shade: hillshade != nil ? shade : nil)
+        let ground = forest != nil ? 255 : 0
         var out = [UInt32](repeating: 0, count: count)
         for i in 0..<count {
-            var a = 0
-            var r = 0
-            var g = 0
-            var b = 0
-            if let forest {
-                let m = Int(forest[i])
-                a = 255
-                r = mix(groundR, forestR, m)
-                g = mix(groundG, forestG, m)
-                b = mix(groundB, forestB, m)
-                if let gains, let hillshade {
-                    let gain = gains[Int(hillshade[i])]
-                    r = scale(r, gain)
-                    g = scale(g, gain)
-                    b = scale(b, gain)
-                }
-            }
-            if let water {
-                let m = Int(water[i])
-                if a == 255 {
-                    r = mix(r, waterR, m)
-                    g = mix(g, waterG, m)
-                    b = mix(b, waterB, m)
-                } else if m > 0 {
-                    a = m
-                    r = waterR
-                    g = waterG
-                    b = waterB
-                }
-            }
-            out[i] = UInt32(a << 24 | r << 16 | g << 8 | b)
+            out[i] = painter.paint(
+                ground: ground,
+                forest: forest.map { Int($0[i]) } ?? 0,
+                hillshade: hillshade.map { Int($0[i]) } ?? painter.neutral,
+                water: water.map { Int($0[i]) } ?? 0
+            )
         }
         return out
     }
 
+    /// 1 画素ぶんの濃さから色を決める。`compose` と、輪郭を鋭くしながら画像を作る `SurfaceRaster.render` が使う。
+    /// `shade` が nil なら、陰影で明るさを変えない。
+    public struct Painter {
+        private let gains: [Int]?
+        /// 陰影の画素の、明るさを変えない値。陰影が無い画素に使う。
+        public let neutral: Int
+        private let ground: (r: Int, g: Int, b: Int)
+        private let forest: (r: Int, g: Int, b: Int)
+        private let water: (r: Int, g: Int, b: Int)
+
+        public init(palette: SurfacePalette, shade: SurfaceShade?) {
+            gains = shade.map { SurfaceCompositor.gainTable($0) }
+            neutral = shade?.neutral ?? 128
+            ground = (palette.ground >> 16 & 0xFF, palette.ground >> 8 & 0xFF, palette.ground & 0xFF)
+            forest = (palette.forest >> 16 & 0xFF, palette.forest >> 8 & 0xFF, palette.forest & 0xFF)
+            water = (palette.water >> 16 & 0xFF, palette.water >> 8 & 0xFF, palette.water & 0xFF)
+        }
+
+        /// 森林の濃さ `forest` で地面の色から森林の色へ塗り、陰影 `hillshade` で明るさを変え、その上に水域の色を濃さ `water` の
+        /// 分だけ重ねる。水域の色には陰影を掛けない。`ground` は地面を塗る範囲の濃さ(0〜255。森林のレイヤーがある場所は 255)。
+        /// 地面が無く水域も無い画素は透明(0)。地面が無く水域だけがあるときは、水域の色を濃さの分の透明度で返す。
+        /// 返す色は 0xAARRGGBB(色に透明度を掛けていない)。
+        public func paint(ground groundAlpha: Int, forest forestMask: Int, hillshade: Int, water waterMask: Int) -> UInt32 {
+            if groundAlpha == 0 && waterMask == 0 { return 0 }
+            var gr = 0
+            var gg = 0
+            var gb = 0
+            if groundAlpha > 0 {
+                gr = SurfaceCompositor.mix(ground.r, forest.r, forestMask)
+                gg = SurfaceCompositor.mix(ground.g, forest.g, forestMask)
+                gb = SurfaceCompositor.mix(ground.b, forest.b, forestMask)
+                if let gains {
+                    let gain = gains[hillshade]
+                    gr = SurfaceCompositor.scale(gr, gain)
+                    gg = SurfaceCompositor.scale(gg, gain)
+                    gb = SurfaceCompositor.scale(gb, gain)
+                }
+            }
+            if waterMask == 0 { return UInt32(groundAlpha << 24 | gr << 16 | gg << 8 | gb) }
+            if groundAlpha == 255 {
+                let r = SurfaceCompositor.mix(gr, water.r, waterMask)
+                let g = SurfaceCompositor.mix(gg, water.g, waterMask)
+                let b = SurfaceCompositor.mix(gb, water.b, waterMask)
+                return UInt32(255 << 24 | r << 16 | g << 8 | b)
+            }
+            // 地面が部分的にしか無いところ(データの端)は、水域の下に地面を透かして重ねる。
+            let alpha = (waterMask * 255 + groundAlpha * (255 - waterMask) + 127) / 255
+            let denominator = alpha * 255
+            func over(_ waterChannel: Int, _ groundChannel: Int) -> Int {
+                (waterChannel * waterMask * 255 + groundChannel * groundAlpha * (255 - waterMask) + denominator / 2) / denominator
+            }
+            return UInt32(alpha << 24 | over(water.r, gr) << 16 | over(water.g, gg) << 8 | over(water.b, gb))
+        }
+    }
+
     /// 陰影の画素の値ごとの、明るさの倍率(`gainOne` が 1.0)。
-    private static func gainTable(_ shade: SurfaceShade) -> [Int] {
+    fileprivate static func gainTable(_ shade: SurfaceShade) -> [Int] {
         (0..<256).map { value in
             let gain = 1 + shade.strength * Double(value - shade.neutral) / Double(shade.neutral)
             return max(0, Int((gain * Double(gainOne)).rounded()))
@@ -155,7 +176,7 @@ public enum SurfaceCompositor {
     }
 
     /// `from` から `to` へ、濃さ `m`(0〜255)の分だけ寄せた色。
-    private static func mix(_ from: Int, _ to: Int, _ m: Int) -> Int { (from * (255 - m) + to * m + 127) / 255 }
+    fileprivate static func mix(_ from: Int, _ to: Int, _ m: Int) -> Int { (from * (255 - m) + to * m + 127) / 255 }
 
-    private static func scale(_ color: Int, _ gain: Int) -> Int { min(255, (color * gain + gainOne / 2) / gainOne) }
+    fileprivate static func scale(_ color: Int, _ gain: Int) -> Int { min(255, (color * gain + gainOne / 2) / gainOne) }
 }

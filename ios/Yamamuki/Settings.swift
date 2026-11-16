@@ -29,8 +29,10 @@ struct Settings: Codable, Equatable {
     var autoCheckPeakData = false
     /// 方位盤・検索・出典に使う山データの種類。設定の「山データ」で選ぶ。
     var peakDataset = PeakDataset.default
-    /// 方位盤の背景に地表(森林・水域・陰影)を描く。地表データを取得していないあいだは描かない。
+    /// 方位盤の背景に地表(森林・水域)を描く。地表データを取得していないあいだは描かない。
     var showSurface = false
+    /// 地表の背景に、地形の起伏の陰影を重ねる。「地表を表示」がオンのときだけ働く。
+    var showHillshade = false
     /// 方位盤の背景に使う地表データの種類。山データの選択画面で選ぶ。
     var surfaceDataset = SurfaceDataset.allCases[0]
 
@@ -59,6 +61,7 @@ struct Settings: Codable, Equatable {
         // 知らない種類(新しい版のアプリで選んだもの)なら、既定に戻す。
         peakDataset = (try? c.decodeIfPresent(PeakDataset.self, forKey: .peakDataset)) ?? d.peakDataset
         showSurface = try c.decodeIfPresent(Bool.self, forKey: .showSurface) ?? d.showSurface
+        showHillshade = try c.decodeIfPresent(Bool.self, forKey: .showHillshade) ?? d.showHillshade
         surfaceDataset = (try? c.decodeIfPresent(SurfaceDataset.self, forKey: .surfaceDataset)) ?? d.surfaceDataset
     }
 }
