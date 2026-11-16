@@ -66,12 +66,14 @@ DATASET_LABELS = {"osm-peaks": "山データ", "gsi-peaks": "国土地理院の�
 SURFACE_DATASETS = {
     "esa-worldcover-z9": {"release": "esa-worldcover", "file": "esa-worldcover-z9.sqlite3"},
     "esa-worldcover-z10": {"release": "esa-worldcover", "file": "esa-worldcover-z10.sqlite3"},
+    "esa-worldcover-z11": {"release": "esa-worldcover", "file": "esa-worldcover-z11.sqlite3"},
+    "esa-worldcover-z12": {"release": "esa-worldcover", "file": "esa-worldcover-z12.sqlite3"},
 }
 SURFACE_TAG = re.compile(r"(?P<release>[a-z]+(?:-[a-z]+)*?)-\d{8}T\d{6}Z-\d+-\d+")
 SURFACE_DATA_SCHEMA_FORMAT = "yamamuki-sqlite"
 SURFACE_CONTAINER_VERSION = 1
 SURFACE_FORMAT_VERSION = 1
-MAX_SURFACE_BYTES = 100_000_000
+MAX_SURFACE_BYTES = 500_000_000
 
 # 配布用（stable）の osm-peaks に書いてよい manifest の形式。配布中のアプリが読める版だけにする。
 # 新しい形式は dev で試し、読めるアプリが行き渡ってから、ここに足して stable に使う。
