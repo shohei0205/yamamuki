@@ -259,6 +259,11 @@ private struct SurfaceSwitchRow: View {
                 model.updateSettings { $0.showSurface = v }
             }
         }
+        SwitchRow(
+            title: Strings.text("settings_show_hillshade"),
+            description: Strings.text("settings_show_hillshade_description"),
+            isOn: model.settings.showHillshade
+        ) { v in model.updateSettings { $0.showHillshade = v } }
     }
 }
 

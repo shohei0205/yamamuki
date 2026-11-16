@@ -6,6 +6,7 @@ package io.github.shohei0205.yamamuki.core
 import kotlin.math.atan2
 import kotlin.math.floor
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
@@ -76,29 +77,56 @@ object SurfaceRaster {
     /** 補間の重みを整数で持つときの 1.0。 */
     private const val WEIGHT_ONE = 256
 
+    /** 濃さ 255 を、補間の重みを掛けた値で持つときの値(重みの合計は [WEIGHT_ONE] の 2 乗)。 */
+    private const val FULL = 255 * WEIGHT_ONE * WEIGHT_ONE
+
     /**
-     * 左上・右上・左下・右下の 4 画素(0xAARRGGBB)を、右への重み [wx] と下への重み [wy](0〜[WEIGHT_ONE])で混ぜる。
-     * 透明な画素の色が混ざらないよう、色は透明度を掛けてから混ぜる。整数で計算し、両 OS で同じ色にする。
+     * 輪郭を鋭くするときの、境目にする濃さ(0〜255 の割合)。森林は中間の濃さを境にする。水域は川のように 1 画素より細い
+     * ものがデータの中で薄く(0.1〜0.3 ほど)入っているので、低い境目から立ち上げて、途切れずに残す。
      */
-    internal fun blend(c00: Int, c10: Int, c01: Int, c11: Int, wx: Int, wy: Int): Int {
-        if (c00 == c10 && c00 == c01 && c00 == c11) return c00
-        val w00 = (WEIGHT_ONE - wx) * (WEIGHT_ONE - wy)
-        val w10 = wx * (WEIGHT_ONE - wy)
-        val w01 = (WEIGHT_ONE - wx) * wy
-        val w11 = wx * wy
-        val a00 = (c00 ushr 24).toLong() * w00
-        val a10 = (c10 ushr 24).toLong() * w10
-        val a01 = (c01 ushr 24).toLong() * w01
-        val a11 = (c11 ushr 24).toLong() * w11
-        val alphaSum = a00 + a10 + a01 + a11
-        if (alphaSum == 0L) return 0
-        val total = WEIGHT_ONE.toLong() * WEIGHT_ONE
-        val alpha = ((alphaSum + total / 2) / total).toInt()
-        fun channel(shift: Int): Int = ((
-            (c00 shr shift and 0xFF) * a00 + (c10 shr shift and 0xFF) * a10 +
-                (c01 shr shift and 0xFF) * a01 + (c11 shr shift and 0xFF) * a11 + alphaSum / 2
-            ) / alphaSum).toInt()
-        return (alpha shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+    private const val FOREST_EDGE = 0.5
+    private const val WATER_EDGE = 0.175
+
+    /** 立ち上げの始まりの下限(濃さの割合)。これより薄い場所は、データの中の薄いばらつきとして色を付けない。 */
+    private const val FOREST_FLOOR = 0.0
+    private const val WATER_FLOOR = 0.05
+
+    /** 輪郭を鋭くする強さ(境目の濃さの傾き)の上限。元の画素が画像の何画素に拡大されても、境目はこの傾きより急にはしない。 */
+    private const val MAX_SHARPNESS = 8.0
+
+    /** 水域の傾きの上限。川の薄い濃さが 0.05〜0.3 の間で、なだらかに濃くなるようにする(大きな湖の岸は別に鋭くなる)。 */
+    private const val WATER_MAX_SHARPNESS = 4.0
+
+    /** 傾きを整数で持つときの 1.0。 */
+    private const val GAIN_ONE = 256
+
+    /** 1 枚のタイルの、森林・陰影・水域の濃さ(1 画素 1 バイト、0〜255)。無いレイヤーは null。 */
+    class TileLayers(val forest: ByteArray?, val hillshade: ByteArray?, val water: ByteArray?)
+
+    /**
+     * 元の画素が画像の何画素に拡大されるか(1 以上)。1 画素より細かい段が無くて拡大するときだけ、1 より大きくなる。
+     * 輪郭を鋭くする傾きに使う。
+     */
+    fun magnification(frame: SurfaceFrame, level: SurfaceLevel, size: Int = SIZE): Double {
+        val scale = SurfaceTiles.metersPerPixel(level, frame.centerLat) / metersPerPixel(frame, size)
+        return scale.coerceIn(1.0, MAX_SHARPNESS)
+    }
+
+    /**
+     * 補間した濃さ [value](0〜[FULL])の境目を [edge] にして、傾き [gain] で立ち上げた濃さ(0〜255)。[gain] が 1.0 なら補間のまま。
+     * 濃さが [floor](0〜1 の割合)以下の場所は 0 にする。境目から傾きの逆数の半分だけ下がったところが、立ち上がりの始まり
+     * (ただし [floor] より下にはしない)で、そこより薄い場所に色が付かない(水域が無い場所が青くならない)。
+     */
+    private fun sharpen(value: Int, edge: Double, gain: Int, floor: Double): Int {
+        if (gain == GAIN_ONE) return (value + WEIGHT_ONE * WEIGHT_ONE / 2) / (WEIGHT_ONE * WEIGHT_ONE)
+        val half = 0.5 * GAIN_ONE / gain
+        val low = maxOf(floor, edge - half)
+        val high = edge + half
+        val lowValue = (FULL * low).toLong()
+        val highValue = (FULL * high).toLong()
+        val x = if (highValue > lowValue) (value - lowValue) * FULL / (highValue - lowValue) else if (value >= lowValue) FULL.toLong() else 0L
+        val clamped = x.coerceIn(0L, FULL.toLong())
+        return ((clamped + WEIGHT_ONE * WEIGHT_ONE / 2) / (WEIGHT_ONE * WEIGHT_ONE)).toInt()
     }
 
     /** [frame] の画像を作るのに要る、ズーム [z] のタイル。 */
@@ -109,18 +137,31 @@ object SurfaceRaster {
     }
 
     /**
-     * [frame] の画像を作る。左上から行ごとに並べた一辺 [size] の画像で、1 画素(0xAARRGGBB)は [tile] が返す画像の
-     * 周りの 4 画素から滑らかに求める。
+     * [frame] の画像を作る。左上から行ごとに並べた一辺 [size] の画像で、1 画素(0xAARRGGBB)は周りの 4 画素の濃さから求める。
      *
-     * @param tile [level] のタイルの画像([SurfaceCompositor.compose] の結果。一辺は [SurfaceLevel.tilePixels])。
-     *   データの無いタイルは null を返す。その場所は透明(0)になる。1 枚のタイルにつき 1 回だけ呼ぶ。
+     * 色にする前の濃さを補間し、森林と水域は境目の濃さで切って輪郭を鋭くする。色を補間すると、元の画素より細かく作ったときに
+     * 輪郭がぼけるため。切る急さは拡大の倍率([magnification])で決め、拡大しないときは補間のままにする。
+     * 森林が無い場所(データの端)は地面を塗らず、色は混ぜずに透明度だけが変わる。陰影は鋭くしない。
+     *
+     * @param tile [level] のタイルの濃さ。データの無いタイルは null を返す。その場所は透明(0)になる。1 枚のタイルにつき 1 回だけ呼ぶ。
+     * @param sharpen false なら輪郭を鋭くしない(補間だけ)。
      */
-    fun render(frame: SurfaceFrame, level: SurfaceLevel, size: Int = SIZE, tile: (SurfaceTile) -> IntArray?): IntArray {
+    fun render(
+        frame: SurfaceFrame,
+        level: SurfaceLevel,
+        palette: SurfacePalette,
+        shade: SurfaceShade?,
+        size: Int = SIZE,
+        sharpen: Boolean = true,
+        tile: (SurfaceTile) -> TileLayers?,
+    ): IntArray {
         require(size > 0) { "画像の一辺 $size が正の数ではありません" }
         val out = IntArray(size * size)
         val tileCount = SurfaceTiles.tileCount(level.z)
         val last = tileCount.toInt() - 1
         val tilePixels = level.tilePixels
+        val painter = SurfaceCompositor.Painter(palette, shade)
+        val gain = if (sharpen) (magnification(frame, level, size) * GAIN_ONE).roundToInt() else GAIN_ONE
 
         // 格子の点ごとに、世界全体を 0〜1 とした位置を正確に求める。
         val nodes = (size + GRID - 1) / GRID + 1
@@ -139,13 +180,22 @@ object SurfaceRaster {
             }
         }
 
-        // タイルをまたいで、世界全体の画素の位置(列・行)から色を読む。データの無い場所は透明(0)。
-        val loaded = HashMap<Long, IntArray?>()
+        // タイルをまたいで、世界全体の画素の位置(列・行)から濃さを読む。データの無い場所は、すべて 0。
+        val loaded = HashMap<Long, TileLayers?>()
         var currentKey = -1L
-        var current: IntArray? = null
+        var current: TileLayers? = null
         val worldPixels = (last + 1L) * tilePixels
-        fun pixel(gx: Long, gy: Long): Int {
-            if (gx < 0 || gy < 0 || gx >= worldPixels || gy >= worldPixels) return 0
+        // 4 画素ぶんの、地面を塗る範囲・森林・陰影・水域の濃さ。
+        val ground = IntArray(4)
+        val forest = IntArray(4)
+        val hillshade = IntArray(4)
+        val water = IntArray(4)
+        fun read(k: Int, gx: Long, gy: Long) {
+            ground[k] = 0
+            forest[k] = 0
+            hillshade[k] = painter.neutral
+            water[k] = 0
+            if (gx < 0 || gy < 0 || gx >= worldPixels || gy >= worldPixels) return
             val tx = (gx / tilePixels).toInt()
             val ty = (gy / tilePixels).toInt()
             val key = ty.toLong() * (last + 1L) + tx
@@ -154,16 +204,26 @@ object SurfaceRaster {
                 current = if (loaded.containsKey(key)) {
                     loaded[key]
                 } else {
-                    val image = tile(SurfaceTile(level.z, tx, ty))
-                    require(image == null || image.size == tilePixels * tilePixels) {
-                        "タイルの画素数 ${image?.size} が ${tilePixels * tilePixels} ではありません"
+                    val layers = tile(SurfaceTile(level.z, tx, ty))
+                    if (layers != null) {
+                        for ((name, layer) in listOf("forest" to layers.forest, "hillshade" to layers.hillshade, "water" to layers.water)) {
+                            require(layer == null || layer.size == tilePixels * tilePixels) {
+                                "タイルの $name の画素数 ${layer?.size} が ${tilePixels * tilePixels} ではありません"
+                            }
+                        }
                     }
-                    loaded[key] = image
-                    image
+                    loaded[key] = layers
+                    layers
                 }
             }
-            val image = current ?: return 0
-            return image[(gy - ty.toLong() * tilePixels).toInt() * tilePixels + (gx - tx.toLong() * tilePixels).toInt()]
+            val layers = current ?: return
+            val index = (gy - ty.toLong() * tilePixels).toInt() * tilePixels + (gx - tx.toLong() * tilePixels).toInt()
+            if (layers.forest != null) {
+                ground[k] = 255
+                forest[k] = layers.forest[index].toInt() and 0xFF
+            }
+            layers.hillshade?.let { hillshade[k] = it[index].toInt() and 0xFF }
+            layers.water?.let { water[k] = it[index].toInt() and 0xFF }
         }
 
         for (j in 0 until size) {
@@ -175,15 +235,45 @@ object SurfaceRaster {
                 val n = b * nodes + a
                 val u = (us[n] * (1 - fx) + us[n + 1] * fx) * (1 - fy) + (us[n + nodes] * (1 - fx) + us[n + nodes + 1] * fx) * fy
                 val v = (vs[n] * (1 - fx) + vs[n + 1] * fx) * (1 - fy) + (vs[n + nodes] * (1 - fx) + vs[n + nodes + 1] * fx) * fy
-                // 画素の中心を基準に、周りの 4 画素から滑らかに求める(元の画素が四角く見えないように)。
+                // 画素の中心を基準に、周りの 4 画素から求める。
                 val gx = u * worldPixels - 0.5
                 val gy = v * worldPixels - 0.5
                 val x0 = floor(gx).toLong()
                 val y0 = floor(gy).toLong()
                 val wx = ((gx - x0) * WEIGHT_ONE).toInt()
                 val wy = ((gy - y0) * WEIGHT_ONE).toInt()
-                out[j * size + i] = blend(
-                    pixel(x0, y0), pixel(x0 + 1, y0), pixel(x0, y0 + 1), pixel(x0 + 1, y0 + 1), wx, wy,
+                read(0, x0, y0)
+                read(1, x0 + 1, y0)
+                read(2, x0, y0 + 1)
+                read(3, x0 + 1, y0 + 1)
+                val w00 = (WEIGHT_ONE - wx) * (WEIGHT_ONE - wy)
+                val w10 = wx * (WEIGHT_ONE - wy)
+                val w01 = (WEIGHT_ONE - wx) * wy
+                val w11 = wx * wy
+                val groundValue = ground[0] * w00 + ground[1] * w10 + ground[2] * w01 + ground[3] * w11
+                var forestValue = forest[0] * w00 + forest[1] * w10 + forest[2] * w01 + forest[3] * w11
+                val waterValue = water[0] * w00 + water[1] * w10 + water[2] * w01 + water[3] * w11
+                if (groundValue == 0 && waterValue == 0) {
+                    out[j * size + i] = 0
+                    continue
+                }
+                var shadeValue = painter.neutral
+                if (groundValue > 0) {
+                    // 地面を塗らない場所(データの端)の分は、色に混ぜない。
+                    val h = hillshade[0] * w00 + hillshade[1] * w10 + hillshade[2] * w01 + hillshade[3] * w11
+                    if (groundValue < FULL) {
+                        forestValue = (forestValue.toLong() * FULL / groundValue).toInt()
+                        shadeValue = ((h.toLong() - painter.neutral.toLong() * (FULL - groundValue) / 255) * 255 / groundValue).toInt()
+                            .coerceIn(0, 255)
+                    } else {
+                        shadeValue = (h + WEIGHT_ONE * WEIGHT_ONE / 2) / (WEIGHT_ONE * WEIGHT_ONE)
+                    }
+                }
+                out[j * size + i] = painter.paint(
+                    ground = (groundValue + WEIGHT_ONE * WEIGHT_ONE / 2) / (WEIGHT_ONE * WEIGHT_ONE),
+                    forest = sharpen(forestValue.coerceAtMost(FULL), FOREST_EDGE, gain, FOREST_FLOOR),
+                    hillshade = shadeValue,
+                    water = sharpen(waterValue, WATER_EDGE, minOf(gain, (WATER_MAX_SHARPNESS * GAIN_ONE).toInt()), WATER_FLOOR),
                 )
             }
         }

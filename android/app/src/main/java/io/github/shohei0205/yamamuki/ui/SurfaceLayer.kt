@@ -35,7 +35,7 @@ class SurfaceImage(val bitmap: ImageBitmap, val frame: SurfaceFrame)
  * 地表データの SQLite から、方位盤に貼る画像を作る。SQLite は最初に画像を作るときに開く。
  * 作るのは重い(タイルの復号と並べ直し)ので、画面を描くスレッドとは別のところで、1 つずつ順に行う。
  */
-private class SurfaceRenderer(private val file: File, private val datasetId: String) {
+private class SurfaceRenderer(private val file: File, private val datasetId: String, private val hillshade: Boolean) {
     private val mutex = Mutex()
     private var source: SurfaceTileSource? = null
 
@@ -44,7 +44,7 @@ private class SurfaceRenderer(private val file: File, private val datasetId: Str
             val source = source ?: SurfaceTileSource(file, datasetId).also { source = it }
             val level = SurfaceRaster.chooseLevel(source.levels, frame) ?: return@withContext null
             val size = SurfaceRaster.SIZE
-            val pixels = SurfaceRaster.render(frame, level, size) { tile -> source.tile(tile, level, SurfacePalette.DIAL) }
+            val pixels = SurfaceRaster.render(frame, level, SurfacePalette.DIAL, source.shade.takeIf { hillshade }, size) { tile -> source.tile(tile, level, hillshade) }
             SurfaceImage(Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888).asImageBitmap(), frame)
         }
     }
@@ -67,9 +67,11 @@ fun rememberSurfaceImage(
     centerLat: Double?,
     centerLon: Double?,
     rangeKm: Double,
+    /** 陰影も重ねる。 */
+    hillshade: Boolean,
 ): SurfaceImage? {
     // 地表データを取り直したら、新しいファイルを開き直す。地表を表示しなくなったら、画像も捨てる。
-    val renderer = remember(file, installed?.version) { installed?.let { SurfaceRenderer(file, it.datasetId) } }
+    val renderer = remember(file, installed?.version, hillshade) { installed?.let { SurfaceRenderer(file, it.datasetId, hillshade) } }
     var image by remember(renderer) { mutableStateOf<SurfaceImage?>(null) }
     LaunchedEffect(renderer) {
         try {

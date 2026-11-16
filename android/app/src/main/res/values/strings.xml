@@ -235,7 +235,9 @@
     <string name="surface_data_error_invalid">地表データを取り込めませんでした。\n%1$s</string>
     <string name="surface_data_error_network">通信に失敗しました。通信できる場所で再度お試しください。</string>
     <string name="settings_show_surface">地表を表示</string>
-    <string name="settings_show_surface_description">方位盤の背景に森林・水域・陰影を表示します。地表データのダウンロードが必要です。</string>
+    <string name="settings_show_surface_description">方位盤の背景に森林・水域を表示します。地表データのダウンロードが必要です。</string>
+    <string name="settings_show_hillshade">陰影を表示</string>
+    <string name="settings_show_hillshade_description">地表の背景に、地形の起伏の陰影を重ねます。「地表を表示」がオンのときに働きます。</string>
     <string name="credits_section_surface">地表データ</string>
     <string name="surface_attribution">© ESA WorldCover project 2021・地理院タイルを加工</string>
 </resources>

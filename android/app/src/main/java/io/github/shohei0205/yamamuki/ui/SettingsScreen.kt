@@ -178,6 +178,12 @@ fun SettingsScreen(
                         }
                     },
                 )
+                SwitchRow(
+                    title = stringResource(R.string.settings_show_hillshade),
+                    description = stringResource(R.string.settings_show_hillshade_description),
+                    checked = settings.showHillshade,
+                    onChange = { v -> onSettingsChange { it.copy(showHillshade = v) } },
+                )
                 // 見出しが「地表データ」なので、値には選んでいる種類の名前を出す。
                 NavigationRow(
                     title = stringResource(R.string.surface_data_section_title),

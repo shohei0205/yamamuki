@@ -83,13 +83,26 @@ final class SurfaceRasterTests: XCTestCase {
         return (i, j)
     }
 
-    /// タイルごとに違う 1 色。
-    private func colorOf(_ tile: SurfaceTile) -> UInt32 {
+    /// 森林の濃さがそのまま灰色の明るさになる配色(地面は黒、森林は白)。水域は青。
+    private let gray = SurfacePalette(ground: 0x000000, forest: 0xFFFFFF, water: 0x0000FF)
+
+    /// 森林の濃さだけを持つタイル。
+    private func forestTile(_ pixels: Int, _ value: (Int) -> Int) -> SurfaceRaster.TileLayers {
+        let forest: [UInt8] = (0..<(pixels * pixels)).map { UInt8(value($0)) }
+        return SurfaceRaster.TileLayers(forest: forest, hillshade: nil, water: nil)
+    }
+
+    /// タイルごとに違う濃さ(20〜219)。
+    private func valueOf(_ tile: SurfaceTile) -> Int {
+        let mixed = tile.x * 7 + tile.y * 13
+        return 20 + mixed % 200
+    }
+
+    private func grayOf(_ value: Int) -> UInt32 {
         // 古い Xcode では 1 つの式にすると型を決めきれないので、成分ごとに分ける。
-        let red = UInt32(tile.x & 0xFF) << 16
-        let green = UInt32(tile.y & 0xFF) << 8
+        let v = UInt32(value)
         let opaque: UInt32 = 0xFF00_0000
-        return opaque | red | green | 0x7F
+        return opaque | (v << 16) | (v << 8) | v
     }
 
     func testRenderPutsEachTileWhereItsPlaceIs() throws {
@@ -97,20 +110,20 @@ final class SurfaceRasterTests: XCTestCase {
         let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 80)
         let size = 128
         var requested: [SurfaceTile] = []
-        let image = try SurfaceRaster.render(frame, level: level, size: size) { tile in
+        let image = try SurfaceRaster.render(frame, level: level, palette: gray, shade: nil, size: size, sharpen: false) { tile in
             requested.append(tile)
-            return [UInt32](repeating: self.colorOf(tile), count: 256)
+            return self.forestTile(16) { _ in self.valueOf(tile) }
         }
         // 1 枚のタイルにつき 1 回だけ読む。
         XCTAssertEqual(Set(requested).count, requested.count)
         XCTAssertTrue(Set(requested).isSubset(of: Set(SurfaceRaster.tiles(frame, z: 9))))
-        // タイルの中央は、そのタイルの色になる。
+        // タイルの中央は、そのタイルの濃さになる。
         var checked = 0
         for tile in SurfaceRaster.tiles(frame, z: 9) {
             let box = tile.bounds
             let p = pixelOf(frame, size, (box.north + box.south) / 2, (box.west + box.east) / 2)
             guard (0..<size).contains(p.i), (0..<size).contains(p.j) else { continue }
-            XCTAssertEqual(image[p.j * size + p.i], colorOf(tile), "tile \(tile)")
+            XCTAssertEqual(image[p.j * size + p.i], grayOf(valueOf(tile)), "tile \(tile)")
             checked += 1
         }
         XCTAssertGreaterThanOrEqual(checked, 4)
@@ -125,18 +138,14 @@ final class SurfaceRasterTests: XCTestCase {
     }
 
     func testRenderInterpolatesBetweenPixels() throws {
-        // 右へ行くほど青が濃くなるタイル(列 × 10)。画像を元の画素より細かく作ると、間の値で埋まる。
+        // 右へ行くほど濃くなるタイル(列 × 10)。画像を元の画素より細かく作ると、間の値で埋まる。
         let level = SurfaceLevel(z: 9, tilePixels: 16)
         let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 8)
         let size = 96
         let tile = SurfaceTiles.tileAt(fujiLat, fujiLon, z: 9)
-        let opaque: UInt32 = 0xFF00_0000
-        let gradient: [UInt32] = (0..<256).map { (index: Int) -> UInt32 in
-            let blue = UInt32(index % 16 * 10)
-            return opaque | blue
-        }
-        let image = try SurfaceRaster.render(frame, level: level, size: size) { _ in gradient }
-        var blues = Set<Int>()
+        let gradient = forestTile(16) { $0 % 16 * 10 }
+        let image = try SurfaceRaster.render(frame, level: level, palette: gray, shade: nil, size: size, sharpen: false) { _ in gradient }
+        var values = Set<Int>()
         for i in 0..<size {
             let east = (Double(i) + 0.5) / Double(size) * 16 - 8
             let p = GeoMath.destination(fujiLat, fujiLon, distanceKm: abs(east), bearingDeg: east >= 0 ? 90 : 270)
@@ -146,36 +155,96 @@ final class SurfaceRasterTests: XCTestCase {
             let value = image[size / 2 * size + i]
             XCTAssertEqual(Double(value & 0xFF), column * 10, accuracy: 2, "列 \(i)")
             XCTAssertEqual(value >> 24, 0xFF)
-            blues.insert(Int(value & 0xFF))
+            values.insert(Int(value & 0xFF))
         }
         // 元の 16 段より細かい値が出ている。
-        XCTAssertGreaterThan(blues.count, 20)
+        XCTAssertGreaterThan(values.count, 20)
     }
 
     func testRenderLeavesMissingTilesTransparent() throws {
         let level = SurfaceLevel(z: 9, tilePixels: 8)
         let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 40)
         let center = SurfaceTiles.tileAt(fujiLat, fujiLon, z: 9)
-        let image = try SurfaceRaster.render(frame, level: level, size: 32) { tile in
-            tile == center ? [UInt32](repeating: 0xFF112233, count: 64) : nil
+        let palette = SurfacePalette(ground: 0x445566, forest: 0x112233, water: 0x0000FF)
+        let image = try SurfaceRaster.render(frame, level: level, palette: palette, shade: nil, size: 32) { tile in
+            tile == center ? self.forestTile(8) { _ in 255 } : nil
         }
         XCTAssertEqual(image[16 * 32 + 16], 0xFF112233)
         XCTAssertTrue(image.contains(0))
         // データの無いタイルとの境目は透明度だけが変わり、色は混ざらない。
         XCTAssertTrue(image.allSatisfy { $0 == 0 || $0 & 0xFFFFFF == 0x112233 })
         // 大きさの合わないタイルは受け取らない。
-        XCTAssertThrowsError(try SurfaceRaster.render(frame, level: level, size: 32) { _ in [UInt32](repeating: 0, count: 10) })
+        XCTAssertThrowsError(try SurfaceRaster.render(frame, level: level, palette: palette, shade: nil, size: 32) { _ in
+            SurfaceRaster.TileLayers(forest: [UInt8](repeating: 0, count: 10), hillshade: nil, water: nil)
+        })
     }
 
-    func testBlendMixesByWeightAndIgnoresTransparentColors() {
-        let red: UInt32 = 0xFFFF0000
-        let blue: UInt32 = 0xFF0000FF
-        XCTAssertEqual(SurfaceRaster.blend(red, red, red, red, 100, 200), red)
-        XCTAssertEqual(SurfaceRaster.blend(red, blue, red, blue, 0, 0), red)
-        XCTAssertEqual(SurfaceRaster.blend(red, blue, red, blue, 128, 77), 0xFF800080)
-        XCTAssertEqual(SurfaceRaster.blend(red, red, blue, blue, 31, 128), 0xFF800080)
-        // 透明な画素の色(黒)は混ざらず、透明度だけが下がる。
-        XCTAssertEqual(SurfaceRaster.blend(red, 0, red, 0, 128, 0), 0x80FF0000)
-        XCTAssertEqual(SurfaceRaster.blend(0, 0, 0, 0x00FFFFFF, 128, 128), 0)
+    func testSharpeningNarrowsTheEdgeOfAMagnifiedMask() throws {
+        // 左半分が森林、右半分が森林なしのタイル。元の 1 画素が画像の十画素ほどに拡大される。
+        let level = SurfaceLevel(z: 9, tilePixels: 16)
+        let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 40)
+        let size = 192
+        let edge = forestTile(16) { $0 % 16 < 8 ? 255 : 0 }
+        let soft = try SurfaceRaster.render(frame, level: level, palette: gray, shade: nil, size: size, sharpen: false) { _ in edge }
+        let sharp = try SurfaceRaster.render(frame, level: level, palette: gray, shade: nil, size: size, sharpen: true) { _ in edge }
+        func middle(_ image: [UInt32]) -> Int {
+            (0..<size).filter { (30...225).contains(Int(image[size / 2 * size + $0] & 0xFF)) }.count
+        }
+        XCTAssertGreaterThanOrEqual(middle(soft), 8)
+        XCTAssertLessThan(middle(sharp) * 3, middle(soft))
+        // 森林と森林なしの面積はほぼ変わらない。
+        func forestShare(_ image: [UInt32]) -> Int { image.filter { ($0 & 0xFF) >= 128 }.count }
+        XCTAssertEqual(Double(forestShare(soft)), Double(forestShare(sharp)), accuracy: Double(size * size) * 0.02)
+        // 拡大しないとき(画像のほうが粗いとき)は補間のまま。
+        let coarse = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 4000)
+        XCTAssertEqual(SurfaceRaster.magnification(coarse, level: level, size: size), 1.0)
+        XCTAssertGreaterThan(SurfaceRaster.magnification(frame, level: level, size: size), 4.0)
+    }
+
+    func testSharpeningKeepsAThinWater() throws {
+        // 1 画素だけの細い水域(濃さ 100)。補間のままだと薄い線になるが、鋭くすると消えずにはっきり残る。
+        let level = SurfaceLevel(z: 9, tilePixels: 16)
+        let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 40)
+        let size = 192
+        let forest = [UInt8](repeating: 0, count: 256)
+        let water: [UInt8] = (0..<256).map { $0 % 16 == 8 ? 100 : 0 }
+        let river = SurfaceRaster.TileLayers(forest: forest, hillshade: nil, water: water)
+        func maxBlue(_ sharpen: Bool) throws -> UInt32 {
+            let image = try SurfaceRaster.render(frame, level: level, palette: gray, shade: nil, size: size, sharpen: sharpen) { _ in river }
+            return image.map { $0 & 0xFF }.max() ?? 0
+        }
+        XCTAssertLessThanOrEqual(try maxBlue(false), 110)
+        XCTAssertGreaterThanOrEqual(try maxBlue(true), 200)
+    }
+
+    func testNoWaterStaysClearAtAnyMagnification() throws {
+        // 水域が無い(濃さ 0)場所と、ごく薄い場所(濃さ 8)は、拡大の倍率が小さくても青くならない。
+        let level = SurfaceLevel(z: 9, tilePixels: 16)
+        let size = 192
+        for radius in [30.0, 80.0, 150.0, 250.0, 400.0] {
+            let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: radius)
+            for faint in [0, 8] {
+                let water = [UInt8](repeating: UInt8(faint), count: 256)
+                let tile = SurfaceRaster.TileLayers(forest: [UInt8](repeating: 0, count: 256), hillshade: nil, water: water)
+                let image = try SurfaceRaster.render(frame, level: level, palette: gray, shade: nil, size: size, sharpen: true) { _ in tile }
+                XCTAssertTrue(image.allSatisfy { $0 & 0xFF <= 8 }, "半径 \(radius) km、濃さ \(faint) で青い画素がある")
+            }
+        }
+    }
+
+    func testSharpeningKeepsAFaintRiverVisible() throws {
+        // データの中で薄く入っている川(濃さ 50、約 0.2)も、補間のままより濃く、途切れずに見える。
+        let level = SurfaceLevel(z: 9, tilePixels: 16)
+        let frame = SurfaceFrame(centerLat: fujiLat, centerLon: fujiLon, radiusKm: 40)
+        let size = 192
+        let forest = [UInt8](repeating: 0, count: 256)
+        let water: [UInt8] = (0..<256).map { $0 % 16 == 8 ? 50 : 0 }
+        let river = SurfaceRaster.TileLayers(forest: forest, hillshade: nil, water: water)
+        func maxBlue(_ sharpen: Bool) throws -> UInt32 {
+            let image = try SurfaceRaster.render(frame, level: level, palette: gray, shade: nil, size: size, sharpen: sharpen) { _ in river }
+            return image.map { $0 & 0xFF }.max() ?? 0
+        }
+        XCTAssertLessThanOrEqual(try maxBlue(false), 60)
+        XCTAssertGreaterThanOrEqual(try maxBlue(true), 120)
     }
 }

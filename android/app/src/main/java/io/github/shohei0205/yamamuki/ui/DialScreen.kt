@@ -302,6 +302,7 @@ fun DialScreen(
             centerLat = state.location?.latitude,
             centerLon = state.location?.longitude,
             rangeKm = state.rangeKm,
+            hillshade = state.settings.showHillshade,
         )
         DialCanvas(
             headingDeg = heading ?: 0.0,
