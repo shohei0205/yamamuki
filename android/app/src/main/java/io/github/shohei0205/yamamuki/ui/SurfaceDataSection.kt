@@ -44,6 +44,7 @@ import java.util.Locale
 val SurfaceDataset.label: Int
     get() = when (this) {
         SurfaceDataset.ESA_WORLDCOVER_Z9 -> R.string.surface_dataset_esa_worldcover_z9
+        SurfaceDataset.ESA_WORLDCOVER_Z10 -> R.string.surface_dataset_esa_worldcover_z10
     }
 
 /**
