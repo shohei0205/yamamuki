@@ -10,11 +10,13 @@ extension SurfaceDataset {
         switch self {
         case .esaWorldcoverZ9: return Strings.text("surface_dataset_esa_worldcover_z9")
         case .esaWorldcoverZ10: return Strings.text("surface_dataset_esa_worldcover_z10")
+        case .esaWorldcoverZ11: return Strings.text("surface_dataset_esa_worldcover_z11")
+        case .esaWorldcoverZ12: return Strings.text("surface_dataset_esa_worldcover_z12")
         }
     }
 }
 
-/// 山データの選択画面の「地表データ」の節。取得済みの種類と、カタログで取得できる種類を並べる。
+/// 地表データの選択画面(`SurfaceDataView`)の中身。取得済みの種類と、カタログで取得できる種類を並べる。
 /// 選ぶとその種類を使い(取得していなければダウンロードするかを聞く)、取得済みの種類は更新と削除ができる。
 /// 方位盤に描くかどうかは、設定の「地表を表示」で切り替える。
 struct SurfaceDataSection: View {
@@ -36,14 +38,11 @@ struct SurfaceDataSection: View {
                 )
             }
         } header: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Strings.text("surface_data_section_title"))
-                // 説明は見出しの太い字にせず、フッターと同じ小さな字で出す。
-                Text(Strings.text("surface_data_section_description"))
-                    .font(.footnote)
-                    .fontWeight(.regular)
-                    .textCase(nil)
-            }
+            // 説明は見出しの太い字にせず、フッターと同じ小さな字で出す。
+            Text(Strings.text("surface_data_section_description"))
+                .font(.footnote)
+                .fontWeight(.regular)
+                .textCase(nil)
         } footer: {
             if surface.checking {
                 HStack(spacing: 8) {

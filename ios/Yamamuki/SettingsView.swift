@@ -14,7 +14,7 @@ struct SettingsView: View {
     @ObservedObject var model: DialModel
     @Environment(\.dismiss) private var dismiss
     /// 「地表を表示」をオンにしたときに、山データの選択画面を開く。
-    @State private var showPeakDataList = false
+    @State private var showSurfaceData = false
 
     var body: some View {
         let settings = model.settings
@@ -74,7 +74,17 @@ struct SettingsView: View {
                         label: { "\($0)" }
                     ) { v in model.updateSettings { $0.initialRangeKm = v } }
                     if Features.surface {
-                        SurfaceSwitchRow(model: model, surface: model.surface, openPeakDataList: { showPeakDataList = true })
+                        SurfaceSwitchRow(model: model, surface: model.surface, openSurfaceData: { showSurfaceData = true })
+                        // 見出しが「地表データ」なので、値には選んでいる種類の名前を出す。
+                        NavigationLink {
+                            SurfaceDataView(model: model)
+                        } label: {
+                            HStack {
+                                Text(Strings.text("surface_data_section_title"))
+                                Spacer()
+                                Text(settings.surfaceDataset.label).foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
 
@@ -136,8 +146,8 @@ struct SettingsView: View {
             }
             // 「地表を表示」から開く選択画面へのリンク。一覧の中の行は、画面の外にあるあいだは開けないので、一覧の外に置く。
             .background(
-                NavigationLink(isActive: $showPeakDataList) {
-                    PeakDataListView(model: model)
+                NavigationLink(isActive: $showSurfaceData) {
+                    SurfaceDataView(model: model)
                 } label: {
                     EmptyView()
                 }
@@ -234,7 +244,7 @@ private struct Choice<T: Hashable>: View {
 private struct SurfaceSwitchRow: View {
     @ObservedObject var model: DialModel
     @ObservedObject var surface: SurfaceDataModel
-    let openPeakDataList: () -> Void
+    let openSurfaceData: () -> Void
 
     var body: some View {
         let installed = surface.installed(model.settings.surfaceDataset)
@@ -244,7 +254,7 @@ private struct SurfaceSwitchRow: View {
             isOn: model.settings.showSurface && installed
         ) { v in
             if v && !installed {
-                openPeakDataList()
+                openSurfaceData()
             } else {
                 model.updateSettings { $0.showSurface = v }
             }

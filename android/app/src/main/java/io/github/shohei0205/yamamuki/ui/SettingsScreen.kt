@@ -97,6 +97,7 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { onOpen() }
     var showPeakGroups by rememberSaveable { mutableStateOf(false) }
     var showCredits by rememberSaveable { mutableStateOf(false) }
+    var showSurfaceData by rememberSaveable { mutableStateOf(false) }
 
     // グループの選択画面、山データの選択画面と出典の画面は、設定画面の上に重ねて出す。
     Box(modifier.fillMaxSize()) {
@@ -171,11 +172,17 @@ fun SettingsScreen(
                     onChange = { v ->
                         // 地表データをまだ取得していなければ、オンにせずに選択画面を開いてダウンロードできるようにする。
                         if (v && !surfaceState.installed(settings.surfaceDataset)) {
-                            onOpenPeakDataList()
+                            showSurfaceData = true
                         } else {
                             onSettingsChange { it.copy(showSurface = v) }
                         }
                     },
+                )
+                // 見出しが「地表データ」なので、値には選んでいる種類の名前を出す。
+                NavigationRow(
+                    title = stringResource(R.string.surface_data_section_title),
+                    value = stringResource(settings.surfaceDataset.label),
+                    onClick = { showSurfaceData = true },
                 )
             }
 
@@ -239,8 +246,14 @@ fun SettingsScreen(
             onChoose = onChoosePeakData,
             onDelete = onDeletePeakData,
             onBack = onClosePeakDataList,
+        )
+    }
+
+    if (showSurfaceData && surface != null) {
+        SurfaceDataScreen(
             surface = surface,
-            selectedSurface = settings.surfaceDataset,
+            selected = settings.surfaceDataset,
+            onBack = { showSurfaceData = false },
         )
     }
 

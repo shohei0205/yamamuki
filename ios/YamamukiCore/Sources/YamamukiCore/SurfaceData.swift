@@ -12,6 +12,12 @@ public enum SurfaceDataset: String, CaseIterable, Codable, Sendable {
     /// `esaWorldcoverZ9` と同じ地表で、ズーム 5〜10(約 42 MB)まで収める。拡大したときに細かく見える。
     case esaWorldcoverZ10 = "esa-worldcover-z10"
 
+    /// 同じ地表で、ズーム 5〜11(約 127 MB)まで収める。
+    case esaWorldcoverZ11 = "esa-worldcover-z11"
+
+    /// 同じ地表で、ズーム 5〜12(約 390 MB)まで収める。
+    case esaWorldcoverZ12 = "esa-worldcover-z12"
+
     /// カタログでの名前(datasets のキー)。
     public var id: String { rawValue }
 
@@ -90,7 +96,7 @@ public enum SurfaceData {
     public static let surfaceFormatVersion = 1
 
     /// これより大きいデータは受け取らない。ズーム 9 までの版は約 17 MB、ズーム 10 までの版は約 42 MB。
-    public static let maxSizeBytes = 100_000_000
+    public static let maxSizeBytes = 500_000_000
 
     /// `requireContainer` に渡す、ズームの段の数を数える SQL。引数は順に、データセットの ID・種類(`datasetKind`)・
     /// 地表の形式の版(`surfaceFormatVersion`)。

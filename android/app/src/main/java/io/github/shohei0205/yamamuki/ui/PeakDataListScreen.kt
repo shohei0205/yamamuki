@@ -41,9 +41,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.PeakDataset
-import io.github.shohei0205.yamamuki.core.SurfaceDataset
-import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -87,9 +84,6 @@ fun PeakDataListScreen(
     onDelete: (PeakDataset) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /** 地表データの節。出さないとき([io.github.shohei0205.yamamuki.Features.SURFACE] が false)は null。 */
-    surface: SurfaceDataViewModel? = null,
-    selectedSurface: SurfaceDataset? = null,
 ) {
     BackHandler(onBack = onBack)
     var deleting by remember { mutableStateOf<PeakDataset?>(null) }
@@ -128,20 +122,6 @@ fun PeakDataListScreen(
                     enabled = !updating,
                     onChoose = { onChoose(entry.dataset) },
                     onDelete = { deleting = entry.dataset },
-                )
-            }
-            if (surface != null && selectedSurface != null) {
-                // 開くたびに、取得できる版を確かめ直す。
-                LaunchedEffect(surface) { surface.open() }
-                val surfaceState by surface.state.collectAsStateWithLifecycle()
-                SurfaceDataSection(
-                    state = surfaceState,
-                    selected = selectedSurface,
-                    onChoose = surface::choose,
-                    onUpdate = surface::offerDownload,
-                    onDelete = surface::delete,
-                    onAnswerOffer = surface::answerOffer,
-                    onDismissError = surface::dismissError,
                 )
             }
         }
