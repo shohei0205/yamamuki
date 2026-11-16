@@ -447,3 +447,132 @@ class CheckHelpersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+SURFACE = "esa-worldcover-z9"
+SURFACE_TAG = "esa-worldcover-20261112T164326Z-43261736372-1"
+
+
+def surface_manifest_bytes(tag=SURFACE_TAG, dataset=SURFACE, **changes):
+    spec = pd.SURFACE_DATASETS[dataset]
+    manifest = {
+        "schemaFormat": "yamamuki-manifest", "schemaVersion": 6,
+        "dataSchemaFormat": "yamamuki-sqlite", "dataSchemaVersion": 1,
+        "name": "日本全国の地表", "version": tag.removeprefix(f"{spec['release']}-"),
+        "fileName": spec["file"],
+        "downloadUrl": f"https://github.com/shohei0205/yamamuki-data/releases/download/{tag}/{spec['file']}",
+        "sha256": "0" * 64, "sizeBytes": 17572352,
+        "datasets": [{"id": "esa-worldcover-japan", "kind": "surface", "formatVersion": 1}],
+        **changes,
+    }
+    return (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode()
+
+
+def surface_entry(data, tag=SURFACE_TAG, dataset=SURFACE):
+    return {"manifestUrl": f"{pd.manifest_url_prefix(dataset)}{tag}.json", "manifestSha256": pd.sha256(data)}
+
+
+class SurfaceCatalogTest(unittest.TestCase):
+    def test_accepts_surface_dataset_next_to_peaks(self):
+        data = surface_manifest_bytes()
+        tags = pd.validate_catalog(catalog(osm_peaks={"stable": entry(STABLE_OLD)}, esa_worldcover_z9={"dev": surface_entry(data)}))
+        self.assertEqual({"osm-peaks": {"stable": STABLE_OLD}, SURFACE: {"dev": SURFACE_TAG}}, tags)
+
+    def test_rejects_tag_of_another_release_and_url_elsewhere(self):
+        peaks = {"stable": entry(STABLE_OLD)}
+        for url in (f"{pd.manifest_url_prefix(SURFACE)}{STABLE_OLD}.json",
+                    f"{pd.manifest_url_prefix('osm-peaks')}{SURFACE_TAG}.json",
+                    f"https://example.invalid/{SURFACE_TAG}.json"):
+            with self.assertRaises(pd.PeakDataError):
+                pd.validate_catalog(catalog(osm_peaks=peaks, esa_worldcover_z9={"dev": {"manifestUrl": url, "manifestSha256": "a" * 64}}))
+        with self.assertRaises(pd.PeakDataError):
+            pd.validate_catalog(catalog(osm_peaks=peaks, esa_worldcover_z10={"dev": surface_entry(b"")}))
+
+    def test_surface_manifest_name_is_per_file(self):
+        self.assertEqual("esa-worldcover-z9.manifest.json", pd.surface_manifest_name(SURFACE))
+
+
+class SurfaceManifestTest(unittest.TestCase):
+    def test_accepts_the_manifest_of_the_dataset(self):
+        manifest = pd.validate_surface_manifest(surface_manifest_bytes(), SURFACE_TAG, SURFACE)
+        self.assertEqual(17572352, manifest["sizeBytes"])
+
+    def test_rejects_other_formats_files_and_versions(self):
+        other_file = "https://github.com/shohei0205/yamamuki-data/releases/download/" + SURFACE_TAG + "/esa-worldcover-z10.sqlite3"
+        for changes in (
+                {"schemaVersion": 5},
+                {"dataSchemaFormat": "yamamuki-points"},
+                {"dataSchemaVersion": 2},
+                {"fileName": "esa-worldcover-z10.sqlite3", "downloadUrl": other_file},
+                {"downloadUrl": "https://example.invalid/esa-worldcover-z9.sqlite3"},
+                {"version": "20261201T000000Z-1-1"},
+                {"sha256": "abc"},
+                {"sizeBytes": pd.MAX_SURFACE_BYTES + 1},
+                {"datasets": []},
+                {"datasets": [{"id": "osm-peaks", "kind": "points", "formatVersion": 1}]},
+                {"datasets": [{"id": "esa-worldcover-japan", "kind": "surface", "formatVersion": 2}]},
+        ):
+            with self.subTest(changes=changes), self.assertRaises(pd.PeakDataError):
+                pd.validate_surface_manifest(surface_manifest_bytes(**changes), SURFACE_TAG, SURFACE)
+        with self.assertRaises(pd.PeakDataError):
+            pd.validate_surface_manifest(b"not json", SURFACE_TAG, SURFACE)
+
+
+class SurfaceCheckTest(SiteTestCase):
+    """カタログに地表データの dev を足した状態で、PR の確認を動かす。"""
+
+    def setUp(self):
+        super().setUp()
+        self.data = surface_manifest_bytes()
+        (self.root / pd.manifests_dir(SURFACE)).mkdir(parents=True)
+        pd.manifest_path(self.root, SURFACE_TAG, SURFACE).write_bytes(self.data)
+        self.write_catalog("dev")
+        self.surface_release = (self.data, {"prerelease": True})
+        self.sizes = []
+        for name, value in (
+                ("surface_release_manifest", lambda tag, dataset: self.surface_release),
+                ("check_surface_data", lambda manifest, tag: self.sizes.append(manifest["sizeBytes"]) or manifest["sizeBytes"]),
+                ("check_data", lambda manifest, tag: 14035),
+                ("base_stable_count", lambda base: 14035),
+        ):
+            patcher = mock.patch.object(pd, name, side_effect=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.added = f"A\tsite/data/{SURFACE}/manifests/{SURFACE_TAG}.json\n"
+        patcher = mock.patch.object(pd, "git", side_effect=lambda *args: self.added)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def write_catalog(self, channel, data=None):
+        stable = self.catalog()["datasets"]["osm-peaks"]["stable"]
+        pd.write_catalog(self.root, catalog(osm_peaks={"stable": stable}, esa_worldcover_z9={channel: surface_entry(data or self.data)}))
+
+    def test_passes_and_checks_the_data_file(self):
+        pd.check(self.root, "origin/main", False)
+        self.assertEqual([17572352], self.sizes)
+
+    def test_write_catalog_keeps_the_surface_dataset(self):
+        pd.write_catalog(self.root, self.catalog())
+        self.assertEqual({"dev": SURFACE_TAG}, self.tags()[SURFACE])
+
+    def test_fails_when_copy_differs_from_release(self):
+        self.surface_release = (self.data + b" ", {"prerelease": True})
+        with self.assertRaises(pd.PeakDataError):
+            pd.check(self.root, "origin/main", False)
+
+    def test_fails_when_sha256_in_catalog_differs(self):
+        self.write_catalog("dev", data=b"another")
+        with self.assertRaises(pd.PeakDataError):
+            pd.check(self.root, "origin/main", False)
+
+    def test_stable_refuses_prerelease_but_accepts_release(self):
+        self.write_catalog("stable")
+        with self.assertRaises(pd.PeakDataError):
+            pd.check(self.root, "origin/main", False)
+        self.surface_release = (self.data, {})
+        pd.check(self.root, "origin/main", False)
+
+    def test_fails_when_added_file_name_is_not_a_release_tag(self):
+        self.added = f"A\tsite/data/{SURFACE}/manifests/{STABLE_OLD}.json\n"
+        with self.assertRaises(pd.PeakDataError):
+            pd.check(self.root, "origin/main", False)
