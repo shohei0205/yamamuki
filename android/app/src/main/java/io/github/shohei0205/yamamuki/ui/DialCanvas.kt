@@ -217,7 +217,7 @@ fun DialCanvas(
         // 距離の帯と視野の扇は、画面下端の余白まで描く。
         clipRect(top = headerHeight + tapeHeight, bottom = size.height + bottomBleed.toPx()) {
             if (pxPerKm > 0f && surface != null && latitude != null && longitude != null) {
-                drawSurface(surface, observer, pxPerKm, headingDeg, latitude, longitude)
+                drawSurface(surface, origin, pxPerKm, headingDeg, viewportLatitude ?: latitude, viewportLongitude ?: longitude)
             }
             if (pxPerKm > 0f && !surfaceShown) drawGroundBands(observer, pxPerKm, rangeKm)
             if (viewFanAlpha > 0f) {
@@ -269,22 +269,24 @@ fun DialCanvas(
 }
 
 /**
- * 地表の画像を地面に貼る。画像は北が上なので、画像の中心を山と同じ計算(現在地からの距離と方位)で画面に置き、
- * 端末の向きの分だけ回す。
+ * 地表の画像を地面に貼る。画像は北が上なので、表示の中心([origin]。画面の基準の位置 [latitude]・[longitude])が画像の
+ * どこにあたるかを、画像の中心からの距離と方位で求めて原点に合わせ、端末の向きの分だけ回す。
+ * 山は現在地からの距離と方位で置くので、画像の中心を現在地からの距離と方位で置くと、中心から離れるほど画面の中央で山と
+ * ずれ、作り直した瞬間にずれが戻って画像が跳ぶ。画面の中央に合わせれば、ずれが出るのは画面の端だけになる。
  */
 private fun DrawScope.drawSurface(
     surface: SurfaceImage,
-    observer: Offset,
+    origin: Offset,
     pxPerKm: Float,
     headingDeg: Double,
     latitude: Double,
     longitude: Double,
 ) {
     val frame = surface.frame
-    val distanceKm = GeoMath.distanceKm(latitude, longitude, frame.centerLat, frame.centerLon)
-    val bearingDeg = GeoMath.bearingDeg(latitude, longitude, frame.centerLat, frame.centerLon)
+    val distanceKm = GeoMath.distanceKm(frame.centerLat, frame.centerLon, latitude, longitude)
+    val bearingDeg = GeoMath.bearingDeg(frame.centerLat, frame.centerLon, latitude, longitude)
     val o = DialGeometry.project(distanceKm, bearingDeg, headingDeg)
-    val center = Offset(observer.x + (o.x * pxPerKm).toFloat(), observer.y - (o.y * pxPerKm).toFloat())
+    val center = Offset(origin.x - (o.x * pxPerKm).toFloat(), origin.y + (o.y * pxPerKm).toFloat())
     val half = (frame.radiusKm * pxPerKm).toFloat()
     rotate(-headingDeg.toFloat(), pivot = center) {
         drawImage(
