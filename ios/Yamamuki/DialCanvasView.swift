@@ -154,8 +154,8 @@ struct DialCanvasView: View, Animatable {
         var groundContext = ctx
         let groundTop = headerHeight + tapeHeight
         groundContext.clip(to: Path(CGRect(x: 0, y: groundTop, width: size.width, height: max(0, size.height + bottomBleed - groundTop))))
-        if pxPerKm > 0, let surface, let observerLocation {
-            drawSurface(groundContext, surface: surface, observer: observer, pxPerKm: pxPerKm, location: observerLocation)
+        if pxPerKm > 0, let surface, let center = viewportLocation ?? observerLocation {
+            drawSurface(groundContext, surface: surface, origin: origin, pxPerKm: pxPerKm, location: center)
         }
         if pxPerKm > 0, !surfaceShown {
             drawGroundBands(groundContext, observer: observer, pxPerKm: pxPerKm)
@@ -212,16 +212,18 @@ struct DialCanvasView: View, Animatable {
         return rotated
     }
 
-    /// 地表の画像を地面に貼る。画像は北が上なので、画像の中心を山と同じ計算(現在地からの距離と方位)で画面に置き、
-    /// 端末の向きの分だけ回す。
-    private func drawSurface(_ ctx: GraphicsContext, surface: SurfaceLayerImage, observer: CGPoint, pxPerKm: CGFloat, location: GeoPoint) {
+    /// 地表の画像を地面に貼る。画像は北が上なので、表示の中心(`origin`。画面の基準の位置 `location`)が画像のどこにあたるかを、
+    /// 画像の中心からの距離と方位で求めて原点に合わせ、端末の向きの分だけ回す。
+    /// 山は現在地からの距離と方位で置くので、画像の中心を現在地からの距離と方位で置くと、中心から離れるほど画面の中央で山と
+    /// ずれ、作り直した瞬間にずれが戻って画像が跳ぶ。画面の中央に合わせれば、ずれが出るのは画面の端だけになる。
+    private func drawSurface(_ ctx: GraphicsContext, surface: SurfaceLayerImage, origin: CGPoint, pxPerKm: CGFloat, location: GeoPoint) {
         let frame = surface.frame
-        let distanceKm = GeoMath.distanceKm(location.latitude, location.longitude, frame.centerLat, frame.centerLon)
-        let bearingDeg = GeoMath.bearingDeg(location.latitude, location.longitude, frame.centerLat, frame.centerLon)
+        let distanceKm = GeoMath.distanceKm(frame.centerLat, frame.centerLon, location.latitude, location.longitude)
+        let bearingDeg = GeoMath.bearingDeg(frame.centerLat, frame.centerLon, location.latitude, location.longitude)
         let o = DialGeometry.project(distanceKm: distanceKm, bearingDeg: bearingDeg, headingDeg: headingDeg)
         let half = CGFloat(frame.radiusKm) * pxPerKm
         var ctx = ctx
-        ctx.translateBy(x: observer.x + CGFloat(o.x) * pxPerKm, y: observer.y - CGFloat(o.y) * pxPerKm)
+        ctx.translateBy(x: origin.x - CGFloat(o.x) * pxPerKm, y: origin.y + CGFloat(o.y) * pxPerKm)
         ctx.rotate(by: .degrees(-headingDeg))
         ctx.draw(surface.image, in: CGRect(x: -half, y: -half, width: half * 2, height: half * 2))
     }
