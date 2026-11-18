@@ -11,7 +11,7 @@
 | キャッシュの自動バックアップ | 含めない（古い版の DB が戻って起動できなくなるのを防ぐ） | iOS の既定のまま（版を持つ DB ではないので戻っても読める） |
 | 位置と方位の精度 | 位置の更新を頼む間隔（省電力 30 秒・標準 10 秒・高精度 5 秒）と方位センサーの値を受け取る間隔（100・60・20 ミリ秒）を変える | 位置の精度（100m・10m・最高）と、方位が届く変化の大きさ（2°・1°・1°）を変える |
 | 設定の保存 | SharedPreferences | UserDefaults |
-| 地表データの読み出し | Android の SQLite（`SQLiteDatabase`）で読み、タイルの画像は `BitmapFactory` で復号する | SQLite3 の C の API で読み、タイルの画像は ImageIO で復号する。取り込み済みの記録は UserDefaults |
+| 地表データの読み出し | Android の SQLite（`SQLiteDatabase`）で読み、タイルの画像は `BitmapFactory` で復号する。地理院タイルは、ディスクのキャッシュを持たない Ktor（OkHttp）で取る | SQLite3 の C の API で読み、タイルの画像は ImageIO で復号する。取り込み済みの記録は UserDefaults。地理院タイルは、ディスクにもメモリにも通信の仕組みのキャッシュを持たない通信（`URLSessionConfiguration.ephemeral`）で取る |
 | 山の詳細 | ダイアログ | 下から出るシート |
 | 広告の SDK | 配布版(release)のビルドにだけ入れる | 常にリンクし、広告を出すのは Release だけ(Swift Package は構成ごとに外せないため) |
 | 位置情報を断ったとき | 許可を求め直す | 設定アプリを開くボタンを出す（iOS はアプリから再度聞けない） |

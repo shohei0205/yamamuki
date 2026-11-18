@@ -35,6 +35,8 @@ struct Settings: Codable, Equatable {
     var showHillshade = false
     /// 方位盤の背景に使う地表データの種類。山データの選択画面で選ぶ。
     var surfaceDataset = SurfaceDataset.allCases[0]
+    /// 方位盤の背景に、地表データの代わりに使う通信して取る地図。nil なら地表データ(`surfaceDataset`)を使う。
+    var onlineSurface: OnlineSurface?
 
     static let textScales = [0.85, 1.0, 1.2, 1.4]
     static let initialRangesKm = [5, 10, 15, 20, 30, 50]
@@ -63,6 +65,8 @@ struct Settings: Codable, Equatable {
         showSurface = try c.decodeIfPresent(Bool.self, forKey: .showSurface) ?? d.showSurface
         showHillshade = try c.decodeIfPresent(Bool.self, forKey: .showHillshade) ?? d.showHillshade
         surfaceDataset = (try? c.decodeIfPresent(SurfaceDataset.self, forKey: .surfaceDataset)) ?? d.surfaceDataset
+        // 知らない種類なら、地表データを使う。
+        onlineSurface = (try? c.decodeIfPresent(OnlineSurface.self, forKey: .onlineSurface)) ?? nil
     }
 }
 

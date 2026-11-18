@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.YamamukiApp
 import io.github.shohei0205.yamamuki.core.InstalledSurfaceData
+import io.github.shohei0205.yamamuki.core.OnlineSurface
 import io.github.shohei0205.yamamuki.core.PeakDataCredits
 import io.github.shohei0205.yamamuki.core.PeakDataCreditsReader
 import io.github.shohei0205.yamamuki.core.SurfaceDataException
@@ -129,10 +130,16 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
     fun choose(d: SurfaceDataset) {
         if (_state.value.updating != null) return
         if (store(d).load() != null) {
-            app.settings.update { it.copy(surfaceDataset = d) }
+            app.settings.update { it.copy(surfaceDataset = d, onlineSurface = null) }
         } else {
             offerDownload(d)
         }
+    }
+
+    /** 選択画面で、通信して取る地図 [surface] を選んだ。ダウンロードはせず、方位盤が表示している周りのタイルだけを取る。 */
+    fun chooseOnline(surface: OnlineSurface) {
+        if (_state.value.updating != null) return
+        app.settings.update { it.copy(onlineSurface = surface) }
     }
 
     /** [d] の新しい版(または、まだ取得していない版)の大きさを見せて、ダウンロードするかを聞く。 */
@@ -160,7 +167,7 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
                 store(d).save(installed)
                 offers.remove(d)
                 setEntry(d, SurfaceDataEntry(d, installed))
-                app.settings.update { it.copy(surfaceDataset = d) }
+                app.settings.update { it.copy(surfaceDataset = d, onlineSurface = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -186,7 +193,8 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
         if (_state.value.updating != null) return
         viewModelScope.launch {
             store(d).clear()
-            if (app.settings.settings.value.surfaceDataset == d) app.settings.update { it.copy(showSurface = false) }
+            val settings = app.settings.settings.value
+            if (settings.surfaceDataset == d && settings.onlineSurface == null) app.settings.update { it.copy(showSurface = false) }
             // 行は「未取得」にしておき、取り込める版が分かっていれば選べるようにする。
             val known = offers[d]
             setEntry(d, known?.let { SurfaceDataEntry(d, null, it.manifest) })

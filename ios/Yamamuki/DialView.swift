@@ -59,7 +59,8 @@ struct DialView: View {
                     viewFanAlpha: model.exploring ? 0 : 1,
                     bottomBleed: geometry.safeAreaInsets.bottom,
                     surface: surfaceLayer.image,
-                    surfaceShown: surfaceLayer.shown,
+                    // 通信して取る地図は、取れるまで(圏外など)距離の帯を残す。
+                    surfaceShown: surfaceLayer.shown && (!surfaceLayer.online || surfaceLayer.image != nil),
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
                     onMountainTap: {
@@ -212,7 +213,11 @@ struct DialView: View {
 
                             VStack(alignment: .trailing, spacing: 0) {
                                 // 地表を表示しているあいだは、地表データの出典も添える。
-                                if surfaceLayer.shown { Text(Strings.text("surface_attribution")) }
+                                if surfaceLayer.online {
+                                    Text(Strings.text("online_surface_attribution"))
+                                } else if surfaceLayer.shown {
+                                    Text(Strings.text("surface_attribution"))
+                                }
                                 Text(model.dataset.attribution)
                             }
                             .font(.caption2)

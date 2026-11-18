@@ -82,7 +82,7 @@ struct SettingsView: View {
                             HStack {
                                 Text(Strings.text("surface_data_section_title"))
                                 Spacer()
-                                Text(settings.surfaceDataset.label).foregroundStyle(.secondary)
+                                Text(settings.onlineSurface?.label ?? settings.surfaceDataset.label).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -240,14 +240,15 @@ private struct Choice<T: Hashable>: View {
     }
 }
 
-/// 「地表を表示」の行。地表データをまだ取得していなければ、オンにせずに選択画面を開いてダウンロードできるようにする。
+/// 「地表を表示」の行。地表データをまだ取得していなければ(通信して取る地図を選んでいるときを除く)、オンにせずに選択画面を開いてダウンロードできるようにする。
 private struct SurfaceSwitchRow: View {
     @ObservedObject var model: DialModel
     @ObservedObject var surface: SurfaceDataModel
     let openSurfaceData: () -> Void
 
     var body: some View {
-        let installed = surface.installed(model.settings.surfaceDataset)
+        // 通信して取る地図を選んでいれば、ダウンロードは要らない。
+        let installed = model.settings.onlineSurface != nil || surface.installed(model.settings.surfaceDataset)
         SwitchRow(
             title: Strings.text("settings_show_surface"),
             description: Strings.text("settings_show_surface_description"),

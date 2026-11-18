@@ -12,6 +12,7 @@ import io.github.shohei0205.yamamuki.core.PeakDataChannel
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
 import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.core.CatalogSurfaceDataSource
+import io.github.shohei0205.yamamuki.core.OnlineSurfaceClient
 import io.github.shohei0205.yamamuki.core.SurfaceDataUpdater
 import io.github.shohei0205.yamamuki.core.SurfaceDataset
 import io.github.shohei0205.yamamuki.data.CacheManager
@@ -101,6 +102,9 @@ class YamamukiApp : Application() {
             )
         }
     }
+
+    /** 方位盤の背景に描く、通信して取る地図(地理院タイル)のタイルを取る。取ったタイルはメモリにだけ覚える。 */
+    val onlineSurfaceClient: OnlineSurfaceClient by lazy { OnlineSurfaceClient(http, userAgent = USER_AGENT) }
 
     /** yamamuki-data が配る [dataset] の地表データを取得して、端末に置く。どこから読むかは山データと同じ。 */
     fun surfaceDataUpdater(dataset: SurfaceDataset): SurfaceDataUpdater = surfaceDataUpdaters.getValue(dataset)

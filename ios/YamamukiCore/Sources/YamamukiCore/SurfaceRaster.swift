@@ -167,22 +167,10 @@ public enum SurfaceRaster {
         let gain = sharpen ? Int((magnification(frame, level: level, size: size) * Double(gainOne)).rounded()) : gainOne
         let unit = weightOne * weightOne
 
-        // 格子の点ごとに、世界全体を 0〜1 とした位置を正確に求める。
-        let nodes = (size + grid - 1) / grid + 1
-        var us = [Double](repeating: 0, count: nodes * nodes)
-        var vs = [Double](repeating: 0, count: nodes * nodes)
-        let kmPerPixel = frame.radiusKm * 2 / Double(size)
-        for b in 0..<nodes {
-            for a in 0..<nodes {
-                let east = Double(a * grid) * kmPerPixel - frame.radiusKm
-                let north = frame.radiusKm - Double(b * grid) * kmPerPixel
-                let point = GeoMath.destination(
-                    frame.centerLat, frame.centerLon, distanceKm: hypot(east, north), bearingDeg: degrees(atan2(east, north))
-                )
-                us[b * nodes + a] = SurfaceTiles.worldU(point.lon)
-                vs[b * nodes + a] = SurfaceTiles.worldV(point.lat)
-            }
-        }
+        let worldGrid = WorldGrid(frame, size: size)
+        let nodes = worldGrid.nodes
+        let us = worldGrid.us
+        let vs = worldGrid.vs
 
         // タイルをまたいで、世界全体の画素の位置(列・行)から濃さを読む。データの無い場所は、すべて 0。
         var loaded: [Int: TileLayers?] = [:]
@@ -278,6 +266,149 @@ public enum SurfaceRaster {
                     hillshade: shadeValue,
                     water: steepen(waterValue, edge: waterEdge, gain: min(gain, Int(waterMaxSharpness * Double(gainOne))), floor: waterFloor)
                 )
+            }
+        }
+        return out
+    }
+
+    /// 画像の格子の点ごとの、世界全体を 0〜1 とした位置。格子の間隔は `grid` 画素で、間の画素は格子の値から直線で求める。
+    private struct WorldGrid {
+        let nodes: Int
+        var us: [Double]
+        var vs: [Double]
+
+        init(_ frame: SurfaceFrame, size: Int) {
+            nodes = (size + grid - 1) / grid + 1
+            us = [Double](repeating: 0, count: nodes * nodes)
+            vs = [Double](repeating: 0, count: nodes * nodes)
+            let kmPerPixel = frame.radiusKm * 2 / Double(size)
+            for b in 0..<nodes {
+                for a in 0..<nodes {
+                    let east = Double(a * grid) * kmPerPixel - frame.radiusKm
+                    let north = frame.radiusKm - Double(b * grid) * kmPerPixel
+                    let point = GeoMath.destination(
+                        frame.centerLat, frame.centerLon, distanceKm: hypot(east, north), bearingDeg: degrees(atan2(east, north))
+                    )
+                    us[b * nodes + a] = SurfaceTiles.worldU(point.lon)
+                    vs[b * nodes + a] = SurfaceTiles.worldV(point.lat)
+                }
+            }
+        }
+    }
+
+    /// `frame` の画像を地図の画像のタイル(`OnlineSurface`)から作るのに読む、`level` のタイル。画像の範囲にかかるものだけ
+    /// (補間で読む隣の画素の分を含む)を、北西から行ごとに並べる。
+    public static func imageTiles(_ frame: SurfaceFrame, level: SurfaceLevel, size: Int = SurfaceRaster.size) -> [SurfaceTile] {
+        let worldGrid = WorldGrid(frame, size: size)
+        let tilesPerSide = Int(SurfaceTiles.tileCount(level.z))
+        let worldPixels = Double(tilesPerSide * level.tilePixels)
+        // 画像の縁は格子の点の外周にある。格子の点のあいだは直線で求めるので、外周の点の最小と最大で足りる。
+        let minU = worldGrid.us.min() ?? 0
+        let maxU = worldGrid.us.max() ?? 0
+        let minV = worldGrid.vs.min() ?? 0
+        let maxV = worldGrid.vs.max() ?? 0
+        func tileIndex(_ world: Double, _ offset: Double) -> Int {
+            min(max(Int(floor((world * worldPixels + offset) / Double(level.tilePixels))), 0), tilesPerSide - 1)
+        }
+        let x0 = tileIndex(minU, -1), x1 = tileIndex(maxU, 1)
+        let y0 = tileIndex(minV, -1), y1 = tileIndex(maxV, 1)
+        return (y0...y1).flatMap { y in (x0...x1).map { x in SurfaceTile(z: level.z, x: x, y: y) } }
+    }
+
+    /// `frame` の画像を、地図の画像のタイル(`OnlineSurface`)から作る。左上から行ごとに並べた一辺 `size` の画像で、
+    /// 1 画素(0xAARRGGBB、透明度を掛けていない色)は周りの 4 画素から求める。透明な画素の色が混ざって縁が暗くならないよう、
+    /// 透明度を掛けた色で補間する。
+    ///
+    /// - Parameter tile: `level` のタイルの画素(0xAARRGGBB、透明度を掛けていない色、一辺は tilePixels)。無いタイルは nil を返し、
+    ///   その場所は透明(0)になる。1 枚のタイルにつき 1 回だけ呼ぶ。
+    /// - Throws: タイルの画素数が `tilePixels` の 2 乗と合わないとき。
+    public static func renderImage(_ frame: SurfaceFrame, level: SurfaceLevel, size: Int = SurfaceRaster.size,
+                                   tile: (SurfaceTile) throws -> [UInt32]?) throws -> [UInt32] {
+        guard size > 0 else { throw SurfaceDataError("画像の一辺 \(size) が正の数ではありません") }
+        var out = [UInt32](repeating: 0, count: size * size)
+        let tilePixels = level.tilePixels
+        let tilesPerSide = Int(SurfaceTiles.tileCount(level.z))
+        let worldPixels = tilesPerSide * tilePixels
+        let worldGrid = WorldGrid(frame, size: size)
+        let nodes = worldGrid.nodes
+        let us = worldGrid.us
+        let vs = worldGrid.vs
+        let unit = weightOne * weightOne
+
+        var loaded: [Int: [UInt32]?] = [:]
+        var currentKey = -1
+        var current: [UInt32]?
+        // 4 画素ぶんの、透明度と、透明度を掛けた赤・緑・青。
+        var alpha = [Int](repeating: 0, count: 4)
+        var red = [Int](repeating: 0, count: 4)
+        var green = [Int](repeating: 0, count: 4)
+        var blue = [Int](repeating: 0, count: 4)
+        func read(_ k: Int, _ gx: Int, _ gy: Int) throws {
+            alpha[k] = 0
+            red[k] = 0
+            green[k] = 0
+            blue[k] = 0
+            if gx < 0 || gy < 0 || gx >= worldPixels || gy >= worldPixels { return }
+            let tx = gx / tilePixels
+            let ty = gy / tilePixels
+            let key = ty * tilesPerSide + tx
+            if key != currentKey {
+                currentKey = key
+                if let known = loaded[key] {
+                    current = known
+                } else {
+                    let pixels = try tile(SurfaceTile(z: level.z, x: tx, y: ty))
+                    if let pixels, pixels.count != tilePixels * tilePixels {
+                        throw SurfaceDataError("タイルの画素数 \(pixels.count) が \(tilePixels * tilePixels) ではありません")
+                    }
+                    loaded[key] = .some(pixels)
+                    current = pixels
+                }
+            }
+            guard let pixels = current else { return }
+            let p = pixels[(gy - ty * tilePixels) * tilePixels + (gx - tx * tilePixels)]
+            let a = Int(p >> 24)
+            alpha[k] = a
+            red[k] = Int(p >> 16 & 0xFF) * a
+            green[k] = Int(p >> 8 & 0xFF) * a
+            blue[k] = Int(p & 0xFF) * a
+        }
+
+        for j in 0..<size {
+            let b = j / grid
+            let fy = (Double(j) + 0.5 - Double(b * grid)) / Double(grid)
+            for i in 0..<size {
+                let a = i / grid
+                let fx = (Double(i) + 0.5 - Double(a * grid)) / Double(grid)
+                let n = b * nodes + a
+                let u = (us[n] * (1 - fx) + us[n + 1] * fx) * (1 - fy) + (us[n + nodes] * (1 - fx) + us[n + nodes + 1] * fx) * fy
+                let v = (vs[n] * (1 - fx) + vs[n + 1] * fx) * (1 - fy) + (vs[n + nodes] * (1 - fx) + vs[n + nodes + 1] * fx) * fy
+                let gx = u * Double(worldPixels) - 0.5
+                let gy = v * Double(worldPixels) - 0.5
+                let x0 = Int(floor(gx))
+                let y0 = Int(floor(gy))
+                let wx = Int((gx - Double(x0)) * Double(weightOne))
+                let wy = Int((gy - Double(y0)) * Double(weightOne))
+                try read(0, x0, y0)
+                try read(1, x0 + 1, y0)
+                try read(2, x0, y0 + 1)
+                try read(3, x0 + 1, y0 + 1)
+                let w00 = (weightOne - wx) * (weightOne - wy)
+                let w10 = wx * (weightOne - wy)
+                let w01 = (weightOne - wx) * wy
+                let w11 = wx * wy
+                // 透明度は 0〜255 に重み(合計 weightOne の 2 乗)を掛けた値、色はさらに透明度を掛けた値。
+                let alphaSum = alpha[0] * w00 + alpha[1] * w10 + alpha[2] * w01 + alpha[3] * w11
+                if alphaSum == 0 {
+                    out[j * size + i] = 0
+                    continue
+                }
+                func unpremultiply(_ c: [Int]) -> UInt32 {
+                    let sum = c[0] * w00 + c[1] * w10 + c[2] * w01 + c[3] * w11
+                    return UInt32(min(max((sum + alphaSum / 2) / alphaSum, 0), 255))
+                }
+                let outAlpha = UInt32((alphaSum + unit / 2) / unit)
+                out[j * size + i] = outAlpha << 24 | unpremultiply(red) << 16 | unpremultiply(green) << 8 | unpremultiply(blue)
             }
         }
         return out

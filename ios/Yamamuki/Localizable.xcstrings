@@ -485,6 +485,17 @@
         }
       }
     },
+    "credits_section_online_surface": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景の地図"
+          }
+        }
+      }
+    },
     "credits_section_sources": {
       "extractionState": "manual",
       "localizations": {
@@ -1108,6 +1119,105 @@
           "stringUnit": {
             "state": "translated",
             "value": "地図を手動で操作します"
+          }
+        }
+      }
+    },
+    "online_surface_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地理院タイル"
+          }
+        }
+      }
+    },
+    "online_surface_credits_source": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "国土地理院"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_hillshade": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陰影起伏図"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_pale": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "淡色地図"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_photo": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写真"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_relief": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "色別標高図"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_std": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準地図"
+          }
+        }
+      }
+    },
+    "online_surface_section_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地理院タイルを方位盤の背景に表示します。通信できるときに、表示している周りの地図を取得します。端末には保存しないので、圏外では表示されません。"
+          }
+        }
+      }
+    },
+    "online_surface_section_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地図（国土地理院）"
           }
         }
       }
@@ -2109,7 +2219,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位盤の背景に森林・水域を表示します。地表データのダウンロードが必要です。"
+            "value": "方位盤の背景に森林・水域や地図を表示します。種類は「地表データ」で選びます。"
           }
         }
       }

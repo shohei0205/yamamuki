@@ -290,19 +290,28 @@ fun DialScreen(
                 }
             },
     ) {
-        // 設定で地表を表示にしていて、その地表データを取得済みなら、背景に貼る画像を作る。
+        // 設定で地表を表示にしていて、通信して取る地図を選んでいるか、その地表データを取得済みなら、背景に貼る画像を作る。
         val surfaceViewModel: SurfaceDataViewModel? = if (Features.SURFACE) viewModel() else null
         val surfaceState = surfaceViewModel?.state?.collectAsStateWithLifecycle()?.value
         val surfaceDataset = state.settings.surfaceDataset
+        val onlineSurface = state.settings.onlineSurface?.takeIf { surfaceViewModel != null && state.settings.showSurface }
         val surfaceInstalled = surfaceState?.entries?.firstOrNull { it.dataset == surfaceDataset }?.installed
-            ?.takeIf { state.settings.showSurface }
+            ?.takeIf { state.settings.showSurface && onlineSurface == null }
+        val app = context.applicationContext as YamamukiApp
+        val hillshade = state.settings.showHillshade
+        val surfaceRenderer: SurfaceRenderer? = remember(onlineSurface, surfaceDataset, surfaceInstalled?.version, surfaceInstalled?.datasetId, hillshade) {
+            when {
+                onlineSurface != null -> OnlineSurfaceRenderer(app.onlineSurfaceClient, onlineSurface)
+                surfaceInstalled != null ->
+                    FileSurfaceRenderer(app.surfaceDataStores.of(surfaceDataset).files.database, surfaceInstalled.datasetId, hillshade)
+                else -> null
+            }
+        }
         val surfaceImage = rememberSurfaceImage(
-            file = remember(surfaceDataset) { (context.applicationContext as YamamukiApp).surfaceDataStores.of(surfaceDataset).files.database },
-            installed = surfaceInstalled,
+            renderer = surfaceRenderer,
             centerLat = state.location?.latitude,
             centerLon = state.location?.longitude,
             rangeKm = state.rangeKm,
-            hillshade = state.settings.showHillshade,
         )
         DialCanvas(
             headingDeg = heading ?: 0.0,
@@ -328,13 +337,18 @@ fun DialScreen(
             viewportLatitude = state.location?.latitude,
             viewportLongitude = state.location?.longitude,
             surface = surfaceImage,
-            surfaceShown = surfaceInstalled != null,
+            // 通信して取る地図は、取れるまで(圏外など)距離の帯を残す。
+            surfaceShown = surfaceRenderer != null && (onlineSurface == null || surfaceImage != null),
         )
         // 配布版では、ヘッダーの中央にバナー広告(320×50)を出す。広告を入れないビルドでは何も出さない(build.gradle.kts の ads)。
         AdBanner(Modifier.align(Alignment.TopCenter).padding(top = ((DialGeometry.HEADER_HEIGHT_DP - 50) / 2).dp))
         Column(Modifier.align(Alignment.BottomEnd).padding(8.dp), horizontalAlignment = Alignment.End) {
             // 地表を表示しているあいだは、地表データの出典も添える。
-            if (surfaceInstalled != null) Text(stringResource(R.string.surface_attribution), style = MaterialTheme.typography.labelSmall)
+            if (onlineSurface != null) {
+                Text(stringResource(R.string.online_surface_attribution), style = MaterialTheme.typography.labelSmall)
+            } else if (surfaceInstalled != null) {
+                Text(stringResource(R.string.surface_attribution), style = MaterialTheme.typography.labelSmall)
+            }
             Text(stringResource(state.settings.peakDataset.attribution), style = MaterialTheme.typography.labelSmall)
         }
 

@@ -12,6 +12,7 @@ import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.data.PeakDataStore
 import io.github.shohei0205.yamamuki.core.DialGeometry
 import io.github.shohei0205.yamamuki.core.PeakDataset
+import io.github.shohei0205.yamamuki.core.OnlineSurface
 import io.github.shohei0205.yamamuki.core.SurfaceDataset
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +52,8 @@ data class Settings(
     val showHillshade: Boolean = false,
     /** 方位盤の背景に使う地表データの種類。山データの選択画面で選ぶ。 */
     val surfaceDataset: SurfaceDataset = SurfaceDataset.entries.first(),
+    /** 方位盤の背景に、地表データの代わりに使う通信して取る地図。null なら地表データ([surfaceDataset])を使う。 */
+    val onlineSurface: OnlineSurface? = null,
 ) {
     companion object {
         val TEXT_SCALES = listOf(0.85f, 1.0f, 1.2f, 1.4f)
@@ -110,6 +113,7 @@ class AppSettings(private val context: Context) {
             .putBoolean(KEY_SHOW_SURFACE, next.showSurface)
             .putBoolean(KEY_SHOW_HILLSHADE, next.showHillshade)
             .putString(KEY_SURFACE_DATASET, next.surfaceDataset.id)
+            .putString(KEY_ONLINE_SURFACE, next.onlineSurface?.id)
             .apply()
         firstLaunchPrefs.edit().putBoolean(KEY_PEAK_DATA_ASKED, next.peakDataAsked).apply()
     }
@@ -152,6 +156,7 @@ class AppSettings(private val context: Context) {
             showSurface = prefs.getBoolean(KEY_SHOW_SURFACE, d.showSurface),
             showHillshade = prefs.getBoolean(KEY_SHOW_HILLSHADE, d.showHillshade),
             surfaceDataset = SurfaceDataset.of(prefs.getString(KEY_SURFACE_DATASET, null)) ?: d.surfaceDataset,
+            onlineSurface = OnlineSurface.of(prefs.getString(KEY_ONLINE_SURFACE, null)),
         )
     }
 
@@ -175,5 +180,6 @@ class AppSettings(private val context: Context) {
         private const val KEY_SHOW_SURFACE = "show_surface"
         private const val KEY_SHOW_HILLSHADE = "show_hillshade"
         private const val KEY_SURFACE_DATASET = "surface_dataset"
+        private const val KEY_ONLINE_SURFACE = "online_surface"
     }
 }
