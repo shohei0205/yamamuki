@@ -73,7 +73,8 @@ class OnlineSurfaceTest {
 
     @Test
     fun clientKeepsFetchedTilesInMemoryAndCountsFailures() = runTest {
-        val requested = mutableListOf<String>()
+        // MockEngine は同時に来た要求を別々のスレッドで受けるので、記録はスレッドを守るリストにする。
+        val requested = java.util.Collections.synchronizedList(mutableListOf<String>())
         val engine = MockEngine { request ->
             val path = request.url.encodedPath
             requested += path
