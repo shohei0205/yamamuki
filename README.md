@@ -45,7 +45,7 @@
 
 | 必要なもの | バージョン |
 |---|---|
-| Mac + Xcode | Xcode 16 以上（16.4 で動作確認） |
+| Mac + Xcode | Xcode 26 以上（CI は 26.6、手元は 27.2 で動作確認） |
 | XcodeGen | `brew install xcodegen` で入れる |
 | 実行する端末 | iOS 15 以上の iPhone（縦向き固定） |
 
