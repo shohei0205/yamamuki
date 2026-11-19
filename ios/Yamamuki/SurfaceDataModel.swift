@@ -127,11 +127,18 @@ final class SurfaceDataModel: ObservableObject {
             .sorted { order.firstIndex(of: $0.dataset)! < order.firstIndex(of: $1.dataset)! }
     }
 
-    /// 選択画面で `d` を選んだ。取得済みならその種類を使い、まだなら大きさを見せてダウンロードするかを聞く。
+    /// 選択画面で「表示しない」を選んだ。方位盤の背景に地表を描かない。
+    func chooseNone() {
+        guard updating == nil else { return }
+        updateSettings { $0.showSurface = false }
+    }
+
+    /// 選択画面で `d` を選んだ。取得済みならその種類を表示し、まだなら大きさを見せてダウンロードするかを聞く。
     func choose(_ d: SurfaceDataset) {
         guard updating == nil else { return }
         if stores[d]!.load() != nil {
             updateSettings {
+                $0.showSurface = true
                 $0.surfaceDataset = d
                 $0.onlineSurface = nil
             }
@@ -143,7 +150,15 @@ final class SurfaceDataModel: ObservableObject {
     /// 選択画面で、通信して取る地図 `surface` を選んだ。ダウンロードはせず、方位盤が表示している周りのタイルだけを取る。
     func chooseOnline(_ surface: OnlineSurface) {
         guard updating == nil else { return }
-        updateSettings { $0.onlineSurface = surface }
+        updateSettings {
+            $0.showSurface = true
+            $0.onlineSurface = surface
+        }
+    }
+
+    /// オフラインデータ(地表データ)に陰影を重ねるかを変える。
+    func setHillshade(_ show: Bool) {
+        updateSettings { $0.showHillshade = show }
     }
 
     /// `d` の新しい版(または、まだ取得していない版)の大きさを見せて、ダウンロードするかを聞く。
@@ -158,7 +173,7 @@ final class SurfaceDataModel: ObservableObject {
         if download { install(d) }
     }
 
-    /// 確認した版のデータ本体を取得して端末に置く。初めての種類なら、取り込めたらその種類を使う。
+    /// 確認した版のデータ本体を取得して端末に置く。取り込めたら、その種類を表示する。
     private func install(_ d: SurfaceDataset) {
         guard updating == nil, let offer = offers[d] else { return }
         checkTask?.cancel()
@@ -178,6 +193,7 @@ final class SurfaceDataModel: ObservableObject {
                 self.offers[d] = nil
                 self.setEntry(d, SurfaceDataEntry(dataset: d, installed: installed))
                 self.updateSettings {
+                    $0.showSurface = true
                     $0.surfaceDataset = d
                     $0.onlineSurface = nil
                 }

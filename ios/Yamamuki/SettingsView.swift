@@ -13,8 +13,6 @@ private let maxPeaksStep = 5
 struct SettingsView: View {
     @ObservedObject var model: DialModel
     @Environment(\.dismiss) private var dismiss
-    /// 「地表を表示」をオンにしたときに、山データの選択画面を開く。
-    @State private var showSurfaceData = false
 
     var body: some View {
         let settings = model.settings
@@ -73,19 +71,6 @@ struct SettingsView: View {
                         // 6 つ並ぶと「10km」が収まらないので、単位は見出しに出す。
                         label: { "\($0)" }
                     ) { v in model.updateSettings { $0.initialRangeKm = v } }
-                    if Features.surface {
-                        SurfaceSwitchRow(model: model, surface: model.surface, openSurfaceData: { showSurfaceData = true })
-                        // 見出しが「地表データ」なので、値には選んでいる種類の名前を出す。
-                        NavigationLink {
-                            SurfaceDataView(model: model)
-                        } label: {
-                            HStack {
-                                Text(Strings.text("surface_data_section_title"))
-                                Spacer()
-                                Text(settings.onlineSurface?.label ?? settings.surfaceDataset.label).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
                 }
 
                 Section(Strings.text("settings_section_battery")) {
@@ -144,15 +129,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            // 「地表を表示」から開く選択画面へのリンク。一覧の中の行は、画面の外にあるあいだは開けないので、一覧の外に置く。
-            .background(
-                NavigationLink(isActive: $showSurfaceData) {
-                    SurfaceDataView(model: model)
-                } label: {
-                    EmptyView()
-                }
-                .hidden()
-            )
             .navigationTitle(Strings.text("settings_title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -237,34 +213,6 @@ private struct Choice<T: Hashable>: View {
             .pickerStyle(.segmented)
             .labelsHidden()
         }
-    }
-}
-
-/// 「地表を表示」の行。地表データをまだ取得していなければ(通信して取る地図を選んでいるときを除く)、オンにせずに選択画面を開いてダウンロードできるようにする。
-private struct SurfaceSwitchRow: View {
-    @ObservedObject var model: DialModel
-    @ObservedObject var surface: SurfaceDataModel
-    let openSurfaceData: () -> Void
-
-    var body: some View {
-        // 通信して取る地図を選んでいれば、ダウンロードは要らない。
-        let installed = model.settings.onlineSurface != nil || surface.installed(model.settings.surfaceDataset)
-        SwitchRow(
-            title: Strings.text("settings_show_surface"),
-            description: Strings.text("settings_show_surface_description"),
-            isOn: model.settings.showSurface && installed
-        ) { v in
-            if v && !installed {
-                openSurfaceData()
-            } else {
-                model.updateSettings { $0.showSurface = v }
-            }
-        }
-        SwitchRow(
-            title: Strings.text("settings_show_hillshade"),
-            description: Strings.text("settings_show_hillshade_description"),
-            isOn: model.settings.showHillshade
-        ) { v in model.updateSettings { $0.showHillshade = v } }
     }
 }
 

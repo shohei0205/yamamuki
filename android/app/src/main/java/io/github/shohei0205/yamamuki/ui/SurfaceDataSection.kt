@@ -36,6 +36,7 @@ import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.OnlineSurface
 import io.github.shohei0205.yamamuki.core.SurfaceDataset
 import io.github.shohei0205.yamamuki.core.byteSizeText
+import io.github.shohei0205.yamamuki.settings.Settings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -61,28 +62,61 @@ val OnlineSurface.label: Int
         OnlineSurface.GSI_PHOTO -> R.string.online_surface_gsi_photo
     }
 
+/** 地表データの選択画面で選んでいるもの。 */
+sealed interface SurfaceChoice {
+    /** 表示しない。 */
+    data object None : SurfaceChoice
+
+    /** オフラインデータ(yamamuki-data の地表データ)。 */
+    data class Offline(val dataset: SurfaceDataset) : SurfaceChoice
+
+    /** オンラインデータ(地理院タイル)。 */
+    data class Online(val surface: OnlineSurface) : SurfaceChoice
+
+    companion object {
+        /** 設定から、選んでいるものを決める。取得していない地表データは「表示しない」とする(方位盤にも描かない)。 */
+        fun of(settings: Settings, state: SurfaceUiState): SurfaceChoice {
+            if (!settings.showSurface) return None
+            settings.onlineSurface?.let { return Online(it) }
+            return if (state.installed(settings.surfaceDataset)) Offline(settings.surfaceDataset) else None
+        }
+    }
+}
+
 /**
- * 地表データの選択画面([SurfaceDataScreen])の中身。取得済みの種類と、カタログで取得できる種類を並べる。
- * 選ぶとその種類を使い(取得していなければダウンロードするかを聞く)、取得済みの種類は更新と削除ができる。
- * 方位盤に描くかどうかは、設定の「地表を表示」で切り替える。
- * そのあとに、通信して取る地図(地理院タイル)を並べる。こちらはダウンロードせず、選ぶとすぐ使う。
+ * 地表データの選択画面([SurfaceDataScreen])の中身。方位盤の背景に描くものを、「表示しない」、オフラインデータ
+ * (yamamuki-data の地表データ)、オンラインデータ(地理院タイル)から 1 つ選ぶ。
+ * オフラインデータは取得済みの種類とカタログで取得できる種類を並べ、選ぶとその種類を表示する(取得していなければ
+ * ダウンロードするかを聞く)。取得済みの種類は更新と削除ができ、陰影を重ねるかもここで切り替える。
+ * オンラインデータはダウンロードせず、選ぶとすぐ表示する。
  */
 @Composable
 fun SurfaceDataSection(
     state: SurfaceUiState,
-    selected: SurfaceDataset,
-    /** 使っている通信して取る地図。地表データを使っているときは null。 */
-    selectedOnline: OnlineSurface?,
+    settings: Settings,
+    onChooseNone: () -> Unit,
     onChoose: (SurfaceDataset) -> Unit,
     onChooseOnline: (OnlineSurface) -> Unit,
+    onHillshadeChange: (Boolean) -> Unit,
     onUpdate: (SurfaceDataset) -> Unit,
     onDelete: (SurfaceDataset) -> Unit,
     onAnswerOffer: (Boolean) -> Unit,
     onDismissError: () -> Unit,
 ) {
     var deleting by remember { mutableStateOf<SurfaceDataset?>(null) }
+    val choice = SurfaceChoice.of(settings, state)
+    val enabled = state.updating == null
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.surface_data_section_description), style = MaterialTheme.typography.bodySmall)
+        HorizontalDivider()
+        ChoiceRow(stringResource(R.string.surface_none), selected = choice == SurfaceChoice.None, enabled = enabled, onClick = onChooseNone)
+
+        // yamamuki-data の地表データはまだ試験的に配っているので、山データの試験版と同じ印を見出しに付ける。
+        SectionHeading(
+            stringResource(R.string.surface_offline_section_title),
+            stringResource(R.string.surface_offline_section_description),
+            badge = stringResource(R.string.peak_data_list_experimental),
+        )
         if (state.checking) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -95,36 +129,26 @@ fun SurfaceDataSection(
             HorizontalDivider()
             SurfaceDataRow(
                 entry = entry,
-                selected = selectedOnline == null && entry.dataset == selected,
-                enabled = state.updating == null,
+                selected = choice == SurfaceChoice.Offline(entry.dataset),
+                enabled = enabled,
                 progress = state.progress.takeIf { state.updating == entry.dataset },
                 onChoose = { onChoose(entry.dataset) },
                 onUpdate = { onUpdate(entry.dataset) },
                 onDelete = { deleting = entry.dataset },
             )
         }
-
-        Text(
-            stringResource(R.string.online_surface_section_title),
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(top = 16.dp),
+        HorizontalDivider()
+        SwitchRow(
+            title = stringResource(R.string.settings_show_hillshade),
+            description = stringResource(R.string.settings_show_hillshade_description),
+            checked = settings.showHillshade,
+            onChange = onHillshadeChange,
         )
-        Text(stringResource(R.string.online_surface_section_description), style = MaterialTheme.typography.bodySmall)
+
+        SectionHeading(stringResource(R.string.online_surface_section_title), stringResource(R.string.online_surface_section_description))
         OnlineSurface.entries.forEach { surface ->
             HorizontalDivider()
-            val inUse = surface == selectedOnline
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .selectable(selected = inUse, enabled = state.updating == null, role = Role.RadioButton, onClick = { onChooseOnline(surface) })
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                RadioButton(selected = inUse, onClick = null, enabled = state.updating == null)
-                Text(stringResource(surface.label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                if (inUse) Badge(stringResource(R.string.peak_data_list_in_use))
-            }
+            ChoiceRow(stringResource(surface.label), selected = choice == SurfaceChoice.Online(surface), enabled = enabled) { onChooseOnline(surface) }
         }
     }
 
@@ -240,3 +264,35 @@ private fun SurfaceDataRow(
 
 /** 押せない行の不透明度。Material の無効な部品と同じ値。 */
 private const val DISABLED_ALPHA = 0.38f
+
+/** 節の見出しと説明。[badge] があれば、見出しの右に印を付ける。 */
+@Composable
+private fun SectionHeading(title: String, description: String, badge: String? = null) {
+    Row(
+        Modifier.padding(top = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        if (badge != null) Badge(badge)
+    }
+    Text(description, style = MaterialTheme.typography.bodySmall)
+}
+
+/** 名前だけの選択肢の行。選んでいれば「使用中」の印を付ける。 */
+@Composable
+private fun ChoiceRow(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .alpha(if (enabled) 1f else DISABLED_ALPHA)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        if (selected) Badge(stringResource(R.string.peak_data_list_in_use))
+    }
+}

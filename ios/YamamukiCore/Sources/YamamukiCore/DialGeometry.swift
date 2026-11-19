@@ -15,8 +15,8 @@ public enum DialGeometry {
     public static let tapeHeight = 44.0
     /// 地図の上端。ヘッダーと方角表示の下に数値の表示を挟む。
     public static let chartTop = headerHeight + tapeHeight + 32
-    /// 描画原点(双眼鏡)の画面下端からの高さ。右下の「© OpenStreetMap contributors」と重ならない。
-    public static let originBottom = 52.0
+    /// 描画原点(双眼鏡)の画面下端からの高さ。右下の出典(2 行)と重ならず、左右下のボタンと高さをそろえる。
+    public static let originBottom = 68.0
     /// 画面の高さから地図上端〜描画原点の高さ(表示範囲の距離に当たる)を引いた残り。
     public static let chartInset = chartTop + originBottom
 

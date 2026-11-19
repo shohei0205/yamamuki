@@ -124,6 +124,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 /** これより小さい方位の変化は画面に反映しない。 */
+/** 方位盤の左下・右下のボタンの、画面下端からの高さ。右下の出典が 2 行になっても、ボタンと重ならない高さにする。 */
+private const val MAP_BUTTONS_BOTTOM_DP = 52
+
 private const val MIN_HEADING_CHANGE_DEG = 0.1
 
 /** ヘディングアップと手動位置モードを切り替えるときの、方位目盛り・コンパス・視野の扇の動きの長さ。 */
@@ -217,6 +220,7 @@ fun DialScreen(
     // 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     var selectedId by remember { mutableStateOf<String?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showSurfaceData by rememberSaveable { mutableStateOf(false) }
     var showDownload by rememberSaveable { mutableStateOf(false) }
     val showSearch = state.search != null
     var showObserver by remember { mutableStateOf(false) }
@@ -249,8 +253,8 @@ fun DialScreen(
                 canvasHeight = it.height / density.density.toDouble()
                 canvasWidth = it.width / density.density.toDouble()
             }
-            .pointerInput(showSettings, showSearch) {
-                if (showSettings || showSearch) return@pointerInput
+            .pointerInput(showSettings, showSearch, showSurfaceData) {
+                if (showSettings || showSearch || showSurfaceData) return@pointerInput
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     var multiTouch = false
@@ -431,8 +435,9 @@ fun DialScreen(
         }
 
         // 右下: 山の検索と、モードの切り替え。検索はどちらのモードからでも使える。
+        // 右下の出典が 2 行(地表の出典と山データの出典)になっても重ならないよう、出典の上に置く。
         Column(
-            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
+            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = MAP_BUTTONS_BOTTOM_DP.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             RoundMapButton(
@@ -457,39 +462,58 @@ fun DialScreen(
             )
         }
 
-        // 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目・同じ高さにそろえる。
-        Row(
-            Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 36.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        // 左下: 設定と事前ダウンロード、設定の上に地表データ。右下のモード切替ボタンと同じ見た目・同じ高さにそろえる。
+        Column(
+            Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = MAP_BUTTONS_BOTTOM_DP.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            RoundMapButton(onClick = { showSettings = true }, iconColor = SETTINGS_BUTTON_ICON_COLOR) {
-                Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title), Modifier.size(28.dp))
+            if (Features.SURFACE) {
+                RoundMapButton(onClick = { showSurfaceData = true }, iconColor = SETTINGS_BUTTON_ICON_COLOR) {
+                    Icon(
+                        painterResource(R.drawable.ic_surface_layers),
+                        contentDescription = stringResource(R.string.surface_data_section_title),
+                        Modifier.size(28.dp),
+                    )
+                }
             }
-            if (Features.AREA_DOWNLOAD) {
-                RoundMapButton(onClick = { showDownload = true }, iconColor = DOWNLOAD_BUTTON_ICON_COLOR) {
-                    // ダウンロード中は画面を閉じていても進み具合が分かるよう、ボタンに出す。
-                    val running = download.running
-                    if (running != null && running.progress.doneTiles > 0) {
-                        CircularProgressIndicator(
-                            progress = { running.progress.fraction },
-                            modifier = Modifier.size(28.dp),
-                            color = LocalContentColor.current,
-                            strokeWidth = 3.dp,
-                            // 進みの少ないうちも輪の形が見えるよう、下地を描く。
-                            trackColor = LocalContentColor.current.copy(alpha = 0.25f),
-                        )
-                    } else if (running != null) {
-                        // 最初の区画が終わるまでは進みが 0 なので、回り続ける表示にする。
-                        CircularProgressIndicator(Modifier.size(28.dp), color = LocalContentColor.current, strokeWidth = 3.dp)
-                    } else {
-                        Icon(
-                            painterResource(R.drawable.ic_area_download),
-                            contentDescription = stringResource(R.string.dial_area_download),
-                            Modifier.size(28.dp),
-                        )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                RoundMapButton(onClick = { showSettings = true }, iconColor = SETTINGS_BUTTON_ICON_COLOR) {
+                    Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title), Modifier.size(28.dp))
+                }
+                if (Features.AREA_DOWNLOAD) {
+                    RoundMapButton(onClick = { showDownload = true }, iconColor = DOWNLOAD_BUTTON_ICON_COLOR) {
+                        // ダウンロード中は画面を閉じていても進み具合が分かるよう、ボタンに出す。
+                        val running = download.running
+                        if (running != null && running.progress.doneTiles > 0) {
+                            CircularProgressIndicator(
+                                progress = { running.progress.fraction },
+                                modifier = Modifier.size(28.dp),
+                                color = LocalContentColor.current,
+                                strokeWidth = 3.dp,
+                                // 進みの少ないうちも輪の形が見えるよう、下地を描く。
+                                trackColor = LocalContentColor.current.copy(alpha = 0.25f),
+                            )
+                        } else if (running != null) {
+                            // 最初の区画が終わるまでは進みが 0 なので、回り続ける表示にする。
+                            CircularProgressIndicator(Modifier.size(28.dp), color = LocalContentColor.current, strokeWidth = 3.dp)
+                        } else {
+                            Icon(
+                                painterResource(R.drawable.ic_area_download),
+                                contentDescription = stringResource(R.string.dial_area_download),
+                                Modifier.size(28.dp),
+                            )
+                        }
                     }
                 }
             }
+        }
+
+        if (Features.SURFACE && showSurfaceData) {
+            SurfaceDataScreen(
+                surface = viewModel<SurfaceDataViewModel>(),
+                settings = state.settings,
+                onBack = { showSurfaceData = false },
+            )
         }
 
         if (showSettings) {
@@ -560,7 +584,7 @@ fun DialScreen(
         )
     }
 
-    val overlay = showSettings || showDownload || showSearch
+    val overlay = showSettings || showDownload || showSearch || showSurfaceData
     if (selected != null && !overlay) {
         MountainDetailDialog(
             selected,
