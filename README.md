@@ -122,6 +122,7 @@ open Yamamuki.xcodeproj
   xcrun simctl launch <シミュレータ名> io.github.shohei0205.yamamuki -fixedHeading 290
   ```
 - 広告(AdMob)は Release だけで出す。Debug で試すときは、ビルド設定 `ADS_ENABLED` を `YES` にする([docs/ads.md](docs/ads.md) を参照)。
+- 利用状況の計測(Firebase)も Release だけで行う。設定ファイル `ios/Yamamuki/GoogleService-Info.plist` はリポジトリに入れず、無いときは計測しない([docs/analytics.md](docs/analytics.md) を参照)。
 - 山データの取得に失敗したときは、原因を Xcode のコンソール（または Mac の「コンソール」アプリ）にカテゴリ `DialModel` で出している。
 
 ## 詳しい仕様
@@ -138,6 +139,7 @@ open Yamamuki.xcodeproj
 | [設定](docs/settings.md) | 設定項目と既定値 |
 | [キャッシュの仕組みと通信量](docs/cache.md) | タイル単位のキャッシュ、自動バックアップ、通信量の目安 |
 | [広告](docs/ads.md) | 配布版のヘッダーのバナー広告（AdMob）、広告を入れるビルドと広告の ID の渡し方 |
+| [利用状況の計測（iOS 版）](docs/analytics.md) | 初回起動を Google 広告のコンバージョンに使う Firebase の計測、設定ファイルの置き場所 |
 | [データの出典とライセンスの画面](docs/credits-screen.md) | 山データの出典の出し方 |
 | [山データの取得で分かったこと](docs/peak-data-notes.md) | Overpass API から取得していたころの記録 |
 

@@ -1,6 +1,6 @@
 ﻿# 広告
 
-配布版では、方位盤のヘッダーの中央に Google AdMob のバナー広告(320×50)を出す。アカウントの作成や app-ads.txt など、人が行う作業は [admob-setup.md](admob-setup.md) にまとめる。
+配布版では、方位盤のヘッダーの中央に Google AdMob のバナー広告(320×50)を出す。アカウントの作成や app-ads.txt など、人が行う作業は [admob-setup.md](admob-setup.md) にまとめる。iOS 版で広告の効果を測る計測（Firebase）は [analytics.md](analytics.md) にある。
 
 - 開発版には出さない。Android は SDK も入れない(Gradle のプロパティ `ads`。既定の `release` は配布版だけ、`all` は開発版にも、`none` はどちらにも入れない)。iOS は Release だけ出す(ビルド設定 `ADS_ENABLED`)。
 - 広告の ID はリポジトリに入れない。無いときは Google のテスト用 ID を使い、「Test Ad」と書かれたテスト広告が出る。

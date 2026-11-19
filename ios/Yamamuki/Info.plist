@@ -10,6 +10,12 @@
 	<string>$(ADMOB_TEST_DEVICE_IDS)</string>
 	<key>YamamukiAdsEnabled</key>
 	<string>$(ADS_ENABLED)</string>
+	<key>YamamukiAnalyticsEnabled</key>
+	<string>$(ANALYTICS_ENABLED)</string>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
+	<false/>
+	<key>FirebaseAutomaticScreenReportingEnabled</key>
+	<false/>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
