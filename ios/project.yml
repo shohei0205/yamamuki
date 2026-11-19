@@ -9,10 +9,10 @@ options:
 packages:
   YamamukiCore:
     path: YamamukiCore
-  # 広告(Google AdMob)。13.4 以降は Xcode 26.2 が要り、CI(Xcode 16.4)でビルドできないので 13.3 系にとどめる。
+  # 広告(Google AdMob)。13.4 以降は Xcode 26.2 以上が要る。13 系の中で新しい版を使う。
   GoogleMobileAds:
     url: https://github.com/googleads/swift-package-manager-google-mobile-ads
-    minorVersion: 13.3.0
+    majorVersion: 13.13.0
 targets:
   Yamamuki:
     type: application
