@@ -9,6 +9,8 @@ captures/
 
 # 本番の広告 ID(iOS。Android は ~/.gradle/gradle.properties に書く)
 ios/Ads.local.xcconfig
+# 利用状況の計測(Firebase)の設定ファイル(iOS。docs/analytics.md)
+ios/Yamamuki/GoogleService-Info.plist
 
 # リリース署名鍵(PC 内の ~/.android に置く。誤って入れないように)
 *.jks

@@ -7,6 +7,10 @@ import SwiftUI
 struct YamamukiApp: App {
     @StateObject private var model = DialModel()
 
+    init() {
+        UsageAnalytics.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             DialView(model: model)

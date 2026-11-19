@@ -13,4 +13,5 @@
 | 設定の保存 | SharedPreferences | UserDefaults |
 | 山の詳細 | ダイアログ | 下から出るシート |
 | 広告の SDK | 配布版(release)のビルドにだけ入れる | 常にリンクし、広告を出すのは Release だけ(Swift Package は構成ごとに外せないため) |
+| 利用状況の計測 | 入れない（インストールは Play Console と Google 広告のリンクで数える） | 配布版だけ Firebase で初回起動を数える（App Store はインストールを Google に知らせないため。[analytics.md](analytics.md)） |
 | 位置情報を断ったとき | 許可を求め直す | 設定アプリを開くボタンを出す（iOS はアプリから再度聞けない） |
