@@ -23,6 +23,8 @@ enum Ads {
         guard !started else { return }
         started = true
         MobileAds.shared.requestConfiguration.testDeviceIdentifiers = testDeviceIDs
+        // 13.12.0 から、位置情報の許可があるとおおよその位置を集めるのが既定になった。位置情報は広告に渡さないので止める。
+        MobileAds.shared.requestConfiguration.coarseLocationCollectionEnabled = false
         MobileAds.shared.start(completionHandler: nil)
     }
 }
