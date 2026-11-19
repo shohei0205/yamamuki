@@ -47,12 +47,12 @@ enum SurfaceChoice: Equatable {
     }
 }
 
-/// 地表データの選択画面(`SurfaceDataView`)の中身。方位盤の背景に描くものを、「表示しない」、オフラインデータ
+/// 地表データの選択画面(`SurfaceDataView`)の一覧。方位盤の背景に描くものを、「表示しない」、オフラインデータ
 /// (yamamuki-data の地表データ)、オンラインデータ(地理院タイル)から 1 つ選ぶ。
 /// オフラインデータは取得済みの種類とカタログで取得できる種類を並べ、選ぶとその種類を表示する(取得していなければ
 /// ダウンロードするかを聞く)。取得済みの種類は更新と削除ができ、陰影を重ねるかもここで切り替える。
 /// オンラインデータはダウンロードせず、選ぶとすぐ表示する。
-struct SurfaceDataSection: View {
+struct SurfaceDataForm: View {
     @ObservedObject var surface: SurfaceDataModel
     let settings: Settings
     @State private var deleting: SurfaceDataset?
@@ -60,62 +60,67 @@ struct SurfaceDataSection: View {
     private var choice: SurfaceChoice { SurfaceChoice.of(settings, surface: surface) }
 
     var body: some View {
-        Section {
-            ChoiceRow(label: Strings.text("surface_none"), selected: choice == .none, enabled: surface.updating == nil) {
-                surface.chooseNone()
+        // 確認や知らせは、節ではなく一覧全体に付ける。一覧は画面に入った節しか作らないので、節に付けると、その節が画面の外に
+        // あるあいだ(小さい画面でオンラインデータの節が下に隠れているときなど)は出せない。
+        Form {
+            Section {
+                ChoiceRow(label: Strings.text("surface_none"), selected: choice == .none, enabled: surface.updating == nil) {
+                    surface.chooseNone()
+                }
+            } header: {
+                // 説明は見出しの太い字にせず、フッターと同じ小さな字で出す。
+                Text(Strings.text("surface_data_section_description"))
+                    .font(.footnote)
+                    .fontWeight(.regular)
+                    .textCase(nil)
             }
-        } header: {
-            // 説明は見出しの太い字にせず、フッターと同じ小さな字で出す。
-            Text(Strings.text("surface_data_section_description"))
-                .font(.footnote)
-                .fontWeight(.regular)
-                .textCase(nil)
-        }
-        Section {
-            ForEach(surface.entries, id: \.dataset) { entry in
-                SurfaceDataRow(
-                    entry: entry,
-                    selected: choice == .offline(entry.dataset),
-                    enabled: surface.updating == nil,
-                    progress: surface.updating == entry.dataset ? surface.progress : nil,
-                    onChoose: { surface.choose(entry.dataset) },
-                    onUpdate: { surface.offerDownload(entry.dataset) },
-                    onDelete: { deleting = entry.dataset }
-                )
-            }
-            if surface.checking {
+            Section {
+                ForEach(surface.entries, id: \.dataset) { entry in
+                    SurfaceDataRow(
+                        entry: entry,
+                        selected: choice == .offline(entry.dataset),
+                        enabled: surface.updating == nil,
+                        progress: surface.updating == entry.dataset ? surface.progress : nil,
+                        onChoose: { surface.choose(entry.dataset) },
+                        onUpdate: { surface.offerDownload(entry.dataset) },
+                        onDelete: { deleting = entry.dataset },
+                        onCancel: { surface.cancelDownload() }
+                    )
+                }
+                if surface.checking {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(Strings.text("surface_data_checking")).foregroundStyle(.secondary)
+                    }
+                } else if surface.entries.isEmpty {
+                    Text(Strings.text("surface_data_none")).foregroundStyle(.secondary)
+                }
+                Toggle(isOn: Binding(get: { settings.showHillshade }, set: { surface.setHillshade($0) })) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(Strings.text("settings_show_hillshade"))
+                        Text(Strings.text("settings_show_hillshade_description")).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                // yamamuki-data の地表データはまだ試験的に配っているので、山データの試験版と同じ印を見出しに付ける。
                 HStack(spacing: 8) {
-                    ProgressView()
-                    Text(Strings.text("surface_data_checking")).foregroundStyle(.secondary)
+                    Text(Strings.text("surface_offline_section_title"))
+                    SurfaceBadge(text: Strings.text("peak_data_list_experimental")).textCase(nil)
                 }
-            } else if surface.entries.isEmpty {
-                Text(Strings.text("surface_data_none")).foregroundStyle(.secondary)
+            } footer: {
+                Text(Strings.text("surface_offline_section_description"))
             }
-            Toggle(isOn: Binding(get: { settings.showHillshade }, set: { surface.setHillshade($0) })) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(Strings.text("settings_show_hillshade"))
-                    Text(Strings.text("settings_show_hillshade_description")).font(.footnote).foregroundStyle(.secondary)
+            Section {
+                ForEach(OnlineSurface.allCases, id: \.self) { online in
+                    ChoiceRow(label: online.label, selected: choice == .online(online), enabled: surface.updating == nil) {
+                        surface.chooseOnline(online)
+                    }
                 }
+            } header: {
+                Text(Strings.text("online_surface_section_title"))
+            } footer: {
+                Text(Strings.text("online_surface_section_description"))
             }
-        } header: {
-            // yamamuki-data の地表データはまだ試験的に配っているので、山データの試験版と同じ印を見出しに付ける。
-            HStack(spacing: 8) {
-                Text(Strings.text("surface_offline_section_title"))
-                SurfaceBadge(text: Strings.text("peak_data_list_experimental")).textCase(nil)
-            }
-        } footer: {
-            Text(Strings.text("surface_offline_section_description"))
-        }
-        Section {
-            ForEach(OnlineSurface.allCases, id: \.self) { online in
-                ChoiceRow(label: online.label, selected: choice == .online(online), enabled: surface.updating == nil) {
-                    surface.chooseOnline(online)
-                }
-            }
-        } header: {
-            Text(Strings.text("online_surface_section_title"))
-        } footer: {
-            Text(Strings.text("online_surface_section_description"))
         }
         .onAppear { surface.open() }
         .alert(
@@ -165,6 +170,7 @@ private struct SurfaceDataRow: View {
     let onChoose: () -> Void
     let onUpdate: () -> Void
     let onDelete: () -> Void
+    let onCancel: () -> Void
 
     private var inUse: Bool { selected && entry.installed != nil }
 
@@ -199,7 +205,10 @@ private struct SurfaceDataRow: View {
             .disabled(!enabled)
             .opacity(enabled || progress != nil ? 1 : 0.4)
             .accessibilityAddTraits(inUse ? .isSelected : [])
-            if entry.installed != nil, progress == nil {
+            if progress != nil {
+                // ダウンロード中は、中止のボタンだけを出す。
+                Button(Strings.text("surface_data_cancel"), action: onCancel).buttonStyle(.borderless)
+            } else if entry.installed != nil {
                 VStack(alignment: .trailing, spacing: 8) {
                     if entry.updateFound {
                         Button(Strings.text("surface_data_update"), action: onUpdate).buttonStyle(.borderless)

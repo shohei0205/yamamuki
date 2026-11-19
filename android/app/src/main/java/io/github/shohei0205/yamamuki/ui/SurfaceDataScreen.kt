@@ -67,6 +67,7 @@ fun SurfaceDataScreen(
                 onHillshadeChange = surface::setHillshade,
                 onUpdate = surface::offerDownload,
                 onDelete = surface::delete,
+                onCancelDownload = surface::cancelDownload,
                 onAnswerOffer = surface::answerOffer,
                 onDismissError = surface::dismissError,
             )

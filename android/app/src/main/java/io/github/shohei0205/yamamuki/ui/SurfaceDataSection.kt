@@ -100,6 +100,7 @@ fun SurfaceDataSection(
     onHillshadeChange: (Boolean) -> Unit,
     onUpdate: (SurfaceDataset) -> Unit,
     onDelete: (SurfaceDataset) -> Unit,
+    onCancelDownload: () -> Unit,
     onAnswerOffer: (Boolean) -> Unit,
     onDismissError: () -> Unit,
 ) {
@@ -135,6 +136,7 @@ fun SurfaceDataSection(
                 onChoose = { onChoose(entry.dataset) },
                 onUpdate = { onUpdate(entry.dataset) },
                 onDelete = { deleting = entry.dataset },
+                onCancel = onCancelDownload,
             )
         }
         HorizontalDivider()
@@ -201,6 +203,7 @@ private fun SurfaceDataRow(
     onChoose: () -> Unit,
     onUpdate: () -> Unit,
     onDelete: () -> Unit,
+    onCancel: () -> Unit,
 ) {
     val installed = entry.installed
     val available = entry.available
@@ -253,7 +256,10 @@ private fun SurfaceDataRow(
                 LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
             }
         }
-        if (installed != null && progress == null) {
+        if (progress != null) {
+            // ダウンロード中は、中止のボタンだけを出す。
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.surface_data_cancel)) }
+        } else if (installed != null) {
             Column(horizontalAlignment = Alignment.End) {
                 if (entry.updateFound) TextButton(onClick = onUpdate, enabled = enabled) { Text(stringResource(R.string.surface_data_update)) }
                 TextButton(onClick = onDelete, enabled = enabled) { Text(stringResource(R.string.peak_data_list_delete)) }

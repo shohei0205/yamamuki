@@ -16,6 +16,7 @@ import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpHeaders
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -169,7 +170,8 @@ class SurfaceDataUpdater(
         } catch (e: IOException) {
             throw SurfaceDataException("地表データを保存できませんでした", e)
         } finally {
-            withContext(Dispatchers.IO) { files.partial.delete() }
+            // 中止(取り消し)されたときも消す。取り消されたコルーチンでは、NonCancellable でないと withContext が始まらない。
+            withContext(NonCancellable + Dispatchers.IO) { files.partial.delete() }
         }
         return InstalledSurfaceData(
             version = manifest.version,

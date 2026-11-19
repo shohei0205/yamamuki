@@ -75,6 +75,7 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
     /** 確認して見つけた、まだ取り込んでいない版。 */
     private val offers = mutableMapOf<SurfaceDataset, SurfaceDataOffer>()
     private var checkJob: Job? = null
+    private var installJob: Job? = null
 
     private fun store(dataset: SurfaceDataset) = app.surfaceDataStores.of(dataset)
 
@@ -172,7 +173,7 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
         if (_state.value.updating != null) return
         checkJob?.cancel()
         _state.update { it.copy(updating = d, progress = 0f, checking = false) }
-        viewModelScope.launch {
+        installJob = viewModelScope.launch {
             try {
                 val installed = app.surfaceDataUpdater(d).install(offer) { p -> _state.update { it.copy(progress = p) } }
                 store(d).save(installed)
@@ -193,6 +194,15 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
                 _state.update { it.copy(updating = null) }
             }
         }
+    }
+
+    /**
+     * ダウンロードを中止する。途中まで受け取ったファイルは消え、前の版(取得済みなら)はそのまま残る。
+     * 利用者が頼んだ中止なので、失敗の知らせは出さない。
+     */
+    fun cancelDownload() {
+        installJob?.cancel()
+        installJob = null
     }
 
     fun dismissError() {

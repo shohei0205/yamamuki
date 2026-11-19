@@ -2290,6 +2290,17 @@
         }
       }
     },
+    "surface_data_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中止"
+          }
+        }
+      }
+    },
     "surface_data_checking": {
       "extractionState": "manual",
       "localizations": {
@@ -2406,7 +2417,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位盤の背景に表示する地表を選びます。"
+            "value": "方位盤の背景に表示する地表を選択します。表示すると、バッテリー消費が増える場合があります。"
           }
         }
       }
@@ -2527,7 +2538,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "yamamuki-data の森林・水域のデータです。ダウンロードすると圏外でも表示できます。"
+            "value": "ダウンロードすると圏外でも表示できます。"
           }
         }
       }

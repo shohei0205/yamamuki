@@ -51,6 +51,7 @@ final class SurfaceDataModel: ObservableObject {
     /// 確認して見つけた、まだ取り込んでいない版。
     private var offers: [SurfaceDataset: SurfaceDataOffer] = [:]
     private var checkTask: Task<Void, Never>?
+    private var installTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "SurfaceDataModel")
 
     init(useDev: Bool, userAgent: String, catalogCache: PeakCatalogCache,
@@ -180,7 +181,7 @@ final class SurfaceDataModel: ObservableObject {
         checking = false
         updating = d
         progress = 0
-        Task { [weak self] in
+        installTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let installed = try await self.updaters[d]!.install(offer) { p in
@@ -199,7 +200,9 @@ final class SurfaceDataModel: ObservableObject {
                 }
             } catch {
                 self.logger.warning("地表データ(\(d.id, privacy: .public))の取得に失敗: \(String(describing: error), privacy: .public)")
-                if let error = error as? SurfaceDataError {
+                if Task.isCancelled {
+                    // 利用者が中止した。失敗の知らせは出さない。
+                } else if let error = error as? SurfaceDataError {
                     self.errorMessage = Strings.format("surface_data_error_invalid", error.message)
                 } else {
                     self.errorMessage = Strings.text("surface_data_error_network")
@@ -207,6 +210,12 @@ final class SurfaceDataModel: ObservableObject {
             }
             self.updating = nil
         }
+    }
+
+    /// ダウンロードを中止する。途中まで受け取ったファイルは消え、前の版(取得済みなら)はそのまま残る。
+    func cancelDownload() {
+        installTask?.cancel()
+        installTask = nil
     }
 
     /// `d` の地表データを端末から消す。使っている種類なら、方位盤の背景は地表なしに戻る。
