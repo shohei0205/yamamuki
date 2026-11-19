@@ -13,9 +13,12 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
+      # イメージの既定の Xcode は更新で変わるので、版を決めて使う。
+      - name: Xcode の選択
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
       - name: core のテスト
         working-directory: ios/YamamukiCore
         run: swift test
