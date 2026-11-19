@@ -123,6 +123,37 @@ final class SurfaceDataUpdaterTests: XCTestCase {
         }
     }
 
+    func testCancellingTheDownloadDeletesThePartialFile() async throws {
+        /// 途中まで書いたところで、中止されるまで待つ取得元。
+        final class StallingSource: SurfaceDataSource, @unchecked Sendable {
+            let manifest: Data
+            let half: Data
+            let started = AsyncStream<Void>.makeStream()
+            init(manifest: Data, half: Data) {
+                self.manifest = manifest
+                self.half = half
+            }
+            func fetchManifest(etag: String?) async throws -> ManifestResponse? {
+                .fetched(body: manifest, etag: PeakData.sha256Hex(manifest))
+            }
+            func download(_ url: URL, to: URL, maxBytes: Int, onProgress: @escaping @Sendable (Int) -> Void) async throws {
+                try half.write(to: to)
+                started.continuation.yield()
+                while true { try await Task.sleep(nanoseconds: 10_000_000) }
+            }
+        }
+        let source = StallingSource(manifest: manifest(), half: data.prefix(data.count / 2))
+        let updater = updater(source)
+        let offer = try await offer(updater)
+        let task = Task { try await updater.install(offer) }
+        for await _ in source.started.stream { break }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: files.partial.path))
+        task.cancel()
+        _ = await task.result
+        XCTAssertFalse(FileManager.default.fileExists(atPath: files.partial.path), "中止したあとに途中のファイルが残っています")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: files.database.path))
+    }
+
     func testInstallsTheDataAndKeepsTheManifest() async throws {
         let source = FakeSurfaceSource(manifest: manifest(), body: data)
         let updater = updater(source)

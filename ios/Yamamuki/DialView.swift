@@ -16,6 +16,7 @@ struct DialView: View {
     /// 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     @State private var selectedId: String?
     @State private var showSettings = false
+    @State private var showSurfaceData = false
     @State private var showDownload = false
     @State private var showObserver = false
     /// 重なる山をまとめた代表の山をタップしたときの一覧。ID で持ち、表示中の一覧から引く。
@@ -171,10 +172,10 @@ struct DialView: View {
                 VStack {
                     Spacer()
                     HStack(alignment: .bottom) {
-                        // 右下のモード切替ボタンと同じ高さにそろえるため、下に出典の文字 1 行分の高さをあける。
+                        // 右下のモード切替ボタンと同じ高さにそろえるため、下に出典の文字 2 行分の高さをあける。
                         VStack(alignment: .leading, spacing: 12) {
                             bottomButtons
-                            Text("©").font(.caption2).hidden()
+                            attributionSpace
                         }
                         .padding(.leading, 8)
                         Spacer()
@@ -213,19 +214,23 @@ struct DialView: View {
                                 : model.exploring ? "map_mode_manual" : "map_mode_heading_up"))
                             .padding(.trailing, 8)
 
-                            VStack(alignment: .trailing, spacing: 0) {
-                                // 地表を表示しているあいだは、地表データの出典も添える。
-                                if surfaceLayer.online {
-                                    Text(Strings.text("online_surface_attribution"))
-                                } else if surfaceLayer.shown {
-                                    Text(Strings.text("surface_attribution"))
+                            // 出典が 1 行のときも 2 行分の高さをとり、2 行(地表の出典と山データの出典)になってもボタンが動かないようにする。
+                            ZStack(alignment: .bottomTrailing) {
+                                attributionSpace
+                                VStack(alignment: .trailing, spacing: 0) {
+                                    // 地表を表示しているあいだは、地表データの出典も添える。
+                                    if surfaceLayer.online {
+                                        Text(Strings.text("online_surface_attribution"))
+                                    } else if surfaceLayer.shown {
+                                        Text(Strings.text("surface_attribution"))
+                                    }
+                                    Text(model.dataset.attribution)
                                 }
-                                Text(model.dataset.attribution)
+                                .font(.caption2)
+                                .foregroundStyle(.black)
+                                .padding(.horizontal, mapShown ? 4 : 0)
+                                .background(RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(mapShown ? mapPanelOpacity : 0)))
                             }
-                            .font(.caption2)
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, mapShown ? 4 : 0)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(mapShown ? mapPanelOpacity : 0)))
                         }
                     }
                     .padding(8)
@@ -247,6 +252,9 @@ struct DialView: View {
         // シートを開いている間は下の画面からアラートを出せないので、シートの中身にも付ける。
         .sheet(isPresented: $showSettings) {
             SettingsView(model: model).peakDataAlerts(model)
+        }
+        .sheet(isPresented: $showSurfaceData) {
+            SurfaceDataView(model: model).peakDataAlerts(model)
         }
         .sheet(isPresented: $showDownload) {
             AreaDownloadView(model: model, download: model.areaDownload).peakDataAlerts(model)
@@ -296,7 +304,7 @@ struct DialView: View {
 
     /// いずれかのシートを開いている。
     private var sheetShown: Bool {
-        showSettings || showDownload || selectedMountain.wrappedValue != nil || showGroup.wrappedValue || showObserver
+        showSettings || showSurfaceData || showDownload || selectedMountain.wrappedValue != nil || showGroup.wrappedValue || showObserver
             || showSearch.wrappedValue
     }
 
@@ -325,16 +333,31 @@ struct DialView: View {
 
     /// 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目にする。
     private var bottomButtons: some View {
-        HStack(spacing: 12) {
-            RoundButton(label: Strings.text("settings_title"), iconColor: settingsButtonIconColor) {
-                Image(systemName: "gearshape.fill")
-            } action: {
-                showSettings = true
+        VStack(alignment: .leading, spacing: 12) {
+            // 地表データ(方位盤の背景)の選択画面を、設定の上のボタンから開く。
+            if Features.surface {
+                RoundButton(label: Strings.text("surface_data_section_title"), iconColor: settingsButtonIconColor) {
+                    Image(systemName: "square.3.layers.3d")
+                } action: {
+                    showSurfaceData = true
+                }
             }
-            if Features.areaDownload {
-                AreaDownloadButton(download: model.areaDownload) { showDownload = true }
+            HStack(spacing: 12) {
+                RoundButton(label: Strings.text("settings_title"), iconColor: settingsButtonIconColor) {
+                    Image(systemName: "gearshape.fill")
+                } action: {
+                    showSettings = true
+                }
+                if Features.areaDownload {
+                    AreaDownloadButton(download: model.areaDownload) { showDownload = true }
+                }
             }
         }
+    }
+
+    /// 右下の出典 2 行分の高さ。左下と右下のボタンの高さをそろえ、出典が 2 行になってもボタンと重ならないようにする。
+    private var attributionSpace: some View {
+        Text("©\n©").font(.caption2).hidden()
     }
 
     /// 取り直しで一覧から消えたら選択も解く(シートが閉じる)。

@@ -1217,7 +1217,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "地図（国土地理院）"
+            "value": "オンラインデータ（国土地理院）"
           }
         }
       }
@@ -2197,29 +2197,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "地表の背景に、地形の起伏の陰影を重ねます。「地表を表示」がオンのときに働きます。"
-          }
-        }
-      }
-    },
-    "settings_show_surface": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "地表を表示"
-          }
-        }
-      }
-    },
-    "settings_show_surface_description": {
-      "extractionState": "manual",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "方位盤の背景に森林・水域や地図を表示します。種類は「地表データ」で選びます。"
+            "value": "オフラインデータに、地形の起伏の陰影を重ねます。"
           }
         }
       }
@@ -2308,6 +2286,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "© ESA WorldCover project 2021・地理院タイルを加工"
+          }
+        }
+      }
+    },
+    "surface_data_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中止"
           }
         }
       }
@@ -2428,7 +2417,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方位盤の背景に表示する森林・水域・陰影のデータです。設定の「地表を表示」で表示を切り替えます。"
+            "value": "方位盤の背景に表示する地表を選択します。表示すると、バッテリー消費が増える場合があります。"
           }
         }
       }
@@ -2528,6 +2517,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "ESA WorldCover（標準）"
+          }
+        }
+      }
+    },
+    "surface_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "表示しない"
+          }
+        }
+      }
+    },
+    "surface_offline_section_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロードすると圏外でも表示できます。"
+          }
+        }
+      }
+    },
+    "surface_offline_section_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフラインデータ"
           }
         }
       }

@@ -7,6 +7,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -75,6 +77,29 @@ class SurfaceDataUpdaterTest {
 
     private suspend fun SurfaceDataUpdater.offer(installed: InstalledSurfaceData? = null): SurfaceDataOffer =
         assertIs<SurfaceDataUpdater.Check.Available>(check(installed)).offer
+
+    @Test
+    fun cancellingTheDownloadDeletesThePartialFile() = runTest {
+        val started = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val source = object : SurfaceDataSource {
+            val inner = FakeSource(manifest(), data)
+            override suspend fun fetchManifest(etag: String?) = inner.fetchManifest(etag)
+            override suspend fun download(url: String, to: File, maxBytes: Long, onProgress: (Long) -> Unit) {
+                // 途中まで書いたところで、中止されるまで待つ。
+                to.writeBytes(data.copyOf(data.size / 2))
+                started.complete(Unit)
+                kotlinx.coroutines.awaitCancellation()
+            }
+        }
+        val updater = updater(source)
+        val offer = updater.offer()
+        val job = launch { updater.install(offer) }
+        started.await()
+        assertTrue(files.partial.exists())
+        job.cancelAndJoin()
+        assertFalse(files.partial.exists(), "中止したあとに途中のファイルが残っています")
+        assertFalse(files.database.exists())
+    }
 
     @Test
     fun installsTheDataAndKeepsTheManifest() = runTest {

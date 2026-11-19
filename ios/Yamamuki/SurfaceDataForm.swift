@@ -29,69 +29,98 @@ extension OnlineSurface {
     }
 }
 
-/// 地表データの選択画面(`SurfaceDataView`)の中身。取得済みの種類と、カタログで取得できる種類を並べる。
-/// 選ぶとその種類を使い(取得していなければダウンロードするかを聞く)、取得済みの種類は更新と削除ができる。
-/// 方位盤に描くかどうかは、設定の「地表を表示」で切り替える。
-/// そのあとに、通信して取る地図(地理院タイル)を並べる。こちらはダウンロードせず、選ぶとすぐ使う。
-struct SurfaceDataSection: View {
+/// 地表データの選択画面で選んでいるもの。
+enum SurfaceChoice: Equatable {
+    /// 表示しない。
+    case none
+    /// オフラインデータ(yamamuki-data の地表データ)。
+    case offline(SurfaceDataset)
+    /// オンラインデータ(地理院タイル)。
+    case online(OnlineSurface)
+
+    /// 設定から、選んでいるものを決める。取得していない地表データは「表示しない」とする(方位盤にも描かない)。
+    @MainActor
+    static func of(_ settings: Settings, surface: SurfaceDataModel) -> SurfaceChoice {
+        guard settings.showSurface else { return .none }
+        if let online = settings.onlineSurface { return .online(online) }
+        return surface.installed(settings.surfaceDataset) ? .offline(settings.surfaceDataset) : .none
+    }
+}
+
+/// 地表データの選択画面(`SurfaceDataView`)の一覧。方位盤の背景に描くものを、「表示しない」、オフラインデータ
+/// (yamamuki-data の地表データ)、オンラインデータ(地理院タイル)から 1 つ選ぶ。
+/// オフラインデータは取得済みの種類とカタログで取得できる種類を並べ、選ぶとその種類を表示する(取得していなければ
+/// ダウンロードするかを聞く)。取得済みの種類は更新と削除ができ、陰影を重ねるかもここで切り替える。
+/// オンラインデータはダウンロードせず、選ぶとすぐ表示する。
+struct SurfaceDataForm: View {
     @ObservedObject var surface: SurfaceDataModel
-    let selected: SurfaceDataset
-    /// 使っている通信して取る地図。地表データを使っているときは nil。
-    let selectedOnline: OnlineSurface?
+    let settings: Settings
     @State private var deleting: SurfaceDataset?
 
+    private var choice: SurfaceChoice { SurfaceChoice.of(settings, surface: surface) }
+
     var body: some View {
-        Section {
-            ForEach(surface.entries, id: \.dataset) { entry in
-                SurfaceDataRow(
-                    entry: entry,
-                    selected: selectedOnline == nil && entry.dataset == selected,
-                    enabled: surface.updating == nil,
-                    progress: surface.updating == entry.dataset ? surface.progress : nil,
-                    onChoose: { surface.choose(entry.dataset) },
-                    onUpdate: { surface.offerDownload(entry.dataset) },
-                    onDelete: { deleting = entry.dataset }
-                )
-            }
-        } header: {
-            // 説明は見出しの太い字にせず、フッターと同じ小さな字で出す。
-            Text(Strings.text("surface_data_section_description"))
-                .font(.footnote)
-                .fontWeight(.regular)
-                .textCase(nil)
-        } footer: {
-            if surface.checking {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text(Strings.text("surface_data_checking"))
+        // 確認や知らせは、節ではなく一覧全体に付ける。一覧は画面に入った節しか作らないので、節に付けると、その節が画面の外に
+        // あるあいだ(小さい画面でオンラインデータの節が下に隠れているときなど)は出せない。
+        Form {
+            Section {
+                ChoiceRow(label: Strings.text("surface_none"), selected: choice == .none, enabled: surface.updating == nil) {
+                    surface.chooseNone()
                 }
-            } else if surface.entries.isEmpty {
-                Text(Strings.text("surface_data_none"))
+            } header: {
+                // 説明は見出しの太い字にせず、フッターと同じ小さな字で出す。
+                Text(Strings.text("surface_data_section_description"))
+                    .font(.footnote)
+                    .fontWeight(.regular)
+                    .textCase(nil)
             }
-        }
-        Section {
-            ForEach(OnlineSurface.allCases, id: \.self) { online in
-                let inUse = online == selectedOnline
-                Button { surface.chooseOnline(online) } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: inUse ? "largecircle.fill.circle" : "circle")
-                            .foregroundStyle(inUse ? Color.accentColor : Color.secondary)
-                            .font(.title3)
-                        // ボタンの中は文字が強調色になるので、黒を指定する。
-                        Text(online.label).foregroundStyle(Color.primary)
-                        if inUse { SurfaceBadge(text: Strings.text("peak_data_list_in_use")) }
-                        Spacer()
+            Section {
+                ForEach(surface.entries, id: \.dataset) { entry in
+                    SurfaceDataRow(
+                        entry: entry,
+                        selected: choice == .offline(entry.dataset),
+                        enabled: surface.updating == nil,
+                        progress: surface.updating == entry.dataset ? surface.progress : nil,
+                        onChoose: { surface.choose(entry.dataset) },
+                        onUpdate: { surface.offerDownload(entry.dataset) },
+                        onDelete: { deleting = entry.dataset },
+                        onCancel: { surface.cancelDownload() }
+                    )
+                }
+                if surface.checking {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(Strings.text("surface_data_checking")).foregroundStyle(.secondary)
                     }
-                    .contentShape(Rectangle())
+                } else if surface.entries.isEmpty {
+                    Text(Strings.text("surface_data_none")).foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .disabled(surface.updating != nil)
-                .accessibilityAddTraits(inUse ? .isSelected : [])
+                Toggle(isOn: Binding(get: { settings.showHillshade }, set: { surface.setHillshade($0) })) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(Strings.text("settings_show_hillshade"))
+                        Text(Strings.text("settings_show_hillshade_description")).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                // yamamuki-data の地表データはまだ試験的に配っているので、山データの試験版と同じ印を見出しに付ける。
+                HStack(spacing: 8) {
+                    Text(Strings.text("surface_offline_section_title"))
+                    SurfaceBadge(text: Strings.text("peak_data_list_experimental")).textCase(nil)
+                }
+            } footer: {
+                Text(Strings.text("surface_offline_section_description"))
             }
-        } header: {
-            Text(Strings.text("online_surface_section_title"))
-        } footer: {
-            Text(Strings.text("online_surface_section_description"))
+            Section {
+                ForEach(OnlineSurface.allCases, id: \.self) { online in
+                    ChoiceRow(label: online.label, selected: choice == .online(online), enabled: surface.updating == nil) {
+                        surface.chooseOnline(online)
+                    }
+                }
+            } header: {
+                Text(Strings.text("online_surface_section_title"))
+            } footer: {
+                Text(Strings.text("online_surface_section_description"))
+            }
         }
         .onAppear { surface.open() }
         .alert(
@@ -141,6 +170,7 @@ private struct SurfaceDataRow: View {
     let onChoose: () -> Void
     let onUpdate: () -> Void
     let onDelete: () -> Void
+    let onCancel: () -> Void
 
     private var inUse: Bool { selected && entry.installed != nil }
 
@@ -175,7 +205,10 @@ private struct SurfaceDataRow: View {
             .disabled(!enabled)
             .opacity(enabled || progress != nil ? 1 : 0.4)
             .accessibilityAddTraits(inUse ? .isSelected : [])
-            if entry.installed != nil, progress == nil {
+            if progress != nil {
+                // ダウンロード中は、中止のボタンだけを出す。
+                Button(Strings.text("surface_data_cancel"), action: onCancel).buttonStyle(.borderless)
+            } else if entry.installed != nil {
                 VStack(alignment: .trailing, spacing: 8) {
                     if entry.updateFound {
                         Button(Strings.text("surface_data_update"), action: onUpdate).buttonStyle(.borderless)
@@ -228,5 +261,32 @@ private struct SurfaceBadge: View {
             .padding(.vertical, 2)
             .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
             .foregroundStyle(Color.primary)
+    }
+}
+
+/// 名前だけの選択肢の行。選んでいれば「使用中」の印を付ける。
+private struct ChoiceRow: View {
+    let label: String
+    let selected: Bool
+    let enabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    .font(.title3)
+                // ボタンの中は文字が強調色になるので、黒を指定する。
+                Text(label).foregroundStyle(Color.primary)
+                if selected { SurfaceBadge(text: Strings.text("peak_data_list_in_use")) }
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

@@ -27,18 +27,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.shohei0205.yamamuki.R
-import io.github.shohei0205.yamamuki.core.OnlineSurface
-import io.github.shohei0205.yamamuki.core.SurfaceDataset
+import io.github.shohei0205.yamamuki.settings.Settings
 
 /**
- * 地表データの選択画面。山データの選択画面([PeakDataListScreen])とは別に、設定画面の「地表データ」の行から開く。
- * 取得済みの種類と、カタログで取得できる種類を並べ、選ぶとその種類を使う(取得していなければダウンロードするかを聞く)。
+ * 地表データの選択画面。方位盤の左下の地表データのボタンから開く。方位盤の背景に描くものを、「表示しない」、
+ * オフラインデータ(yamamuki-data の地表データ)、オンラインデータ(地理院タイル)から選ぶ([SurfaceDataSection])。
  */
 @Composable
 fun SurfaceDataScreen(
     surface: SurfaceDataViewModel,
-    selected: SurfaceDataset,
-    selectedOnline: OnlineSurface?,
+    settings: Settings,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -62,12 +60,14 @@ fun SurfaceDataScreen(
             }
             SurfaceDataSection(
                 state = state,
-                selected = selected,
-                selectedOnline = selectedOnline,
+                settings = settings,
+                onChooseNone = surface::chooseNone,
                 onChoose = surface::choose,
                 onChooseOnline = surface::chooseOnline,
+                onHillshadeChange = surface::setHillshade,
                 onUpdate = surface::offerDownload,
                 onDelete = surface::delete,
+                onCancelDownload = surface::cancelDownload,
                 onAnswerOffer = surface::answerOffer,
                 onDismissError = surface::dismissError,
             )

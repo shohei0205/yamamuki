@@ -75,6 +75,7 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
     /** 確認して見つけた、まだ取り込んでいない版。 */
     private val offers = mutableMapOf<SurfaceDataset, SurfaceDataOffer>()
     private var checkJob: Job? = null
+    private var installJob: Job? = null
 
     private fun store(dataset: SurfaceDataset) = app.surfaceDataStores.of(dataset)
 
@@ -124,13 +125,19 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    /** 選択画面で「表示しない」を選んだ。方位盤の背景に地表を描かない。 */
+    fun chooseNone() {
+        if (_state.value.updating != null) return
+        app.settings.update { it.copy(showSurface = false) }
+    }
+
     /**
-     * 選択画面で [d] を選んだ。取得済みならその種類を使い、まだなら大きさを見せてダウンロードするかを聞く。
+     * 選択画面で [d] を選んだ。取得済みならその種類を表示し、まだなら大きさを見せてダウンロードするかを聞く。
      */
     fun choose(d: SurfaceDataset) {
         if (_state.value.updating != null) return
         if (store(d).load() != null) {
-            app.settings.update { it.copy(surfaceDataset = d, onlineSurface = null) }
+            app.settings.update { it.copy(showSurface = true, surfaceDataset = d, onlineSurface = null) }
         } else {
             offerDownload(d)
         }
@@ -139,7 +146,12 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
     /** 選択画面で、通信して取る地図 [surface] を選んだ。ダウンロードはせず、方位盤が表示している周りのタイルだけを取る。 */
     fun chooseOnline(surface: OnlineSurface) {
         if (_state.value.updating != null) return
-        app.settings.update { it.copy(onlineSurface = surface) }
+        app.settings.update { it.copy(showSurface = true, onlineSurface = surface) }
+    }
+
+    /** オフラインデータ(地表データ)に陰影を重ねるかを変える。 */
+    fun setHillshade(show: Boolean) {
+        app.settings.update { it.copy(showHillshade = show) }
     }
 
     /** [d] の新しい版(または、まだ取得していない版)の大きさを見せて、ダウンロードするかを聞く。 */
@@ -155,19 +167,19 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
         if (download) install(d)
     }
 
-    /** 確認した版のデータ本体を取得して端末に置く。初めての種類なら、取り込めたらその種類を使う。 */
+    /** 確認した版のデータ本体を取得して端末に置く。取り込めたら、その種類を表示する。 */
     private fun install(d: SurfaceDataset) {
         val offer = offers[d] ?: return
         if (_state.value.updating != null) return
         checkJob?.cancel()
         _state.update { it.copy(updating = d, progress = 0f, checking = false) }
-        viewModelScope.launch {
+        installJob = viewModelScope.launch {
             try {
                 val installed = app.surfaceDataUpdater(d).install(offer) { p -> _state.update { it.copy(progress = p) } }
                 store(d).save(installed)
                 offers.remove(d)
                 setEntry(d, SurfaceDataEntry(d, installed))
-                app.settings.update { it.copy(surfaceDataset = d, onlineSurface = null) }
+                app.settings.update { it.copy(showSurface = true, surfaceDataset = d, onlineSurface = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -182,6 +194,15 @@ class SurfaceDataViewModel(application: Application) : AndroidViewModel(applicat
                 _state.update { it.copy(updating = null) }
             }
         }
+    }
+
+    /**
+     * ダウンロードを中止する。途中まで受け取ったファイルは消え、前の版(取得済みなら)はそのまま残る。
+     * 利用者が頼んだ中止なので、失敗の知らせは出さない。
+     */
+    fun cancelDownload() {
+        installJob?.cancel()
+        installJob = null
     }
 
     fun dismissError() {

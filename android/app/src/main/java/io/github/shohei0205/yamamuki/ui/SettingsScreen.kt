@@ -90,14 +90,13 @@ fun SettingsScreen(
     onClosePeakDataList: () -> Unit = {},
     onChoosePeakData: (PeakDataset) -> Unit = {},
     onDeletePeakData: (PeakDataset) -> Unit = {},
-    /** 地表データ(方位盤の背景)。出さないとき([Features.SURFACE] が false)は null。 */
+    /** 地表データ(方位盤の背景)。出典の画面に使う。出さないとき([Features.SURFACE] が false)は null。 */
     surface: SurfaceDataViewModel? = null,
 ) {
     BackHandler(onBack = onClose)
     LaunchedEffect(Unit) { onOpen() }
     var showPeakGroups by rememberSaveable { mutableStateOf(false) }
     var showCredits by rememberSaveable { mutableStateOf(false) }
-    var showSurfaceData by rememberSaveable { mutableStateOf(false) }
 
     // グループの選択画面、山データの選択画面と出典の画面は、設定画面の上に重ねて出す。
     Box(modifier.fillMaxSize()) {
@@ -163,36 +162,6 @@ fun SettingsScreen(
                 label = { "$it" },
                 onSelect = { v -> onSettingsChange { it.copy(initialRangeKm = v) } },
             )
-            if (surface != null) {
-                val surfaceState by surface.state.collectAsStateWithLifecycle()
-                SwitchRow(
-                    title = stringResource(R.string.settings_show_surface),
-                    description = stringResource(R.string.settings_show_surface_description),
-                    checked = settings.showSurface && (settings.onlineSurface != null || surfaceState.installed(settings.surfaceDataset)),
-                    onChange = { v ->
-                        // 地表データをまだ取得していなければ、オンにせずに選択画面を開いてダウンロードできるようにする。
-                        // 通信して取る地図を選んでいれば、ダウンロードは要らない。
-                        if (v && settings.onlineSurface == null && !surfaceState.installed(settings.surfaceDataset)) {
-                            showSurfaceData = true
-                        } else {
-                            onSettingsChange { it.copy(showSurface = v) }
-                        }
-                    },
-                )
-                SwitchRow(
-                    title = stringResource(R.string.settings_show_hillshade),
-                    description = stringResource(R.string.settings_show_hillshade_description),
-                    checked = settings.showHillshade,
-                    onChange = { v -> onSettingsChange { it.copy(showHillshade = v) } },
-                )
-                // 見出しが「地表データ」なので、値には選んでいる種類の名前を出す。
-                NavigationRow(
-                    title = stringResource(R.string.surface_data_section_title),
-                    value = stringResource(settings.onlineSurface?.label ?: settings.surfaceDataset.label),
-                    onClick = { showSurfaceData = true },
-                )
-            }
-
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_battery))
             SwitchRow(
@@ -256,15 +225,6 @@ fun SettingsScreen(
         )
     }
 
-    if (showSurfaceData && surface != null) {
-        SurfaceDataScreen(
-            surface = surface,
-            selected = settings.surfaceDataset,
-            selectedOnline = settings.onlineSurface,
-            onBack = { showSurfaceData = false },
-        )
-    }
-
     if (showCredits) {
         CreditsScreen(
             dataset = settings.peakDataset,
@@ -272,7 +232,7 @@ fun SettingsScreen(
             loadCredits = loadCredits,
             onBack = { showCredits = false },
             loadSurfaceCredits = surface?.let { it::credits },
-            onlineSurface = settings.onlineSurface.takeIf { surface != null },
+            onlineSurface = settings.onlineSurface.takeIf { surface != null && settings.showSurface },
         )
     }
     }
@@ -395,7 +355,7 @@ private fun <T> Choice(
 }
 
 @Composable
-private fun SwitchRow(title: String, description: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, description: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)

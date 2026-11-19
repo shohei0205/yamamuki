@@ -51,6 +51,7 @@ final class SurfaceDataModel: ObservableObject {
     /// 確認して見つけた、まだ取り込んでいない版。
     private var offers: [SurfaceDataset: SurfaceDataOffer] = [:]
     private var checkTask: Task<Void, Never>?
+    private var installTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "SurfaceDataModel")
 
     init(useDev: Bool, userAgent: String, catalogCache: PeakCatalogCache,
@@ -127,11 +128,18 @@ final class SurfaceDataModel: ObservableObject {
             .sorted { order.firstIndex(of: $0.dataset)! < order.firstIndex(of: $1.dataset)! }
     }
 
-    /// 選択画面で `d` を選んだ。取得済みならその種類を使い、まだなら大きさを見せてダウンロードするかを聞く。
+    /// 選択画面で「表示しない」を選んだ。方位盤の背景に地表を描かない。
+    func chooseNone() {
+        guard updating == nil else { return }
+        updateSettings { $0.showSurface = false }
+    }
+
+    /// 選択画面で `d` を選んだ。取得済みならその種類を表示し、まだなら大きさを見せてダウンロードするかを聞く。
     func choose(_ d: SurfaceDataset) {
         guard updating == nil else { return }
         if stores[d]!.load() != nil {
             updateSettings {
+                $0.showSurface = true
                 $0.surfaceDataset = d
                 $0.onlineSurface = nil
             }
@@ -143,7 +151,15 @@ final class SurfaceDataModel: ObservableObject {
     /// 選択画面で、通信して取る地図 `surface` を選んだ。ダウンロードはせず、方位盤が表示している周りのタイルだけを取る。
     func chooseOnline(_ surface: OnlineSurface) {
         guard updating == nil else { return }
-        updateSettings { $0.onlineSurface = surface }
+        updateSettings {
+            $0.showSurface = true
+            $0.onlineSurface = surface
+        }
+    }
+
+    /// オフラインデータ(地表データ)に陰影を重ねるかを変える。
+    func setHillshade(_ show: Bool) {
+        updateSettings { $0.showHillshade = show }
     }
 
     /// `d` の新しい版(または、まだ取得していない版)の大きさを見せて、ダウンロードするかを聞く。
@@ -158,14 +174,14 @@ final class SurfaceDataModel: ObservableObject {
         if download { install(d) }
     }
 
-    /// 確認した版のデータ本体を取得して端末に置く。初めての種類なら、取り込めたらその種類を使う。
+    /// 確認した版のデータ本体を取得して端末に置く。取り込めたら、その種類を表示する。
     private func install(_ d: SurfaceDataset) {
         guard updating == nil, let offer = offers[d] else { return }
         checkTask?.cancel()
         checking = false
         updating = d
         progress = 0
-        Task { [weak self] in
+        installTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let installed = try await self.updaters[d]!.install(offer) { p in
@@ -178,12 +194,15 @@ final class SurfaceDataModel: ObservableObject {
                 self.offers[d] = nil
                 self.setEntry(d, SurfaceDataEntry(dataset: d, installed: installed))
                 self.updateSettings {
+                    $0.showSurface = true
                     $0.surfaceDataset = d
                     $0.onlineSurface = nil
                 }
             } catch {
                 self.logger.warning("地表データ(\(d.id, privacy: .public))の取得に失敗: \(String(describing: error), privacy: .public)")
-                if let error = error as? SurfaceDataError {
+                if Task.isCancelled {
+                    // 利用者が中止した。失敗の知らせは出さない。
+                } else if let error = error as? SurfaceDataError {
                     self.errorMessage = Strings.format("surface_data_error_invalid", error.message)
                 } else {
                     self.errorMessage = Strings.text("surface_data_error_network")
@@ -191,6 +210,12 @@ final class SurfaceDataModel: ObservableObject {
             }
             self.updating = nil
         }
+    }
+
+    /// ダウンロードを中止する。途中まで受け取ったファイルは消え、前の版(取得済みなら)はそのまま残る。
+    func cancelDownload() {
+        installTask?.cancel()
+        installTask = nil
     }
 
     /// `d` の地表データを端末から消す。使っている種類なら、方位盤の背景は地表なしに戻る。

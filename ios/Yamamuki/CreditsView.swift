@@ -69,7 +69,7 @@ struct CreditsView: View {
                 }
             }
             // 通信して取る地図を使っているときは、その出典を出す。
-            if Features.surface, let online = model.settings.onlineSurface {
+            if Features.surface, model.settings.showSurface, let online = model.settings.onlineSurface {
                 Section(Strings.text("credits_section_online_surface")) {
                     Text(online.label).font(.headline)
                     CreditsItems(items: [
