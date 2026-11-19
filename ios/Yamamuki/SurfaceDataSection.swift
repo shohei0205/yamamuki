@@ -16,12 +16,28 @@ extension SurfaceDataset {
     }
 }
 
+extension OnlineSurface {
+    /// 通信して取る地図の種類の名前。
+    var label: String {
+        switch self {
+        case .gsiPale: return Strings.text("online_surface_gsi_pale")
+        case .gsiStd: return Strings.text("online_surface_gsi_std")
+        case .gsiHillshade: return Strings.text("online_surface_gsi_hillshade")
+        case .gsiRelief: return Strings.text("online_surface_gsi_relief")
+        case .gsiPhoto: return Strings.text("online_surface_gsi_photo")
+        }
+    }
+}
+
 /// 地表データの選択画面(`SurfaceDataView`)の中身。取得済みの種類と、カタログで取得できる種類を並べる。
 /// 選ぶとその種類を使い(取得していなければダウンロードするかを聞く)、取得済みの種類は更新と削除ができる。
 /// 方位盤に描くかどうかは、設定の「地表を表示」で切り替える。
+/// そのあとに、通信して取る地図(地理院タイル)を並べる。こちらはダウンロードせず、選ぶとすぐ使う。
 struct SurfaceDataSection: View {
     @ObservedObject var surface: SurfaceDataModel
     let selected: SurfaceDataset
+    /// 使っている通信して取る地図。地表データを使っているときは nil。
+    let selectedOnline: OnlineSurface?
     @State private var deleting: SurfaceDataset?
 
     var body: some View {
@@ -29,7 +45,7 @@ struct SurfaceDataSection: View {
             ForEach(surface.entries, id: \.dataset) { entry in
                 SurfaceDataRow(
                     entry: entry,
-                    selected: entry.dataset == selected,
+                    selected: selectedOnline == nil && entry.dataset == selected,
                     enabled: surface.updating == nil,
                     progress: surface.updating == entry.dataset ? surface.progress : nil,
                     onChoose: { surface.choose(entry.dataset) },
@@ -52,6 +68,30 @@ struct SurfaceDataSection: View {
             } else if surface.entries.isEmpty {
                 Text(Strings.text("surface_data_none"))
             }
+        }
+        Section {
+            ForEach(OnlineSurface.allCases, id: \.self) { online in
+                let inUse = online == selectedOnline
+                Button { surface.chooseOnline(online) } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: inUse ? "largecircle.fill.circle" : "circle")
+                            .foregroundStyle(inUse ? Color.accentColor : Color.secondary)
+                            .font(.title3)
+                        // ボタンの中は文字が強調色になるので、黒を指定する。
+                        Text(online.label).foregroundStyle(Color.primary)
+                        if inUse { SurfaceBadge(text: Strings.text("peak_data_list_in_use")) }
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(surface.updating != nil)
+                .accessibilityAddTraits(inUse ? .isSelected : [])
+            }
+        } header: {
+            Text(Strings.text("online_surface_section_title"))
+        } footer: {
+            Text(Strings.text("online_surface_section_description"))
         }
         .onAppear { surface.open() }
         .alert(

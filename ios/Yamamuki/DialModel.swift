@@ -158,13 +158,15 @@ final class DialModel: ObservableObject {
     private let settingsStore = SettingsStore()
     private let surfaceUserAgent: String
     private let surfaceCatalogCache: PeakCatalogCache
+    /// 方位盤の背景に描く、通信して取る地図(地理院タイル)のタイルを取る。取ったタイルはメモリにだけ覚える。
+    let onlineSurfaceClient: OnlineSurfaceClient
 
     /// 地表データ(方位盤の背景)の確認・ダウンロード・削除。設定画面を開くまでは作らない。
     @MainActor private(set) lazy var surface = SurfaceDataModel(
         useDev: Self.peakDataChannel == .dev,
         userAgent: surfaceUserAgent,
         catalogCache: surfaceCatalogCache,
-        selected: { [weak self] in self?.settings.surfaceDataset ?? SurfaceDataset.allCases[0] },
+        settings: { [weak self] in self?.settings ?? Settings() },
         updateSettings: { [weak self] transform in self?.updateSettings(transform) }
     )
     private let locationService = LocationService()
@@ -230,6 +232,7 @@ final class DialModel: ObservableObject {
         rangeKm = Double(saved.initialRangeKm)
         surfaceUserAgent = userAgent
         surfaceCatalogCache = catalogCache
+        onlineSurfaceClient = OnlineSurfaceClient(userAgent: userAgent)
         authorization = locationService.authorization
         locationService.apply(saved.sensorPrecision)
 

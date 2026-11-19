@@ -68,6 +68,17 @@ struct CreditsView: View {
                     Text(Strings.text(model.peakData == nil ? "credits_not_installed" : "credits_missing"))
                 }
             }
+            // 通信して取る地図を使っているときは、その出典を出す。
+            if Features.surface, let online = model.settings.onlineSurface {
+                Section(Strings.text("credits_section_online_surface")) {
+                    Text(online.label).font(.headline)
+                    CreditsItems(items: [
+                        CreditsItem(Strings.text("credits_source"), Strings.text("online_surface_credits_source")),
+                        CreditsItem(Strings.text("credits_attribution"),
+                                    "\(Strings.text("online_surface_attribution")) \(OnlineSurface.creditsUrl)"),
+                    ])
+                }
+            }
             // 地表データは、取得しているときだけ出典を並べる。
             if let surfaceCredits {
                 Section(Strings.text("credits_section_surface")) {

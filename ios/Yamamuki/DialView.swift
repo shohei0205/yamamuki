@@ -59,7 +59,9 @@ struct DialView: View {
                     viewFanAlpha: model.exploring ? 0 : 1,
                     bottomBleed: geometry.safeAreaInsets.bottom,
                     surface: surfaceLayer.image,
-                    surfaceShown: surfaceLayer.shown,
+                    // 通信して取る地図は、取れるまで(圏外など)距離の帯を残す。
+                    surfaceShown: surfaceLayer.shown && (!surfaceLayer.online || surfaceLayer.image != nil),
+                    mapShown: mapShown,
                     onPan: { model.onPan(dx: $0, dy: $1, chartHeight: $2) },
                     onTransform: { model.onTransform(zoom: $0, rotation: $1, previous: $2, midpoint: $3, chartHeight: $4) },
                     onMountainTap: {
@@ -97,14 +99,15 @@ struct DialView: View {
                             // 方位が無効なあいだは方位の値が届かないので、値の有無にかかわらず出す。
                             message: model.headingAccuracyLow ? Strings.text("dial_heading_accuracy_low") : nil,
                             // 距離の円が文字の後ろを通っても読めるよう、方位の札と同じ淡い白の札にする。
-                            labeled: true
+                            labeled: true,
+                            mapShown: mapShown
                         )
-                        StatusLine(message: statusMessage)
+                        StatusLine(message: statusMessage, labeled: mapShown, mapShown: mapShown)
                         // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
                         // どちらも設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
                         if model.peakDataMissing {
                             // 初回のダウンロードを「あとで」にしたときに、設定画面を探さなくても取得できるようにする。
-                            StatusLine(message: Strings.text("dial_peak_data_missing"))
+                            StatusLine(message: Strings.text("dial_peak_data_missing"), labeled: mapShown, mapShown: mapShown)
                             PeakDataLabel(text: Strings.text("dial_peak_data_download"), identifier: "peakDataDownloadLabel") {
                                 model.updatePeakData()
                             }
@@ -212,11 +215,17 @@ struct DialView: View {
 
                             VStack(alignment: .trailing, spacing: 0) {
                                 // 地表を表示しているあいだは、地表データの出典も添える。
-                                if surfaceLayer.shown { Text(Strings.text("surface_attribution")) }
+                                if surfaceLayer.online {
+                                    Text(Strings.text("online_surface_attribution"))
+                                } else if surfaceLayer.shown {
+                                    Text(Strings.text("surface_attribution"))
+                                }
                                 Text(model.dataset.attribution)
                             }
                             .font(.caption2)
                             .foregroundStyle(.black)
+                            .padding(.horizontal, mapShown ? 4 : 0)
+                            .background(RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(mapShown ? mapPanelOpacity : 0)))
                         }
                     }
                     .padding(8)
@@ -308,8 +317,11 @@ struct DialView: View {
             .font(.system(size: 15 * model.settings.textScale, weight: .bold))
             .padding(.horizontal, 12)
             .padding(.vertical, 3)
-            .background(Capsule().fill(Color.white.opacity(0.5)))
+            .background(Capsule().fill(Color.white.opacity(mapShown ? mapPanelOpacity : 0.5)))
     }
+
+    /// 地図(地理院タイル)を背景に描いている。地図の上で読みにくい文字に、半透明の白い下地を敷く。
+    private var mapShown: Bool { surfaceLayer.online && surfaceLayer.image != nil }
 
     /// 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目にする。
     private var bottomButtons: some View {
@@ -486,6 +498,8 @@ private struct AreaDownloadButton: View {
 private struct StatusLine: View {
     let message: String?
     var labeled = false
+    /// 地図を背景に描いている。札の白を濃くする(`mapPanelOpacity`)。
+    var mapShown = false
 
     var body: some View {
         if let message {
@@ -494,7 +508,7 @@ private struct StatusLine: View {
                     Text(message).font(.footnote).foregroundStyle(.black)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 3)
-                        .background(Capsule().fill(Color.white.opacity(0.5)))
+                        .background(Capsule().fill(Color.white.opacity(mapShown ? mapPanelOpacity : 0.5)))
                 } else {
                     Text(message).font(.footnote).foregroundStyle(.black)
                 }

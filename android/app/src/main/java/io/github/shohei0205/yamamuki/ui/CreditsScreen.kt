@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.core.InstalledPeakData
 import io.github.shohei0205.yamamuki.core.LinkText
+import io.github.shohei0205.yamamuki.core.OnlineSurface
 import io.github.shohei0205.yamamuki.core.PeakDataCredits
 import io.github.shohei0205.yamamuki.core.PeakDataset
 
@@ -68,6 +69,8 @@ fun CreditsScreen(
     modifier: Modifier = Modifier,
     /** 取得済みの地表データ(方位盤の背景)の出典を、端末に残した manifest から読む。地表データを出さないときは null。 */
     loadSurfaceCredits: (suspend () -> PeakDataCredits?)? = null,
+    /** 方位盤の背景に使っている、通信して取る地図。使っていなければ null。 */
+    onlineSurface: OnlineSurface? = null,
 ) {
     BackHandler(onBack = onBack)
     val surfaceCredits by produceState<PeakDataCredits?>(null, loadSurfaceCredits) { value = loadSurfaceCredits?.invoke() }
@@ -125,6 +128,17 @@ fun CreditsScreen(
                     items = listOf(R.string.credits_attribution to "${stringResource(dataset.creditsAttribution)} ${dataset.copyrightUrl}"),
                 )
                 Note(stringResource(if (peakData == null) R.string.credits_not_installed else R.string.credits_missing))
+            }
+            // 通信して取る地図を使っているときは、その出典を出す。
+            onlineSurface?.let { online ->
+                SectionTitle(stringResource(R.string.credits_section_online_surface))
+                CreditsCard(
+                    title = stringResource(online.label),
+                    items = listOf(
+                        R.string.credits_source to stringResource(R.string.online_surface_credits_source),
+                        R.string.credits_attribution to "${stringResource(R.string.online_surface_attribution)} ${OnlineSurface.CREDITS_URL}",
+                    ),
+                )
             }
             // 地表データは、取得しているときだけ出典を並べる。
             surfaceCredits?.let { surface ->

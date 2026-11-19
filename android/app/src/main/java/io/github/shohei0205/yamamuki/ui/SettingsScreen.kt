@@ -168,10 +168,11 @@ fun SettingsScreen(
                 SwitchRow(
                     title = stringResource(R.string.settings_show_surface),
                     description = stringResource(R.string.settings_show_surface_description),
-                    checked = settings.showSurface && surfaceState.installed(settings.surfaceDataset),
+                    checked = settings.showSurface && (settings.onlineSurface != null || surfaceState.installed(settings.surfaceDataset)),
                     onChange = { v ->
                         // 地表データをまだ取得していなければ、オンにせずに選択画面を開いてダウンロードできるようにする。
-                        if (v && !surfaceState.installed(settings.surfaceDataset)) {
+                        // 通信して取る地図を選んでいれば、ダウンロードは要らない。
+                        if (v && settings.onlineSurface == null && !surfaceState.installed(settings.surfaceDataset)) {
                             showSurfaceData = true
                         } else {
                             onSettingsChange { it.copy(showSurface = v) }
@@ -187,7 +188,7 @@ fun SettingsScreen(
                 // 見出しが「地表データ」なので、値には選んでいる種類の名前を出す。
                 NavigationRow(
                     title = stringResource(R.string.surface_data_section_title),
-                    value = stringResource(settings.surfaceDataset.label),
+                    value = stringResource(settings.onlineSurface?.label ?: settings.surfaceDataset.label),
                     onClick = { showSurfaceData = true },
                 )
             }
@@ -259,6 +260,7 @@ fun SettingsScreen(
         SurfaceDataScreen(
             surface = surface,
             selected = settings.surfaceDataset,
+            selectedOnline = settings.onlineSurface,
             onBack = { showSurfaceData = false },
         )
     }
@@ -270,6 +272,7 @@ fun SettingsScreen(
             loadCredits = loadCredits,
             onBack = { showCredits = false },
             loadSurfaceCredits = surface?.let { it::credits },
+            onlineSurface = settings.onlineSurface.takeIf { surface != null },
         )
     }
     }

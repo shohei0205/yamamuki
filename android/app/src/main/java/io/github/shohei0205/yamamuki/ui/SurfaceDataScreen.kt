@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.core.OnlineSurface
 import io.github.shohei0205.yamamuki.core.SurfaceDataset
 
 /**
@@ -37,6 +38,7 @@ import io.github.shohei0205.yamamuki.core.SurfaceDataset
 fun SurfaceDataScreen(
     surface: SurfaceDataViewModel,
     selected: SurfaceDataset,
+    selectedOnline: OnlineSurface?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -61,7 +63,9 @@ fun SurfaceDataScreen(
             SurfaceDataSection(
                 state = state,
                 selected = selected,
+                selectedOnline = selectedOnline,
                 onChoose = surface::choose,
+                onChooseOnline = surface::chooseOnline,
                 onUpdate = surface::offerDownload,
                 onDelete = surface::delete,
                 onAnswerOffer = surface::answerOffer,

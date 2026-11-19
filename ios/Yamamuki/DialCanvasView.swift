@@ -7,6 +7,9 @@ import YamamukiCore
 
 /// 方位盤の地面のクリーム色。
 let dialGround = Color(hex: 0xFFF4D8)
+/// 地図(地理院タイル)を背景に描いているあいだ、地図の上に載る文字に敷く白い下地の濃さ。
+/// 地図の線や文字、色別標高図の濃い色の上でも読めるようにする。
+let mapPanelOpacity = 0.85
 /// 距離の円の間の帯。現在地に近い帯から順に塗り、ここにない遠くの帯は地面の色のままにする。
 private let groundBands = [Color(hex: 0xFFE7B0), Color(hex: 0xFFEDC2), Color(hex: 0xFFF1CF)]
 private let ringLine = Color(hex: 0xE8C98F)
@@ -88,6 +91,9 @@ struct DialCanvasView: View, Animatable {
     var surface: SurfaceLayerImage?
     /// 地表を表示している。距離の帯の色分けを地表に重ねず、同心円の線だけにする。
     var surfaceShown = false
+    /// 地図(地理院タイル)を背景に描いている。地図の上で読みにくい文字(「ほか 3 山」、方位と標高の札)に、
+    /// 半透明の白い下地(`mapPanelOpacity`)を敷く。
+    var mapShown = false
     let onPan: (Double, Double, Double) -> Void
     let onTransform: (Double, Double, PlanOffset, PlanOffset, Double) -> Void
     let onMountainTap: (NearbyMountain) -> Void
@@ -615,6 +621,12 @@ struct DialCanvasView: View, Animatable {
             }
             var box = peak.box
             if let others = othersLabels[i] {
+                if mapShown {
+                    // 下地は文字の幅より少し広げ、山名の札に重ならないよう高さは文字のままにする。
+                    let panel = CGRect(x: p.x - others.text.size.width / 2 - 4, y: CGFloat(others.box.top),
+                                       width: others.text.size.width + 8, height: others.text.size.height)
+                    chip.fill(Path(roundedRect: panel, cornerRadius: panel.height / 2), with: .color(.white.opacity(mapPanelOpacity)))
+                }
                 chip.draw(others.text.text, at: CGPoint(x: p.x - others.text.size.width / 2, y: CGFloat(others.box.top)), anchor: .topLeading)
                 box = ScreenBox(left: min(box.left, others.box.left), top: box.top,
                     right: max(box.right, others.box.right), bottom: others.box.bottom)
@@ -849,7 +861,7 @@ struct DialCanvasView: View, Animatable {
                           width: textSize.width + padX * 2, height: textSize.height + padY * 2)
         let radius = pill.height / 2
         // 札は目盛りの帯と同じくらいの淡い白にして、帯より目立たせない。同心円と重なっても文字が読める程度の濃さは残す。
-        ctx.fill(Path(roundedRect: pill, cornerRadius: radius), with: .color(.white.opacity(0.5)))
+        ctx.fill(Path(roundedRect: pill, cornerRadius: radius), with: .color(.white.opacity(mapShown ? mapPanelOpacity : 0.5)))
         ctx.draw(text, at: CGPoint(x: pill.minX + padX, y: pill.minY + padY), anchor: .topLeading)
     }
 }

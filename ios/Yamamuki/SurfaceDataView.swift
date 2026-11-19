@@ -10,7 +10,7 @@ struct SurfaceDataView: View {
 
     var body: some View {
         Form {
-            SurfaceDataSection(surface: model.surface, selected: model.settings.surfaceDataset)
+            SurfaceDataSection(surface: model.surface, selected: model.settings.surfaceDataset, selectedOnline: model.settings.onlineSurface)
         }
         .navigationTitle(Strings.text("surface_data_section_title"))
         .navigationBarTitleDisplayMode(.inline)

@@ -44,8 +44,8 @@ final class SurfaceDataModel: ObservableObject {
 
     private let stores: [SurfaceDataset: SurfaceDataStore]
     private let updaters: [SurfaceDataset: SurfaceDataUpdater]
-    /// 使っている種類(設定の surfaceDataset)。
-    private let selected: () -> SurfaceDataset
+    /// 今の設定(使っている種類は surfaceDataset と onlineSurface)。
+    private let settings: () -> Settings
     /// 設定を書き換える(`DialModel.updateSettings`)。
     private let updateSettings: ((inout Settings) -> Void) -> Void
     /// 確認して見つけた、まだ取り込んでいない版。
@@ -54,7 +54,7 @@ final class SurfaceDataModel: ObservableObject {
     private let logger = Logger(subsystem: "io.github.shohei0205.yamamuki", category: "SurfaceDataModel")
 
     init(useDev: Bool, userAgent: String, catalogCache: PeakCatalogCache,
-         selected: @escaping () -> SurfaceDataset, updateSettings: @escaping ((inout Settings) -> Void) -> Void) {
+         settings: @escaping () -> Settings, updateSettings: @escaping ((inout Settings) -> Void) -> Void) {
         var stores: [SurfaceDataset: SurfaceDataStore] = [:]
         var updaters: [SurfaceDataset: SurfaceDataUpdater] = [:]
         for d in SurfaceDataset.allCases {
@@ -69,7 +69,7 @@ final class SurfaceDataModel: ObservableObject {
         }
         self.stores = stores
         self.updaters = updaters
-        self.selected = selected
+        self.settings = settings
         self.updateSettings = updateSettings
         entries = installedEntries()
     }
@@ -131,10 +131,19 @@ final class SurfaceDataModel: ObservableObject {
     func choose(_ d: SurfaceDataset) {
         guard updating == nil else { return }
         if stores[d]!.load() != nil {
-            updateSettings { $0.surfaceDataset = d }
+            updateSettings {
+                $0.surfaceDataset = d
+                $0.onlineSurface = nil
+            }
         } else {
             offerDownload(d)
         }
+    }
+
+    /// 選択画面で、通信して取る地図 `surface` を選んだ。ダウンロードはせず、方位盤が表示している周りのタイルだけを取る。
+    func chooseOnline(_ surface: OnlineSurface) {
+        guard updating == nil else { return }
+        updateSettings { $0.onlineSurface = surface }
     }
 
     /// `d` の新しい版(または、まだ取得していない版)の大きさを見せて、ダウンロードするかを聞く。
@@ -168,7 +177,10 @@ final class SurfaceDataModel: ObservableObject {
                 self.stores[d]!.save(installed)
                 self.offers[d] = nil
                 self.setEntry(d, SurfaceDataEntry(dataset: d, installed: installed))
-                self.updateSettings { $0.surfaceDataset = d }
+                self.updateSettings {
+                    $0.surfaceDataset = d
+                    $0.onlineSurface = nil
+                }
             } catch {
                 self.logger.warning("地表データ(\(d.id, privacy: .public))の取得に失敗: \(String(describing: error), privacy: .public)")
                 if let error = error as? SurfaceDataError {
@@ -185,7 +197,8 @@ final class SurfaceDataModel: ObservableObject {
     func delete(_ d: SurfaceDataset) {
         guard updating == nil else { return }
         stores[d]!.clear()
-        if selected() == d { updateSettings { $0.showSurface = false } }
+        let current = settings()
+        if current.surfaceDataset == d && current.onlineSurface == nil { updateSettings { $0.showSurface = false } }
         // 行は「未取得」にしておき、取り込める版が分かっていれば選べるようにする。
         if let known = offers[d] {
             setEntry(d, SurfaceDataEntry(dataset: d, installed: nil, available: known.manifest))
@@ -209,7 +222,7 @@ final class SurfaceDataModel: ObservableObject {
 
     /// 使っている種類の地表データの出典。取り込んだときに端末へ残した manifest から読む。取得していなければ nil。
     func credits() -> PeakDataCredits? {
-        let store = stores[selected()]!
+        let store = stores[settings().surfaceDataset]!
         guard store.load() != nil, let manifest = store.files.readManifest() else { return nil }
         return PeakDataCreditsReader.parse(manifest)
     }

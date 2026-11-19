@@ -33,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.shohei0205.yamamuki.R
+import io.github.shohei0205.yamamuki.core.OnlineSurface
 import io.github.shohei0205.yamamuki.core.SurfaceDataset
 import io.github.shohei0205.yamamuki.core.byteSizeText
 import java.text.SimpleDateFormat
@@ -49,16 +50,31 @@ val SurfaceDataset.label: Int
         SurfaceDataset.ESA_WORLDCOVER_Z12 -> R.string.surface_dataset_esa_worldcover_z12
     }
 
+/** 通信して取る地図の種類の名前。 */
+@get:StringRes
+val OnlineSurface.label: Int
+    get() = when (this) {
+        OnlineSurface.GSI_PALE -> R.string.online_surface_gsi_pale
+        OnlineSurface.GSI_STD -> R.string.online_surface_gsi_std
+        OnlineSurface.GSI_HILLSHADE -> R.string.online_surface_gsi_hillshade
+        OnlineSurface.GSI_RELIEF -> R.string.online_surface_gsi_relief
+        OnlineSurface.GSI_PHOTO -> R.string.online_surface_gsi_photo
+    }
+
 /**
  * 地表データの選択画面([SurfaceDataScreen])の中身。取得済みの種類と、カタログで取得できる種類を並べる。
  * 選ぶとその種類を使い(取得していなければダウンロードするかを聞く)、取得済みの種類は更新と削除ができる。
  * 方位盤に描くかどうかは、設定の「地表を表示」で切り替える。
+ * そのあとに、通信して取る地図(地理院タイル)を並べる。こちらはダウンロードせず、選ぶとすぐ使う。
  */
 @Composable
 fun SurfaceDataSection(
     state: SurfaceUiState,
     selected: SurfaceDataset,
+    /** 使っている通信して取る地図。地表データを使っているときは null。 */
+    selectedOnline: OnlineSurface?,
     onChoose: (SurfaceDataset) -> Unit,
+    onChooseOnline: (OnlineSurface) -> Unit,
     onUpdate: (SurfaceDataset) -> Unit,
     onDelete: (SurfaceDataset) -> Unit,
     onAnswerOffer: (Boolean) -> Unit,
@@ -79,13 +95,36 @@ fun SurfaceDataSection(
             HorizontalDivider()
             SurfaceDataRow(
                 entry = entry,
-                selected = entry.dataset == selected,
+                selected = selectedOnline == null && entry.dataset == selected,
                 enabled = state.updating == null,
                 progress = state.progress.takeIf { state.updating == entry.dataset },
                 onChoose = { onChoose(entry.dataset) },
                 onUpdate = { onUpdate(entry.dataset) },
                 onDelete = { deleting = entry.dataset },
             )
+        }
+
+        Text(
+            stringResource(R.string.online_surface_section_title),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        Text(stringResource(R.string.online_surface_section_description), style = MaterialTheme.typography.bodySmall)
+        OnlineSurface.entries.forEach { surface ->
+            HorizontalDivider()
+            val inUse = surface == selectedOnline
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .selectable(selected = inUse, enabled = state.updating == null, role = Role.RadioButton, onClick = { onChooseOnline(surface) })
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                RadioButton(selected = inUse, onClick = null, enabled = state.updating == null)
+                Text(stringResource(surface.label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                if (inUse) Badge(stringResource(R.string.peak_data_list_in_use))
+            }
         }
     }
 
