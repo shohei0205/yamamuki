@@ -313,6 +313,8 @@ fun DialScreen(
             centerLon = state.location?.longitude,
             rangeKm = state.rangeKm,
         )
+        // 地図(地理院タイル)を背景に描いているあいだは、地図の上で読みにくい文字に半透明の白い下地を敷く。
+        val mapShown = onlineSurface != null && surfaceImage != null
         DialCanvas(
             headingDeg = heading ?: 0.0,
             compassHeadingDeg = compassHeading ?: heading ?: 0.0,
@@ -339,10 +341,17 @@ fun DialScreen(
             surface = surfaceImage,
             // 通信して取る地図は、取れるまで(圏外など)距離の帯を残す。
             surfaceShown = surfaceRenderer != null && (onlineSurface == null || surfaceImage != null),
+            mapShown = mapShown,
         )
         // 配布版では、ヘッダーの中央にバナー広告(320×50)を出す。広告を入れないビルドでは何も出さない(build.gradle.kts の ads)。
         AdBanner(Modifier.align(Alignment.TopCenter).padding(top = ((DialGeometry.HEADER_HEIGHT_DP - 50) / 2).dp))
-        Column(Modifier.align(Alignment.BottomEnd).padding(8.dp), horizontalAlignment = Alignment.End) {
+        Column(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(8.dp)
+                .then(if (mapShown) Modifier.background(Color.White.copy(alpha = MAP_PANEL_ALPHA), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp) else Modifier),
+            horizontalAlignment = Alignment.End,
+        ) {
             // 地表を表示しているあいだは、地表データの出典も添える。
             if (onlineSurface != null) {
                 Text(stringResource(R.string.online_surface_attribution), style = MaterialTheme.typography.labelSmall)
@@ -364,13 +373,14 @@ fun DialScreen(
                     message = if (headingAccuracyLow && compassHeading != null) stringResource(R.string.dial_heading_accuracy_low) else null,
                     // 距離の円が文字の後ろを通っても読めるよう、方位の札と同じ淡い白の札にする。
                     labeled = true,
+                    mapShown = mapShown,
                 )
-                StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null))
+                StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null), labeled = mapShown, mapShown = mapShown)
                 // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
                 // どちらも設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
                 if (state.peakDataMissing) {
                     // 初回のダウンロードを「あとで」にしたときに、設定画面を探さなくても取得できるようにする。
-                    StatusLine(message = stringResource(R.string.dial_peak_data_missing))
+                    StatusLine(message = stringResource(R.string.dial_peak_data_missing), labeled = mapShown, mapShown = mapShown)
                     PeakDataLabel(stringResource(R.string.dial_peak_data_download), onClick = viewModel::updatePeakData)
                 } else if (state.peakDataRefreshNeeded) {
                     PeakDataLabel(stringResource(R.string.peak_data_refresh_needed), onClick = viewModel::updatePeakData)
@@ -397,6 +407,7 @@ fun DialScreen(
                     headingDeg = compassHeading ?: heading,
                     altitudeM = location?.mslAltitudeM,
                     textScale = state.settings.textScale,
+                    panelAlpha = if (mapShown) MAP_PANEL_ALPHA else 0.5f,
                 )
             }
         }
@@ -760,7 +771,7 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
  * ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
  */
 @Composable
-private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Float) {
+private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Float, panelAlpha: Float = 0.5f) {
     val texts = rememberDialTexts()
     val parts = headingDeg?.let { texts.readoutParts(it, altitudeM) }
     val heading = if (parts == null) stringResource(R.string.dial_heading_loading) else parts.first
@@ -775,7 +786,7 @@ private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Flo
             fontSize = 15.sp * textScale,
             fontWeight = FontWeight.Bold,
             modifier = Modifier
-                .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
+                .background(Color.White.copy(alpha = panelAlpha), RoundedCornerShape(50))
                 .padding(horizontal = 12.dp, vertical = 3.dp),
         )
     }
@@ -888,7 +899,13 @@ private val PostDark = Color(0xFF8A6036)
 private val PostLight = Color(0xFFA57646)
 
 @Composable
-private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled: Boolean = false) {
+private fun StatusLine(
+    message: String?,
+    modifier: Modifier = Modifier,
+    labeled: Boolean = false,
+    /** 地図を背景に描いている。札の白を濃くする([MAP_PANEL_ALPHA])。 */
+    mapShown: Boolean = false,
+) {
     if (message == null) return
     Text(
         message,
@@ -896,7 +913,7 @@ private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled:
         modifier = modifier.padding(horizontal = 12.dp, vertical = 8.dp).then(
             if (labeled) {
                 Modifier
-                    .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = if (mapShown) MAP_PANEL_ALPHA else 0.5f), RoundedCornerShape(50))
                     .padding(horizontal = 12.dp, vertical = 3.dp)
             } else {
                 Modifier
