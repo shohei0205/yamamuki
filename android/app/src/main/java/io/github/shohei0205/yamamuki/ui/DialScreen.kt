@@ -338,6 +338,7 @@ fun DialScreen(
             maxPeaks = state.settings.maxPeaks,
             textScale = state.settings.textScale,
             gridStyle = state.settings.gridStyle,
+            observerStyle = state.settings.observerStyle,
             latitude = location?.latitude,
             longitude = location?.longitude,
             viewportLatitude = state.location?.latitude,

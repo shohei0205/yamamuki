@@ -16,6 +16,8 @@ struct Settings: Codable, Equatable {
     var textScale = 1.0
     /// 方位盤に引く補助線の種類。
     var gridStyle = GridStyle.rings
+    /// 方位盤の現在地の描き方。
+    var observerStyle = ObserverStyle.icon
     /// 起動時の表示範囲(現在地から画面上端までの距離)。
     var initialRangeKm = Int(DialGeometry.defaultRangeKm)
     /// 現在地と方位をどのくらいこまめに測るか。こまめなほど電池を使う。
@@ -55,6 +57,7 @@ struct Settings: Codable, Equatable {
         maxPeaks = min(max(savedMaxPeaks, Settings.maxPeaksRange.lowerBound), Settings.maxPeaksRange.upperBound)
         textScale = try c.decodeIfPresent(Double.self, forKey: .textScale) ?? d.textScale
         gridStyle = (try? c.decodeIfPresent(GridStyle.self, forKey: .gridStyle)) ?? d.gridStyle
+        observerStyle = (try? c.decodeIfPresent(ObserverStyle.self, forKey: .observerStyle)) ?? d.observerStyle
         initialRangeKm = try c.decodeIfPresent(Int.self, forKey: .initialRangeKm) ?? d.initialRangeKm
         sensorPrecision = (try? c.decodeIfPresent(SensorPrecision.self, forKey: .sensorPrecision)) ?? d.sensorPrecision
         peakDataAsked = try c.decodeIfPresent(Bool.self, forKey: .peakDataAsked) ?? d.peakDataAsked
@@ -102,6 +105,21 @@ enum GridStyle: String, Codable, CaseIterable {
         case .bearingLines: return Strings.text("settings_grid_style_bearing_lines")
         case .ringTicks: return Strings.text("settings_grid_style_ring_ticks")
         case .off: return Strings.text("settings_grid_style_none")
+        }
+    }
+}
+
+/// 方位盤の現在地の描き方。設定画面ではこの順に並ぶ。
+enum ObserverStyle: String, Codable, CaseIterable {
+    /// 双眼鏡(山頂にいるときは山頂アイコン)を白い丸の上に描く。
+    case icon
+    /// アプリアイコンと同じ、白い丸に濃い点の小さな印。近くの山の山名と重なりにくい。
+    case point
+
+    var label: String {
+        switch self {
+        case .icon: return Strings.text("settings_observer_style_icon")
+        case .point: return Strings.text("settings_observer_style_point")
         }
     }
 }

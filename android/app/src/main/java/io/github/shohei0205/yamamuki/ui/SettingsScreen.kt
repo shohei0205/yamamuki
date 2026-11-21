@@ -55,6 +55,7 @@ import io.github.shohei0205.yamamuki.core.PeakDataset
 import io.github.shohei0205.yamamuki.core.TagGroup
 import io.github.shohei0205.yamamuki.core.TagGroups
 import io.github.shohei0205.yamamuki.settings.GridStyle
+import io.github.shohei0205.yamamuki.settings.ObserverStyle
 import io.github.shohei0205.yamamuki.settings.SensorPrecision
 import io.github.shohei0205.yamamuki.settings.Settings
 import java.text.SimpleDateFormat
@@ -153,6 +154,13 @@ fun SettingsScreen(
                 selected = settings.gridStyle,
                 label = { stringResource(it.label) },
                 onSelect = { v -> onSettingsChange { it.copy(gridStyle = v) } },
+            )
+            Choice(
+                title = stringResource(R.string.settings_observer_style),
+                options = ObserverStyle.entries,
+                selected = settings.observerStyle,
+                label = { stringResource(it.label) },
+                onSelect = { v -> onSettingsChange { it.copy(observerStyle = v) } },
             )
             Choice(
                 title = stringResource(R.string.settings_initial_range),

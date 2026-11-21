@@ -115,6 +115,9 @@
     <string name="settings_grid_style_bearing_lines">方位線</string>
     <string name="settings_grid_style_ring_ticks">目盛り</string>
     <string name="settings_grid_style_none">なし</string>
+    <string name="settings_observer_style">現在地の表示</string>
+    <string name="settings_observer_style_icon">アイコン</string>
+    <string name="settings_observer_style_point">ポイント</string>
     <string name="settings_initial_range">起動時の表示距離（km）</string>
     <string name="settings_section_battery">バッテリー</string>
     <string name="settings_keep_screen_on">画面を常に点灯</string>

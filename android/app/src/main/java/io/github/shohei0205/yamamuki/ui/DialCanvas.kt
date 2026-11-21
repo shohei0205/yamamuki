@@ -72,6 +72,7 @@ import io.github.shohei0205.yamamuki.core.PeakGroup
 import io.github.shohei0205.yamamuki.core.PeakLayout
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.settings.GridStyle
+import io.github.shohei0205.yamamuki.settings.ObserverStyle
 import io.github.shohei0205.yamamuki.core.displayScore
 import io.github.shohei0205.yamamuki.core.elevationClass
 import io.github.shohei0205.yamamuki.core.tagCount
@@ -103,6 +104,8 @@ private val FlagPole = Color(0xFF333333)
 private val FanShade = Color(0xFFB08D57)
 private val FanEdge = Color(0xFFF2A65A)
 private val ShadowColor = Color.Black.copy(alpha = 0.2f)
+/** 現在地をポイントで描くときの点の色。アプリアイコンの現在地の点と同じ。 */
+private val ObserverDot = Color(0xFF2E3A40)
 internal val TapeInk = Color(0xFF2E3A40)
 internal val TapeSubtle = Color(0xFF6B7178)
 
@@ -141,6 +144,7 @@ private class DialTextStyles(scale: Float) {
  * 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。代表の山なら、まとめた山を含む一覧を [onGroupTap] に渡す。
  * 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
  * 現在地がほぼ山頂([summit] が非 null)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
+ * [observerStyle] がポイントのときは、双眼鏡と山頂アイコンの代わりに小さなポイントを描く(山頂の山名は残す)。
  */
 @Composable
 fun DialCanvas(
@@ -164,6 +168,8 @@ fun DialCanvas(
     textScale: Float = 1f,
     /** 補助線の種類。 */
     gridStyle: GridStyle = GridStyle.RINGS,
+    /** 現在地の描き方。 */
+    observerStyle: ObserverStyle = ObserverStyle.ICON,
     latitude: Double? = null,
     longitude: Double? = null,
     viewportLatitude: Double? = latitude,
@@ -238,9 +244,10 @@ fun DialCanvas(
         }
         clipRect {
             val coneAlpha = 1f - viewFanAlpha
+            val point = observerStyle == ObserverStyle.POINT
             hitTargets.peaks = if (pxPerKm > 0f) {
                 // 方位線は円と距離の数字の下に引き、距離の数字を線で隠さない。方位名の札は円の上に置く。
-                if (gridStyle == GridStyle.BEARING_LINES) drawBearingLines(observer, headingDeg, observerRotation, chartTop)
+                if (gridStyle == GridStyle.BEARING_LINES) drawBearingLines(observer, headingDeg, observerRotation, chartTop, point)
                 if (gridStyle != GridStyle.NONE) {
                     val previousAngle = RingLabelGeometry.rotatedAngle(hitTargets.ringLabelAngle, hitTargets.ringLabelHeading, headingDeg)
                     hitTargets.ringLabelAngle = drawRings(observer, pxPerKm, rangeKm, chartTop, textMeasurer, styles, texts,
@@ -254,13 +261,17 @@ fun DialCanvas(
                 emptyList()
             }
             if (summit != null) {
-                hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation, coneAlpha, summitLabel)
+                hitTargets.summit = drawSummit(observer, summit, textMeasurer, styles, observerRotation, coneAlpha, summitLabel, point)
                 hitTargets.observer = null
             } else {
                 hitTargets.observerCenter = observer
                 hitTargets.observerRotation = observerRotation
-                rotate(observerRotation, pivot = observer) {
-                    hitTargets.observer = drawBinoculars(observer, coneAlpha)
+                if (point) {
+                    hitTargets.observer = drawObserverPoint(observer, observerRotation, coneAlpha)
+                } else {
+                    rotate(observerRotation, pivot = observer) {
+                        hitTargets.observer = drawBinoculars(observer, coneAlpha)
+                    }
                 }
                 hitTargets.summit = null
             }
@@ -427,9 +438,9 @@ private val BEARING_LINE_DEGS = (0 until 360 step 45).map { it.toDouble() }
  * 方位線。現在地から 45° ごとに細い破線を引く。方位名は [drawBearingLabels] で円の上に添える。
  * あわせて、端末を向けている方向へ青い破線を引く。手動位置モードで地図を回していても、双眼鏡と同じ向きを指す。
  */
-private fun DrawScope.drawBearingLines(observer: Offset, headingDeg: Double, observerRotation: Float, chartTop: Float) {
-    // 双眼鏡の白い丸の外から引く。
-    val start = 26.dp.toPx()
+private fun DrawScope.drawBearingLines(observer: Offset, headingDeg: Double, observerRotation: Float, chartTop: Float, point: Boolean) {
+    // 双眼鏡(またはポイント)の白い丸の外から引く。
+    val start = (if (point) POINT_RADIUS_DP + 3f else 26f).dp.toPx()
     val reach = hypot(size.width, size.height) * 2
     fun direction(a: Double) = Offset(cos(a).toFloat(), sin(a).toFloat())
     clipRect(top = chartTop, bottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()) {
@@ -989,6 +1000,7 @@ private fun polygon(points: List<Offset>): Path = Path().apply {
  * 現在地がほぼ山頂のとき(検索位置モードでは選んだ山頂)に双眼鏡の代わりに描く、頂上に赤い旗を立てた灰色の三角の山と山名。
  * 方位盤の山アイコンと見分けられる形にし、双眼鏡と同じ白い丸の中に置いて、同じ視野の扇形を前方へ描く。
  * 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤のため)。タップの当たり判定用の範囲を返す。
+ * [point] のときは、山頂アイコンの代わりにポイント([drawObserverPoint])を描き、山名をそのすぐ右に置く。
  */
 private fun DrawScope.drawSummit(
     center: Offset,
@@ -998,9 +1010,15 @@ private fun DrawScope.drawSummit(
     observerRotation: Float,
     coneAlpha: Float,
     showLabel: Boolean,
+    point: Boolean,
 ): PlacedPeak {
     val u = 1.dp.toPx()
     fun at(x: Float, y: Float) = Offset(center.x + x * u, center.y + y * u)
+    val label = textMeasurer.measure(summit.mountain.name, styles.label)
+    if (point) {
+        val dot = drawObserverPoint(center, observerRotation, coneAlpha)
+        return placeSummitLabel(summit, center, label, dot, labelLeft = center.x + (POINT_RADIUS_DP + 6f) * u, labelCenterY = center.y, showLabel)
+    }
 
     // 白い丸の真ん中に、灰色の三角の山と、頂上に立てた赤い旗を描く。
     val peak = polygon(listOf(at(-15f, 12f), at(0f, -8f), at(15f, 12f)))
@@ -1015,14 +1033,29 @@ private fun DrawScope.drawSummit(
     drawLine(FlagPole, poleTop, poleBottom, strokeWidth = 2f * u, cap = StrokeCap.Round)
     drawPath(flag, NorthRed)
 
-    val label = textMeasurer.measure(summit.mountain.name, styles.label)
     // 白い丸の範囲。山名を出さないときは、これがタップの当たり判定になる。
     val disc = Box(left = center.x - 23f * u, top = center.y - 24f * u, right = center.x + 23f * u, bottom = center.y + 22f * u)
-    if (!showLabel) return PlacedPeak(summit, center, label, disc)
+    return placeSummitLabel(summit, center, label, disc, labelLeft = center.x + 30f * u, labelCenterY = center.y - 1f * u, showLabel)
+}
+
+/**
+ * 現在地の山頂の山名を、[labelLeft] から白い下地付きで描き、[icon] と山名を合わせた範囲を返す。
+ * 山名を出さないときは [icon] だけをタップの当たり判定にする。
+ */
+private fun DrawScope.placeSummitLabel(
+    summit: NearbyMountain,
+    center: Offset,
+    label: TextLayoutResult,
+    icon: Box,
+    labelLeft: Float,
+    labelCenterY: Float,
+    showLabel: Boolean,
+): PlacedPeak {
+    if (!showLabel) return PlacedPeak(summit, center, label, icon)
+    val u = 1.dp.toPx()
     val padX = 5f * u
     val padY = 2f * u
-    val labelLeft = center.x + 30f * u
-    val labelTop = center.y - 1f * u - label.size.height / 2f
+    val labelTop = labelCenterY - label.size.height / 2f
     drawRoundRect(
         Color.White.copy(alpha = 0.85f),
         topLeft = Offset(labelLeft - padX, labelTop - padY),
@@ -1032,17 +1065,17 @@ private fun DrawScope.drawSummit(
     drawText(label, topLeft = Offset(labelLeft, labelTop))
 
     val box = Box(
-        left = disc.left,
-        top = min(disc.top, labelTop - padY),
+        left = icon.left,
+        top = min(icon.top, labelTop - padY),
         right = labelLeft + label.size.width + padX,
-        bottom = max(disc.bottom, labelTop + label.size.height + padY),
+        bottom = max(icon.bottom, labelTop + label.size.height + padY),
     )
     return PlacedPeak(summit, center, label, box)
 }
 
 /**
  * 向いている方位(画面の上)を示す視野。[apex] から前方へ扇形に広がり、遠くほど薄くなる。
- * 双眼鏡と山頂アイコンで共通に使う。
+ * 双眼鏡と山頂アイコンとポイントで共通に使う。
  */
 private fun DrawScope.drawViewCone(apex: Offset, alpha: Float) {
     val reach = 70.dp.toPx()
@@ -1128,6 +1161,26 @@ private fun DrawScope.drawBinoculars(center: Offset, coneAlpha: Float): Box {
     }
     return Box(left = center.x - 23f * u, top = center.y - 24f * u, right = center.x + 23f * u, bottom = center.y + 22f * u)
 }
+
+/**
+ * 現在地を表す小さなポイント。アプリアイコンの現在地と同じく、影付きの白い丸に濃い点を描く。
+ * 双眼鏡より小さく、近くの山の山名を隠しにくい。向いている方位は、双眼鏡と同じ視野の扇で示す。
+ * タップの当たり判定用に、白い丸より少し広い範囲を返す(小さくて押しにくいため)。
+ */
+private fun DrawScope.drawObserverPoint(center: Offset, observerRotation: Float, coneAlpha: Float): Box {
+    val u = 1.dp.toPx()
+    // 視野の扇だけを端末を向けている方向へ回す。影は回さず、いつも下に落とす。
+    if (coneAlpha > 0f) rotate(observerRotation, pivot = center) { drawViewCone(center, coneAlpha) }
+    drawCircle(ShadowColor, radius = POINT_RADIUS_DP * u, center = center + Offset(0f, 1.5f * u))
+    drawCircle(Color.White, radius = POINT_RADIUS_DP * u, center = center)
+    // 白い丸と点の大きさの比は、アプリアイコン(46 と 22)に合わせる。
+    drawCircle(ObserverDot, radius = POINT_RADIUS_DP * 22f / 46f * u, center = center)
+    val hit = (POINT_RADIUS_DP + 6f) * u
+    return Box(left = center.x - hit, top = center.y - hit, right = center.x + hit, bottom = center.y + hit)
+}
+
+/** 現在地のポイントの白い丸の半径(dp)。 */
+private const val POINT_RADIUS_DP = 8f
 
 /** 双眼鏡と山頂アイコンを載せる、影付きの白い丸。帯や円の上でも現在地が目立つようにする。 */
 private fun DrawScope.drawObserverDisc(center: Offset) {

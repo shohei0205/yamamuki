@@ -19,6 +19,10 @@ private let headingLine = Color(hex: 0x3A7BD5)
 /// 方位線の向き。北から 45° ごと。
 private let bearingLineDegs = stride(from: 0, to: 360, by: 45).map { Double($0) }
 private let shadowColor = Color.black.opacity(0.2)
+/// 現在地をポイントで描くときの点の色。アプリアイコンの現在地の点と同じ。
+private let observerDot = Color(hex: 0x2E3A40)
+/// 現在地のポイントの白い丸の半径。
+private let observerPointRadius: CGFloat = 8
 private let northRed = Color(hex: 0xED1C24)
 private let binocularBody = Color(hex: 0x333333)
 private let binocularHinge = Color(hex: 0x777777)
@@ -61,6 +65,7 @@ private let labelPadY: CGFloat = 2
 /// 描いた山(アイコンか山名)をタップすると [onMountainTap] を呼ぶ。代表の山なら、まとめた山を含む一覧を [onGroupTap] に渡す。
 /// 双眼鏡(現在地)をタップすると [onObserverTap] を呼ぶ。
 /// 現在地がほぼ山頂([summit] が非 nil)のときは、双眼鏡の代わりに山頂アイコンと山名を描き、そのタップも [onMountainTap] に渡す。
+/// [observerStyle] がポイントのときは、双眼鏡と山頂アイコンの代わりに小さなポイントを描く(山頂の山名は残す)。
 struct DialCanvasView: View, Animatable {
     let headingDeg: Double
     let mountains: [NearbyMountain]
@@ -77,6 +82,8 @@ struct DialCanvasView: View, Animatable {
     let textScale: Double
     /// 補助線の種類。
     var gridStyle = GridStyle.rings
+    /// 現在地の描き方。
+    var observerStyle = ObserverStyle.icon
     let observerLocation: GeoPoint?
     let viewportLocation: GeoPoint?
     let compassHeading: Double
@@ -194,7 +201,9 @@ struct DialCanvasView: View, Animatable {
         } else {
             hitTargets.observerCenter = observer
             hitTargets.observerRotation = Heading.delta(headingDeg, compassHeading)
-            hitTargets.observer = drawBinoculars(rotatedObserver(ctx, center: observer), center: observer)
+            hitTargets.observer = observerStyle == .point
+                ? drawObserverPoint(ctx, center: observer)
+                : drawBinoculars(rotatedObserver(ctx, center: observer), center: observer)
             hitTargets.summit = nil
         }
         // 上部の青空と山並みは、地図の上に重ねる。手動位置モードで地図を動かしても、双眼鏡などがヘッダーに重ならない。
@@ -343,8 +352,8 @@ struct DialCanvasView: View, Animatable {
         var ctx = ctx
         let bottom = size.height - originBottom
         ctx.clip(to: Path(CGRect(x: 0, y: chartTop, width: size.width, height: max(0, bottom - chartTop))))
-        // 双眼鏡の白い丸の外から引く。
-        let start: CGFloat = 26
+        // 双眼鏡(またはポイント)の白い丸の外から引く。
+        let start: CGFloat = observerStyle == .point ? observerPointRadius + 3 : 26
         let reach = hypot(size.width, size.height) * 2
         func ray(_ a: Double) -> Path {
             let dx = CGFloat(cos(a)), dy = CGFloat(sin(a))
@@ -660,6 +669,12 @@ struct DialCanvasView: View, Animatable {
     /// 山名は右側に白い下地付きで置く(下は画面の端、上は方位盤のため)。タップの当たり判定用の範囲を返す。
     private func drawSummit(_ ctx: GraphicsContext, center: CGPoint, summit: NearbyMountain, styles: TextStyles, showLabel: Bool) -> PlacedPeak {
         func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: center.x + x, y: center.y + y) }
+        if observerStyle == .point {
+            let dot = drawObserverPoint(ctx, center: center)
+            let icon = ScreenBox(left: Double(dot.minX), top: Double(dot.minY), right: Double(dot.maxX), bottom: Double(dot.maxY))
+            return placeSummitLabel(ctx, center: center, summit: summit, styles: styles, icon: icon,
+                labelLeft: center.x + observerPointRadius + 6, labelCenterY: center.y, showLabel: showLabel)
+        }
 
         // 白い丸の真ん中に、灰色の三角の山と、頂上に立てた赤い旗を描く。
         let peak = polygon([at(-15, 12), at(0, -8), at(15, 12)])
@@ -675,27 +690,36 @@ struct DialCanvasView: View, Animatable {
 
         // 白い丸の範囲。山名を出さないときは、これがタップの当たり判定になる。
         let disc = ScreenBox(left: Double(center.x - 23), top: Double(center.y - 24), right: Double(center.x + 23), bottom: Double(center.y + 22))
-        guard showLabel else { return PlacedPeak(mountain: summit, position: center, box: disc) }
+        return placeSummitLabel(ctx, center: center, summit: summit, styles: styles, icon: disc,
+            labelLeft: center.x + 30, labelCenterY: center.y - 1, showLabel: showLabel)
+    }
+
+    /// 現在地の山頂の山名を、[labelLeft] から白い下地付きで描き、[icon] と山名を合わせた範囲を返す。
+    /// 山名を出さないときは [icon] だけをタップの当たり判定にする。
+    private func placeSummitLabel(
+        _ ctx: GraphicsContext, center: CGPoint, summit: NearbyMountain, styles: TextStyles, icon: ScreenBox,
+        labelLeft: CGFloat, labelCenterY: CGFloat, showLabel: Bool
+    ) -> PlacedPeak {
+        guard showLabel else { return PlacedPeak(mountain: summit, position: center, box: icon) }
         let label = measuredText(ctx, summit.mountain.name, size: styles.label, color: tapeInk)
         let padX: CGFloat = 5
         let padY: CGFloat = 2
-        let labelLeft = center.x + 30
-        let labelTop = center.y - 1 - label.size.height / 2
+        let labelTop = labelCenterY - label.size.height / 2
         let background = CGRect(x: labelLeft - padX, y: labelTop - padY, width: label.size.width + padX * 2, height: label.size.height + padY * 2)
         ctx.fill(Path(roundedRect: background, cornerRadius: 4), with: .color(.white.opacity(0.85)))
         ctx.draw(label.text, at: CGPoint(x: labelLeft, y: labelTop), anchor: .topLeading)
 
         let box = ScreenBox(
-            left: disc.left,
-            top: min(disc.top, Double(labelTop - padY)),
+            left: icon.left,
+            top: min(icon.top, Double(labelTop - padY)),
             right: Double(labelLeft + label.size.width + padX),
-            bottom: max(disc.bottom, Double(labelTop + label.size.height + padY))
+            bottom: max(icon.bottom, Double(labelTop + label.size.height + padY))
         )
         return PlacedPeak(mountain: summit, position: center, box: box)
     }
 
     /// 向いている方位(画面の上)を示す視野。[apex] から前方へ扇形に広がり、遠くほど薄くなる。
-    /// 双眼鏡と山頂アイコンで共通に使う。
+    /// 双眼鏡と山頂アイコンとポイントで共通に使う。
     private func drawViewCone(_ ctx: GraphicsContext, apex: CGPoint) {
         let alpha = 1 - viewFanAlpha
         guard alpha > 0 else { return }
@@ -769,6 +793,23 @@ struct DialCanvasView: View, Animatable {
             ctx.fill(Path(ellipseIn: CGRect(x: lens.x - 3.5, y: lens.y - 1.5, width: 3, height: 1.4)), with: .color(.white.opacity(0.8)))
         }
         return CGRect(x: center.x - 23, y: center.y - 24, width: 46, height: 46)
+    }
+
+    /// 現在地を表す小さなポイント。アプリアイコンの現在地と同じく、影付きの白い丸に濃い点を描く。
+    /// 双眼鏡より小さく、近くの山の山名を隠しにくい。向いている方位は、双眼鏡と同じ視野の扇で示す。
+    /// タップの当たり判定用に、白い丸より少し広い範囲を返す(小さくて押しにくいため)。
+    private func drawObserverPoint(_ ctx: GraphicsContext, center: CGPoint) -> CGRect {
+        // 視野の扇だけを端末を向けている方向へ回す。影は回さず、いつも下に落とす。
+        drawViewCone(rotatedObserver(ctx, center: center), apex: center)
+        let r = observerPointRadius
+        let disc = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+        ctx.fill(Path(ellipseIn: disc.offsetBy(dx: 0, dy: 1.5)), with: .color(shadowColor))
+        ctx.fill(Path(ellipseIn: disc), with: .color(.white))
+        // 白い丸と点の大きさの比は、アプリアイコン(46 と 22)に合わせる。
+        let dot = r * 22 / 46
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - dot, y: center.y - dot, width: dot * 2, height: dot * 2)), with: .color(observerDot))
+        let hit = r + 6
+        return CGRect(x: center.x - hit, y: center.y - hit, width: hit * 2, height: hit * 2)
     }
 
     /// 双眼鏡と山頂アイコンを載せる、影付きの白い丸。帯や円の上でも現在地が目立つようにする。

@@ -65,6 +65,12 @@ struct SettingsView: View {
                         label: { $0.label }
                     ) { v in model.updateSettings { $0.gridStyle = v } }
                     Choice(
+                        title: Strings.text("settings_observer_style"),
+                        options: ObserverStyle.allCases,
+                        selected: settings.observerStyle,
+                        label: { $0.label }
+                    ) { v in model.updateSettings { $0.observerStyle = v } }
+                    Choice(
                         title: Strings.text("settings_initial_range"),
                         options: Settings.initialRangesKm,
                         selected: settings.initialRangeKm,
