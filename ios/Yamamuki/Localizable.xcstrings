@@ -1894,6 +1894,39 @@
         }
       }
     },
+    "settings_observer_style": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在地の表示"
+          }
+        }
+      }
+    },
+    "settings_observer_style_icon": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アイコン"
+          }
+        }
+      }
+    },
+    "settings_observer_style_point": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ポイント"
+          }
+        }
+      }
+    },
     "settings_peak_data_auto_check": {
       "extractionState": "manual",
       "localizations": {
