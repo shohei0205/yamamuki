@@ -38,6 +38,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
+import io.github.shohei0205.yamamuki.core.GeoMath
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
@@ -104,6 +106,12 @@ private val ShadowColor = Color.Black.copy(alpha = 0.2f)
 internal val TapeInk = Color(0xFF2E3A40)
 internal val TapeSubtle = Color(0xFF6B7178)
 
+/**
+ * 地図(地理院タイル)を背景に描いているあいだ、地図の上に載る文字に敷く白い下地の濃さ。
+ * 地図の線や文字、色別標高図の濃い色の上でも読めるようにする。
+ */
+internal const val MAP_PANEL_ALPHA = 0.85f
+
 /** 方位目盛りの 10° ごとと 5° ごとの線の長さ。 */
 private const val TAPE_MAJOR_TICK_DP = 14f
 private const val TAPE_MINOR_TICK_DP = 8f
@@ -168,6 +176,15 @@ fun DialCanvas(
     viewFanAlpha: Float = 1f,
     /** 画面下端の余白(ジェスチャーバーなど)の高さ。視野の扇の外側の暗さだけを、ここまで描き足す。 */
     bottomBleed: Dp = 0.dp,
+    /** 背景に貼る地表(森林・水域・陰影)の画像。地表を表示しないときと、まだ画像が無いときは null。 */
+    surface: SurfaceImage? = null,
+    /** 地表を表示している。距離の帯の色分けを地表に重ねず、同心円の線だけにする。 */
+    surfaceShown: Boolean = false,
+    /**
+     * 地図(地理院タイル)を背景に描いている。地図の上で読みにくい文字(「ほか 3 山」、方位と標高の札)に、
+     * 半透明の白い下地([MAP_PANEL_ALPHA])を敷く。
+     */
+    mapShown: Boolean = false,
 ) {
     val styles = remember(textScale) { DialTextStyles(textScale) }
     val texts = rememberDialTexts()
@@ -210,7 +227,10 @@ fun DialCanvas(
         val observerRotation = Heading.delta(headingDeg, compassHeadingDeg).toFloat()
         // 距離の帯と視野の扇は、画面下端の余白まで描く。
         clipRect(top = headerHeight + tapeHeight, bottom = size.height + bottomBleed.toPx()) {
-            if (pxPerKm > 0f) drawGroundBands(observer, pxPerKm, rangeKm)
+            if (pxPerKm > 0f && surface != null && latitude != null && longitude != null) {
+                drawSurface(surface, origin, pxPerKm, headingDeg, viewportLatitude ?: latitude, viewportLongitude ?: longitude)
+            }
+            if (pxPerKm > 0f && !surfaceShown) drawGroundBands(observer, pxPerKm, rangeKm)
             if (viewFanAlpha > 0f) {
                 // 扇は画面の真上に固定する。手動位置モードへ切り替えて消える間も、端末の向きにつられて回らない。
                 drawViewFan(observer, viewFanAlpha)
@@ -228,7 +248,8 @@ fun DialCanvas(
                     hitTargets.ringLabelHeading = headingDeg
                 }
                 if (gridStyle == GridStyle.BEARING_LINES) drawBearingLabels(observer, headingDeg, chartTop, textMeasurer, styles, texts)
-                drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, texts, maxPeaks, peakSelection, headingUp)
+                drawPeaks(observer, pxPerKm, headingDeg, mountains, altitudeM, chartTop, textMeasurer, styles, texts, maxPeaks, peakSelection, headingUp,
+                    othersPanel = mapShown)
             } else {
                 emptyList()
             }
@@ -251,11 +272,41 @@ fun DialCanvas(
                 clipRect(top = headerHeight) {
                     translate(top = headerHeight - tapeHidden * (chartTop - headerHeight) * 1.5f) {
                         drawTape(headingDeg, tapeHeight, textMeasurer)
-                        drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles, texts)
+                        drawReadout(headingDeg, altitudeM, tapeHeight, textMeasurer, styles, texts, panelAlpha = if (mapShown) MAP_PANEL_ALPHA else 0.5f)
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * 地表の画像を地面に貼る。画像は北が上なので、表示の中心([origin]。画面の基準の位置 [latitude]・[longitude])が画像の
+ * どこにあたるかを、画像の中心からの距離と方位で求めて原点に合わせ、端末の向きの分だけ回す。
+ * 山は現在地からの距離と方位で置くので、画像の中心を現在地からの距離と方位で置くと、中心から離れるほど画面の中央で山と
+ * ずれ、作り直した瞬間にずれが戻って画像が跳ぶ。画面の中央に合わせれば、ずれが出るのは画面の端だけになる。
+ */
+private fun DrawScope.drawSurface(
+    surface: SurfaceImage,
+    origin: Offset,
+    pxPerKm: Float,
+    headingDeg: Double,
+    latitude: Double,
+    longitude: Double,
+) {
+    val frame = surface.frame
+    val distanceKm = GeoMath.distanceKm(frame.centerLat, frame.centerLon, latitude, longitude)
+    val bearingDeg = GeoMath.bearingDeg(frame.centerLat, frame.centerLon, latitude, longitude)
+    val o = DialGeometry.project(distanceKm, bearingDeg, headingDeg)
+    val center = Offset(origin.x - (o.x * pxPerKm).toFloat(), origin.y + (o.y * pxPerKm).toFloat())
+    val half = (frame.radiusKm * pxPerKm).toFloat()
+    rotate(-headingDeg.toFloat(), pivot = center) {
+        drawImage(
+            surface.bitmap,
+            dstOffset = IntOffset((center.x - half).roundToInt(), (center.y - half).roundToInt()),
+            dstSize = IntSize((half * 2).roundToInt(), (half * 2).roundToInt()),
+            filterQuality = FilterQuality.Medium,
+        )
     }
 }
 
@@ -541,6 +592,8 @@ private fun DrawScope.drawPeaks(
     maxPeaks: Int,
     selection: PeakSelection,
     headingUp: Boolean,
+    /** 「ほか 3 山」に白い下地を敷く(地図を背景に描いているとき)。 */
+    othersPanel: Boolean = false,
 ): List<PlacedPeak> {
     val gap = 2.dp.toPx()
     val chartBottom = size.height - DialGeometry.ORIGIN_BOTTOM_DP.dp.toPx()
@@ -728,7 +781,15 @@ private fun DrawScope.drawPeaks(
         drawNameChip(peak, gap, icon.color, alpha)
         var box = peak.box
         othersLabels[i]?.let { (others, below) ->
-            drawText(others, topLeft = Offset(p.x - others.size.width / 2f, below.top), alpha = alpha)
+            val topLeft = Offset(p.x - others.size.width / 2f, below.top)
+            if (othersPanel) {
+                // 下地は文字の幅より少し広げ、山名の札に重ならないよう高さは文字のままにする。
+                val padX = 4.dp.toPx()
+                val height = others.size.height.toFloat()
+                drawRoundRect(Color.White.copy(alpha = MAP_PANEL_ALPHA * alpha), topLeft = topLeft - Offset(padX, 0f),
+                    size = Size(others.size.width + padX * 2, height), cornerRadius = CornerRadius(height / 2))
+            }
+            drawText(others, topLeft = topLeft, alpha = alpha)
             box = Box(min(box.left, below.left), box.top, max(box.right, below.right), below.bottom)
         }
         PlacedPeak(peak.mountain, p, peak.label, box, group.members.map { it.mountain })
@@ -1143,6 +1204,8 @@ private fun DrawScope.drawReadout(
     textMeasurer: TextMeasurer,
     styles: DialTextStyles,
     texts: DialTexts,
+    /** 札の白の濃さ。地図を背景に描いているときは濃くする([MAP_PANEL_ALPHA])。 */
+    panelAlpha: Float = 0.5f,
 ) {
     val center = size.width / 2
     val caret = 5.dp.toPx()
@@ -1172,7 +1235,7 @@ private fun DrawScope.drawReadout(
     val topLeft = Offset(center - pill.width / 2, tapeHeight + 4.dp.toPx())
     val radius = CornerRadius(pill.height / 2)
     // 札は目盛りの帯と同じくらいの淡い白にして、帯より目立たせない。同心円と重なっても文字が読める程度の濃さは残す。
-    drawRoundRect(Color.White.copy(alpha = 0.5f), topLeft, pill, radius)
+    drawRoundRect(Color.White.copy(alpha = panelAlpha), topLeft, pill, radius)
     drawText(label, topLeft = topLeft + Offset(padX, padY))
 }
 

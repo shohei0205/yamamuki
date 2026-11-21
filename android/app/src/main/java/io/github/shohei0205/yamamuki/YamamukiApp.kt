@@ -11,11 +11,17 @@ import io.github.shohei0205.yamamuki.core.PeakData
 import io.github.shohei0205.yamamuki.core.PeakDataChannel
 import io.github.shohei0205.yamamuki.core.PeakDataUpdater
 import io.github.shohei0205.yamamuki.core.PeakDataset
+import io.github.shohei0205.yamamuki.core.CatalogSurfaceDataSource
+import io.github.shohei0205.yamamuki.core.OnlineSurfaceClient
+import io.github.shohei0205.yamamuki.core.SurfaceDataUpdater
+import io.github.shohei0205.yamamuki.core.SurfaceDataset
 import io.github.shohei0205.yamamuki.data.CacheManager
 import io.github.shohei0205.yamamuki.data.MountainDatabase
 import io.github.shohei0205.yamamuki.data.PeakDataStores
 import io.github.shohei0205.yamamuki.data.RoomMountainCache
 import io.github.shohei0205.yamamuki.data.SavedAreas
+import io.github.shohei0205.yamamuki.data.SurfaceDataStores
+import io.github.shohei0205.yamamuki.data.SurfaceDatabaseValidator
 import io.github.shohei0205.yamamuki.settings.AppSettings
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -80,6 +86,28 @@ class YamamukiApp : Application() {
             )
         }
     }
+
+    /** 取り込み済みの地表データの記録とファイル。地表データの種類ごとに持つ。 */
+    val surfaceDataStores: SurfaceDataStores by lazy { SurfaceDataStores(this) }
+
+    private val surfaceDataUpdaters: Map<SurfaceDataset, SurfaceDataUpdater> by lazy {
+        SurfaceDataset.entries.associateWith {
+            SurfaceDataUpdater(
+                CatalogSurfaceDataSource(
+                    http, it, useDev = peakDataChannel == PeakDataChannel.DEV, userAgent = USER_AGENT, catalogCache = catalogCache,
+                ),
+                surfaceDataStores.of(it).files,
+                it,
+                validate = SurfaceDatabaseValidator::validate,
+            )
+        }
+    }
+
+    /** 方位盤の背景に描く、通信して取る地図(地理院タイル)のタイルを取る。取ったタイルはメモリにだけ覚える。 */
+    val onlineSurfaceClient: OnlineSurfaceClient by lazy { OnlineSurfaceClient(http, userAgent = USER_AGENT) }
+
+    /** yamamuki-data が配る [dataset] の地表データを取得して、端末に置く。どこから読むかは山データと同じ。 */
+    fun surfaceDataUpdater(dataset: SurfaceDataset): SurfaceDataUpdater = surfaceDataUpdaters.getValue(dataset)
 
     /** 保存している [dataset] の山データ。方位盤は [mountainRepository] を通して読み、山の検索だけは全件を直接読む。 */
     fun mountainCache(dataset: PeakDataset): RoomMountainCache = mountainCaches.getValue(dataset)

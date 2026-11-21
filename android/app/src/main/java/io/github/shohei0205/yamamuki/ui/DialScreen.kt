@@ -97,6 +97,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.shohei0205.yamamuki.Features
+import io.github.shohei0205.yamamuki.YamamukiApp
 import io.github.shohei0205.yamamuki.R
 import io.github.shohei0205.yamamuki.ads.AdBanner
 import io.github.shohei0205.yamamuki.core.DialGeometry
@@ -123,6 +124,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 /** これより小さい方位の変化は画面に反映しない。 */
+/** 方位盤の左下・右下のボタンの、画面下端からの高さ。右下の出典が 2 行になっても、ボタンと重ならない高さにする。 */
+private const val MAP_BUTTONS_BOTTOM_DP = 52
+
 private const val MIN_HEADING_CHANGE_DEG = 0.1
 
 /** ヘディングアップと手動位置モードを切り替えるときの、方位目盛り・コンパス・視野の扇の動きの長さ。 */
@@ -216,6 +220,7 @@ fun DialScreen(
     // 選んだ山は ID で持ち、表示中の一覧から引く。歩いて現在地が変わると距離も更新される。
     var selectedId by remember { mutableStateOf<String?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showSurfaceData by rememberSaveable { mutableStateOf(false) }
     var showDownload by rememberSaveable { mutableStateOf(false) }
     val showSearch = state.search != null
     var showObserver by remember { mutableStateOf(false) }
@@ -248,8 +253,8 @@ fun DialScreen(
                 canvasHeight = it.height / density.density.toDouble()
                 canvasWidth = it.width / density.density.toDouble()
             }
-            .pointerInput(showSettings, showSearch) {
-                if (showSettings || showSearch) return@pointerInput
+            .pointerInput(showSettings, showSearch, showSurfaceData) {
+                if (showSettings || showSearch || showSurfaceData) return@pointerInput
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     var multiTouch = false
@@ -289,6 +294,31 @@ fun DialScreen(
                 }
             },
     ) {
+        // 設定で地表を表示にしていて、通信して取る地図を選んでいるか、その地表データを取得済みなら、背景に貼る画像を作る。
+        val surfaceViewModel: SurfaceDataViewModel? = if (Features.SURFACE) viewModel() else null
+        val surfaceState = surfaceViewModel?.state?.collectAsStateWithLifecycle()?.value
+        val surfaceDataset = state.settings.surfaceDataset
+        val onlineSurface = state.settings.onlineSurface?.takeIf { surfaceViewModel != null && state.settings.showSurface }
+        val surfaceInstalled = surfaceState?.entries?.firstOrNull { it.dataset == surfaceDataset }?.installed
+            ?.takeIf { state.settings.showSurface && onlineSurface == null }
+        val app = context.applicationContext as YamamukiApp
+        val hillshade = state.settings.showHillshade
+        val surfaceRenderer: SurfaceRenderer? = remember(onlineSurface, surfaceDataset, surfaceInstalled?.version, surfaceInstalled?.datasetId, hillshade) {
+            when {
+                onlineSurface != null -> OnlineSurfaceRenderer(app.onlineSurfaceClient, onlineSurface)
+                surfaceInstalled != null ->
+                    FileSurfaceRenderer(app.surfaceDataStores.of(surfaceDataset).files.database, surfaceInstalled.datasetId, hillshade)
+                else -> null
+            }
+        }
+        val surfaceImage = rememberSurfaceImage(
+            renderer = surfaceRenderer,
+            centerLat = state.location?.latitude,
+            centerLon = state.location?.longitude,
+            rangeKm = state.rangeKm,
+        )
+        // 地図(地理院タイル)を背景に描いているあいだは、地図の上で読みにくい文字に半透明の白い下地を敷く。
+        val mapShown = onlineSurface != null && surfaceImage != null
         DialCanvas(
             headingDeg = heading ?: 0.0,
             compassHeadingDeg = compassHeading ?: heading ?: 0.0,
@@ -312,14 +342,28 @@ fun DialScreen(
             longitude = location?.longitude,
             viewportLatitude = state.location?.latitude,
             viewportLongitude = state.location?.longitude,
+            surface = surfaceImage,
+            // 通信して取る地図は、取れるまで(圏外など)距離の帯を残す。
+            surfaceShown = surfaceRenderer != null && (onlineSurface == null || surfaceImage != null),
+            mapShown = mapShown,
         )
         // 配布版では、ヘッダーの中央にバナー広告(320×50)を出す。広告を入れないビルドでは何も出さない(build.gradle.kts の ads)。
         AdBanner(Modifier.align(Alignment.TopCenter).padding(top = ((DialGeometry.HEADER_HEIGHT_DP - 50) / 2).dp))
-        Text(
-            stringResource(state.settings.peakDataset.attribution),
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
-        )
+        Column(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(8.dp)
+                .then(if (mapShown) Modifier.background(Color.White.copy(alpha = MAP_PANEL_ALPHA), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp) else Modifier),
+            horizontalAlignment = Alignment.End,
+        ) {
+            // 地表を表示しているあいだは、地表データの出典も添える。
+            if (onlineSurface != null) {
+                Text(stringResource(R.string.online_surface_attribution), style = MaterialTheme.typography.labelSmall)
+            } else if (surfaceInstalled != null) {
+                Text(stringResource(R.string.surface_attribution), style = MaterialTheme.typography.labelSmall)
+            }
+            Text(stringResource(state.settings.peakDataset.attribution), style = MaterialTheme.typography.labelSmall)
+        }
 
         if (!hasPermission) {
             PermissionRequest(
@@ -333,13 +377,14 @@ fun DialScreen(
                     message = if (headingAccuracyLow && compassHeading != null) stringResource(R.string.dial_heading_accuracy_low) else null,
                     // 距離の円が文字の後ろを通っても読めるよう、方位の札と同じ淡い白の札にする。
                     labeled = true,
+                    mapShown = mapShown,
                 )
-                StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null))
+                StatusLine(message = statusMessage(state, headingAvailable = compassHeading != null), labeled = mapShown, mapShown = mapShown)
                 // 古いデータのままでも使えるので、自動では取り直さず、いつ取りに行くかは利用者に任せる。
                 // どちらも設定の「更新を確認」と同じ流れにする(新しい版の大きさを見せて確認する。圏外なら通信せずに知らせる)。
                 if (state.peakDataMissing) {
                     // 初回のダウンロードを「あとで」にしたときに、設定画面を探さなくても取得できるようにする。
-                    StatusLine(message = stringResource(R.string.dial_peak_data_missing))
+                    StatusLine(message = stringResource(R.string.dial_peak_data_missing), labeled = mapShown, mapShown = mapShown)
                     PeakDataLabel(stringResource(R.string.dial_peak_data_download), onClick = viewModel::updatePeakData)
                 } else if (state.peakDataRefreshNeeded) {
                     PeakDataLabel(stringResource(R.string.peak_data_refresh_needed), onClick = viewModel::updatePeakData)
@@ -366,6 +411,7 @@ fun DialScreen(
                     headingDeg = compassHeading ?: heading,
                     altitudeM = location?.mslAltitudeM,
                     textScale = state.settings.textScale,
+                    panelAlpha = if (mapShown) MAP_PANEL_ALPHA else 0.5f,
                 )
             }
         }
@@ -389,8 +435,9 @@ fun DialScreen(
         }
 
         // 右下: 山の検索と、モードの切り替え。検索はどちらのモードからでも使える。
+        // 右下の出典が 2 行(地表の出典と山データの出典)になっても重ならないよう、出典の上に置く。
         Column(
-            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 36.dp),
+            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = MAP_BUTTONS_BOTTOM_DP.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             RoundMapButton(
@@ -415,39 +462,58 @@ fun DialScreen(
             )
         }
 
-        // 左下: 設定と事前ダウンロード。右下のモード切替ボタンと同じ見た目・同じ高さにそろえる。
-        Row(
-            Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 36.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        // 左下: 設定と事前ダウンロード、設定の上に地表データ。右下のモード切替ボタンと同じ見た目・同じ高さにそろえる。
+        Column(
+            Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = MAP_BUTTONS_BOTTOM_DP.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            RoundMapButton(onClick = { showSettings = true }, iconColor = SETTINGS_BUTTON_ICON_COLOR) {
-                Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title), Modifier.size(28.dp))
+            if (Features.SURFACE) {
+                RoundMapButton(onClick = { showSurfaceData = true }, iconColor = SETTINGS_BUTTON_ICON_COLOR) {
+                    Icon(
+                        painterResource(R.drawable.ic_surface_layers),
+                        contentDescription = stringResource(R.string.surface_data_section_title),
+                        Modifier.size(28.dp),
+                    )
+                }
             }
-            if (Features.AREA_DOWNLOAD) {
-                RoundMapButton(onClick = { showDownload = true }, iconColor = DOWNLOAD_BUTTON_ICON_COLOR) {
-                    // ダウンロード中は画面を閉じていても進み具合が分かるよう、ボタンに出す。
-                    val running = download.running
-                    if (running != null && running.progress.doneTiles > 0) {
-                        CircularProgressIndicator(
-                            progress = { running.progress.fraction },
-                            modifier = Modifier.size(28.dp),
-                            color = LocalContentColor.current,
-                            strokeWidth = 3.dp,
-                            // 進みの少ないうちも輪の形が見えるよう、下地を描く。
-                            trackColor = LocalContentColor.current.copy(alpha = 0.25f),
-                        )
-                    } else if (running != null) {
-                        // 最初の区画が終わるまでは進みが 0 なので、回り続ける表示にする。
-                        CircularProgressIndicator(Modifier.size(28.dp), color = LocalContentColor.current, strokeWidth = 3.dp)
-                    } else {
-                        Icon(
-                            painterResource(R.drawable.ic_area_download),
-                            contentDescription = stringResource(R.string.dial_area_download),
-                            Modifier.size(28.dp),
-                        )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                RoundMapButton(onClick = { showSettings = true }, iconColor = SETTINGS_BUTTON_ICON_COLOR) {
+                    Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title), Modifier.size(28.dp))
+                }
+                if (Features.AREA_DOWNLOAD) {
+                    RoundMapButton(onClick = { showDownload = true }, iconColor = DOWNLOAD_BUTTON_ICON_COLOR) {
+                        // ダウンロード中は画面を閉じていても進み具合が分かるよう、ボタンに出す。
+                        val running = download.running
+                        if (running != null && running.progress.doneTiles > 0) {
+                            CircularProgressIndicator(
+                                progress = { running.progress.fraction },
+                                modifier = Modifier.size(28.dp),
+                                color = LocalContentColor.current,
+                                strokeWidth = 3.dp,
+                                // 進みの少ないうちも輪の形が見えるよう、下地を描く。
+                                trackColor = LocalContentColor.current.copy(alpha = 0.25f),
+                            )
+                        } else if (running != null) {
+                            // 最初の区画が終わるまでは進みが 0 なので、回り続ける表示にする。
+                            CircularProgressIndicator(Modifier.size(28.dp), color = LocalContentColor.current, strokeWidth = 3.dp)
+                        } else {
+                            Icon(
+                                painterResource(R.drawable.ic_area_download),
+                                contentDescription = stringResource(R.string.dial_area_download),
+                                Modifier.size(28.dp),
+                            )
+                        }
                     }
                 }
             }
+        }
+
+        if (Features.SURFACE && showSurfaceData) {
+            SurfaceDataScreen(
+                surface = viewModel<SurfaceDataViewModel>(),
+                settings = state.settings,
+                onBack = { showSurfaceData = false },
+            )
         }
 
         if (showSettings) {
@@ -470,6 +536,7 @@ fun DialScreen(
                 onClosePeakDataList = viewModel::closePeakDataList,
                 onChoosePeakData = viewModel::choosePeakData,
                 onDeletePeakData = viewModel::deletePeakData,
+                surface = if (Features.SURFACE) viewModel<SurfaceDataViewModel>() else null,
             )
         }
 
@@ -517,7 +584,7 @@ fun DialScreen(
         )
     }
 
-    val overlay = showSettings || showDownload || showSearch
+    val overlay = showSettings || showDownload || showSearch || showSurfaceData
     if (selected != null && !overlay) {
         MountainDetailDialog(
             selected,
@@ -728,7 +795,7 @@ private fun statusMessage(state: DialUiState, headingAvailable: Boolean): String
  * ヘディングアップの方位目盛りの下の札と同じ見た目(淡い白の札、方位は濃い色、標高は灰色)にする。
  */
 @Composable
-private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Float) {
+private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Float, panelAlpha: Float = 0.5f) {
     val texts = rememberDialTexts()
     val parts = headingDeg?.let { texts.readoutParts(it, altitudeM) }
     val heading = if (parts == null) stringResource(R.string.dial_heading_loading) else parts.first
@@ -743,7 +810,7 @@ private fun HeadingLabel(headingDeg: Double?, altitudeM: Double?, textScale: Flo
             fontSize = 15.sp * textScale,
             fontWeight = FontWeight.Bold,
             modifier = Modifier
-                .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
+                .background(Color.White.copy(alpha = panelAlpha), RoundedCornerShape(50))
                 .padding(horizontal = 12.dp, vertical = 3.dp),
         )
     }
@@ -856,7 +923,13 @@ private val PostDark = Color(0xFF8A6036)
 private val PostLight = Color(0xFFA57646)
 
 @Composable
-private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled: Boolean = false) {
+private fun StatusLine(
+    message: String?,
+    modifier: Modifier = Modifier,
+    labeled: Boolean = false,
+    /** 地図を背景に描いている。札の白を濃くする([MAP_PANEL_ALPHA])。 */
+    mapShown: Boolean = false,
+) {
     if (message == null) return
     Text(
         message,
@@ -864,7 +937,7 @@ private fun StatusLine(message: String?, modifier: Modifier = Modifier, labeled:
         modifier = modifier.padding(horizontal = 12.dp, vertical = 8.dp).then(
             if (labeled) {
                 Modifier
-                    .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = if (mapShown) MAP_PANEL_ALPHA else 0.5f), RoundedCornerShape(50))
                     .padding(horizontal = 12.dp, vertical = 3.dp)
             } else {
                 Modifier

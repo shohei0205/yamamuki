@@ -204,7 +204,7 @@ private fun PeakDataRow(entry: PeakDataEntry, selected: Boolean, enabled: Boolea
 
 /** 名前の横に出す小さな印。 */
 @Composable
-private fun Badge(text: String) {
+internal fun Badge(text: String) {
     Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
         Text(text, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }

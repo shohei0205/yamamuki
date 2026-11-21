@@ -485,6 +485,17 @@
         }
       }
     },
+    "credits_section_online_surface": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景の地図"
+          }
+        }
+      }
+    },
     "credits_section_sources": {
       "extractionState": "manual",
       "localizations": {
@@ -503,6 +514,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "補足に使った資料"
+          }
+        }
+      }
+    },
+    "credits_section_surface": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データ"
           }
         }
       }
@@ -1097,6 +1119,105 @@
           "stringUnit": {
             "state": "translated",
             "value": "地図を手動で操作します"
+          }
+        }
+      }
+    },
+    "online_surface_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地理院タイル"
+          }
+        }
+      }
+    },
+    "online_surface_credits_source": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "国土地理院"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_hillshade": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陰影起伏図"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_pale": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "淡色地図"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_photo": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写真"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_relief": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "色別標高図"
+          }
+        }
+      }
+    },
+    "online_surface_gsi_std": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準地図"
+          }
+        }
+      }
+    },
+    "online_surface_section_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地理院タイルを方位盤の背景に表示します。通信できるときに、表示している周りの地図を取得します。端末には保存しないので、圏外では表示されません。"
+          }
+        }
+      }
+    },
+    "online_surface_section_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オンラインデータ（国土地理院）"
           }
         }
       }
@@ -2059,6 +2180,28 @@
         }
       }
     },
+    "settings_show_hillshade": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陰影を表示"
+          }
+        }
+      }
+    },
+    "settings_show_hillshade_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフラインデータに、地形の起伏の陰影を重ねます。"
+          }
+        }
+      }
+    },
     "settings_text_size": {
       "extractionState": "manual",
       "localizations": {
@@ -2132,6 +2275,281 @@
           "stringUnit": {
             "state": "translated",
             "value": "バージョン %1$@"
+          }
+        }
+      }
+    },
+    "surface_attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "© ESA WorldCover project 2021・地理院タイルを加工"
+          }
+        }
+      }
+    },
+    "surface_data_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中止"
+          }
+        }
+      }
+    },
+    "surface_data_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用可能な地表データを確認しています…"
+          }
+        }
+      }
+    },
+    "surface_data_delete_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端末に保存した地表データを削除します。必要な場合は後で再度ダウンロードできます。"
+          }
+        }
+      }
+    },
+    "surface_data_delete_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」の地表データを削除しますか？"
+          }
+        }
+      }
+    },
+    "surface_data_error_invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データを取り込めませんでした。\n%1$@"
+          }
+        }
+      }
+    },
+    "surface_data_error_network": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通信に失敗しました。通信できる場所で再度お試しください。"
+          }
+        }
+      }
+    },
+    "surface_data_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データをダウンロードできませんでした"
+          }
+        }
+      }
+    },
+    "surface_data_fetching": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取得中… %1$ld％"
+          }
+        }
+      }
+    },
+    "surface_data_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用できる地表データはありません。"
+          }
+        }
+      }
+    },
+    "surface_data_offer_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」の地表データをダウンロードします。保存後は圏外でも利用できます。\n%2$@\n今すぐダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "surface_data_offer_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データのダウンロード"
+          }
+        }
+      }
+    },
+    "surface_data_section_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方位盤の背景に表示する地表を選択します。表示すると、バッテリー消費が増える場合があります。"
+          }
+        }
+      }
+    },
+    "surface_data_section_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地表データ"
+          }
+        }
+      }
+    },
+    "surface_data_summary_available": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リリース：%1$@・約 %2$@"
+          }
+        }
+      }
+    },
+    "surface_data_summary_installed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リリース：%1$@・取得日 %2$@・約 %3$@"
+          }
+        }
+      }
+    },
+    "surface_data_summary_installed_no_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取得日 %1$@・約 %2$@"
+          }
+        }
+      }
+    },
+    "surface_data_update": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
+          }
+        }
+      }
+    },
+    "surface_dataset_esa_worldcover_z10": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ESA WorldCover（高精細）"
+          }
+        }
+      }
+    },
+    "surface_dataset_esa_worldcover_z11": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ESA WorldCover（超高精細）"
+          }
+        }
+      }
+    },
+    "surface_dataset_esa_worldcover_z12": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ESA WorldCover（最高精細）"
+          }
+        }
+      }
+    },
+    "surface_dataset_esa_worldcover_z9": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ESA WorldCover（標準）"
+          }
+        }
+      }
+    },
+    "surface_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "表示しない"
+          }
+        }
+      }
+    },
+    "surface_offline_section_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロードすると圏外でも表示できます。"
+          }
+        }
+      }
+    },
+    "surface_offline_section_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフラインデータ"
           }
         }
       }

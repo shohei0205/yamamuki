@@ -7,6 +7,9 @@ import YamamukiCore
 
 /// 方位盤の地面のクリーム色。
 let dialGround = Color(hex: 0xFFF4D8)
+/// 地図(地理院タイル)を背景に描いているあいだ、地図の上に載る文字に敷く白い下地の濃さ。
+/// 地図の線や文字、色別標高図の濃い色の上でも読めるようにする。
+let mapPanelOpacity = 0.85
 /// 距離の円の間の帯。現在地に近い帯から順に塗り、ここにない遠くの帯は地面の色のままにする。
 private let groundBands = [Color(hex: 0xFFE7B0), Color(hex: 0xFFEDC2), Color(hex: 0xFFF1CF)]
 private let ringLine = Color(hex: 0xE8C98F)
@@ -84,6 +87,13 @@ struct DialCanvasView: View, Animatable {
     var viewFanAlpha: Double
     /// 画面下端の余白(ホームインジケーターなど)の高さ。視野の扇の外側の暗さだけを、ここまで描き足す。
     var bottomBleed: CGFloat = 0
+    /// 背景に貼る地表(森林・水域・陰影)の画像。地表を表示しないときと、まだ画像が無いときは nil。
+    var surface: SurfaceLayerImage?
+    /// 地表を表示している。距離の帯の色分けを地表に重ねず、同心円の線だけにする。
+    var surfaceShown = false
+    /// 地図(地理院タイル)を背景に描いている。地図の上で読みにくい文字(「ほか 3 山」、方位と標高の札)に、
+    /// 半透明の白い下地(`mapPanelOpacity`)を敷く。
+    var mapShown = false
     let onPan: (Double, Double, Double) -> Void
     let onTransform: (Double, Double, PlanOffset, PlanOffset, Double) -> Void
     let onMountainTap: (NearbyMountain) -> Void
@@ -150,7 +160,10 @@ struct DialCanvasView: View, Animatable {
         var groundContext = ctx
         let groundTop = headerHeight + tapeHeight
         groundContext.clip(to: Path(CGRect(x: 0, y: groundTop, width: size.width, height: max(0, size.height + bottomBleed - groundTop))))
-        if pxPerKm > 0 {
+        if pxPerKm > 0, let surface, let center = viewportLocation ?? observerLocation {
+            drawSurface(groundContext, surface: surface, origin: origin, pxPerKm: pxPerKm, location: center)
+        }
+        if pxPerKm > 0, !surfaceShown {
             drawGroundBands(groundContext, observer: observer, pxPerKm: pxPerKm)
         }
         if viewFanAlpha > 0 {
@@ -203,6 +216,22 @@ struct DialCanvasView: View, Animatable {
         rotated.rotate(by: .degrees(Heading.delta(headingDeg, compassHeading)))
         rotated.translateBy(x: -center.x, y: -center.y)
         return rotated
+    }
+
+    /// 地表の画像を地面に貼る。画像は北が上なので、表示の中心(`origin`。画面の基準の位置 `location`)が画像のどこにあたるかを、
+    /// 画像の中心からの距離と方位で求めて原点に合わせ、端末の向きの分だけ回す。
+    /// 山は現在地からの距離と方位で置くので、画像の中心を現在地からの距離と方位で置くと、中心から離れるほど画面の中央で山と
+    /// ずれ、作り直した瞬間にずれが戻って画像が跳ぶ。画面の中央に合わせれば、ずれが出るのは画面の端だけになる。
+    private func drawSurface(_ ctx: GraphicsContext, surface: SurfaceLayerImage, origin: CGPoint, pxPerKm: CGFloat, location: GeoPoint) {
+        let frame = surface.frame
+        let distanceKm = GeoMath.distanceKm(frame.centerLat, frame.centerLon, location.latitude, location.longitude)
+        let bearingDeg = GeoMath.bearingDeg(frame.centerLat, frame.centerLon, location.latitude, location.longitude)
+        let o = DialGeometry.project(distanceKm: distanceKm, bearingDeg: bearingDeg, headingDeg: headingDeg)
+        let half = CGFloat(frame.radiusKm) * pxPerKm
+        var ctx = ctx
+        ctx.translateBy(x: origin.x - CGFloat(o.x) * pxPerKm, y: origin.y + CGFloat(o.y) * pxPerKm)
+        ctx.rotate(by: .degrees(-headingDeg))
+        ctx.draw(surface.image, in: CGRect(x: -half, y: -half, width: half * 2, height: half * 2))
     }
 
     /// 距離の円の間を、現在地に近いほど濃い淡い色で塗り分ける(groundBands)。遠い帯から順に重ねる。
@@ -592,6 +621,12 @@ struct DialCanvasView: View, Animatable {
             }
             var box = peak.box
             if let others = othersLabels[i] {
+                if mapShown {
+                    // 下地は文字の幅より少し広げ、山名の札に重ならないよう高さは文字のままにする。
+                    let panel = CGRect(x: p.x - others.text.size.width / 2 - 4, y: CGFloat(others.box.top),
+                                       width: others.text.size.width + 8, height: others.text.size.height)
+                    chip.fill(Path(roundedRect: panel, cornerRadius: panel.height / 2), with: .color(.white.opacity(mapPanelOpacity)))
+                }
                 chip.draw(others.text.text, at: CGPoint(x: p.x - others.text.size.width / 2, y: CGFloat(others.box.top)), anchor: .topLeading)
                 box = ScreenBox(left: min(box.left, others.box.left), top: box.top,
                     right: max(box.right, others.box.right), bottom: others.box.bottom)
@@ -826,7 +861,7 @@ struct DialCanvasView: View, Animatable {
                           width: textSize.width + padX * 2, height: textSize.height + padY * 2)
         let radius = pill.height / 2
         // 札は目盛りの帯と同じくらいの淡い白にして、帯より目立たせない。同心円と重なっても文字が読める程度の濃さは残す。
-        ctx.fill(Path(roundedRect: pill, cornerRadius: radius), with: .color(.white.opacity(0.5)))
+        ctx.fill(Path(roundedRect: pill, cornerRadius: radius), with: .color(.white.opacity(mapShown ? mapPanelOpacity : 0.5)))
         ctx.draw(text, at: CGPoint(x: pill.minX + padX, y: pill.minY + padY), anchor: .topLeading)
     }
 }

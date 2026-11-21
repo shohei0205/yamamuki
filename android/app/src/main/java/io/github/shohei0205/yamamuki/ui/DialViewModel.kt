@@ -223,6 +223,8 @@ class DialViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch { connectivityUpdates(application).collect(::onConnectivity) }
+        // 地表データの設定は、この ViewModel を通さずに変わる([SurfaceDataViewModel])。画面に出す設定をそろえる。
+        viewModelScope.launch { appSettings.settings.collect { s -> _state.update { it.copy(settings = s) } } }
         // 事前ダウンロードで現在地の周辺が埋まったり消えたりしたら、表示を読み直す。
         viewModelScope.launch {
             app.cacheChanges.collect {

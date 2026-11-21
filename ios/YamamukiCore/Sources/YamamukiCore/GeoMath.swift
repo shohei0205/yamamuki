@@ -24,6 +24,18 @@ public enum GeoMath {
         return (degrees(atan2(y, x)) + 360).truncatingRemainder(dividingBy: 360)
     }
 
+    /// 地点から方位角 `bearingDeg`(真北 0°、時計回り)へ大円に沿って `distanceKm` 進んだ地点の緯度と経度。
+    /// `distanceKm` と `bearingDeg` の逆の計算で、経度は -180〜180° に収める。
+    public static func destination(_ lat: Double, _ lon: Double, distanceKm: Double, bearingDeg: Double) -> (lat: Double, lon: Double) {
+        let phi1 = radians(lat)
+        let delta = distanceKm / earthRadiusKm
+        let theta = radians(bearingDeg)
+        let sinPhi2 = min(max(sin(phi1) * cos(delta) + cos(phi1) * sin(delta) * cos(theta), -1), 1)
+        let phi2 = asin(sinPhi2)
+        let lambda = radians(lon) + atan2(sin(theta) * sin(delta) * cos(phi1), cos(delta) - sin(phi1) * sinPhi2)
+        return (degrees(phi2), (degrees(lambda) + 540).truncatingRemainder(dividingBy: 360) - 180)
+    }
+
     /// 大気の屈折の標準的な係数。光が地面に沿って少し曲がり、遠くの山が実際より少し高く見える。
     public static let refractionCoefficient = 0.13
 

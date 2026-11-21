@@ -35,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,6 +90,8 @@ fun SettingsScreen(
     onClosePeakDataList: () -> Unit = {},
     onChoosePeakData: (PeakDataset) -> Unit = {},
     onDeletePeakData: (PeakDataset) -> Unit = {},
+    /** 地表データ(方位盤の背景)。出典の画面に使う。出さないとき([Features.SURFACE] が false)は null。 */
+    surface: SurfaceDataViewModel? = null,
 ) {
     BackHandler(onBack = onClose)
     LaunchedEffect(Unit) { onOpen() }
@@ -159,7 +162,6 @@ fun SettingsScreen(
                 label = { "$it" },
                 onSelect = { v -> onSettingsChange { it.copy(initialRangeKm = v) } },
             )
-
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_battery))
             SwitchRow(
@@ -224,7 +226,14 @@ fun SettingsScreen(
     }
 
     if (showCredits) {
-        CreditsScreen(dataset = settings.peakDataset, peakData = peakData, loadCredits = loadCredits, onBack = { showCredits = false })
+        CreditsScreen(
+            dataset = settings.peakDataset,
+            peakData = peakData,
+            loadCredits = loadCredits,
+            onBack = { showCredits = false },
+            loadSurfaceCredits = surface?.let { it::credits },
+            onlineSurface = settings.onlineSurface.takeIf { surface != null && settings.showSurface },
+        )
     }
     }
 }
@@ -346,7 +355,7 @@ private fun <T> Choice(
 }
 
 @Composable
-private fun SwitchRow(title: String, description: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, description: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)

@@ -33,6 +33,20 @@ object GeoMath {
         return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
     }
 
+    /**
+     * 地点から方位角 [bearingDeg](真北 0°、時計回り)へ大円に沿って [distanceKm] 進んだ地点の緯度と経度。
+     * [distanceKm] と [bearingDeg] の逆の計算で、経度は -180〜180° に収める。
+     */
+    fun destination(lat: Double, lon: Double, distanceKm: Double, bearingDeg: Double): Pair<Double, Double> {
+        val phi1 = Math.toRadians(lat)
+        val delta = distanceKm / EARTH_RADIUS_KM
+        val theta = Math.toRadians(bearingDeg)
+        val sinPhi2 = (sin(phi1) * cos(delta) + cos(phi1) * sin(delta) * cos(theta)).coerceIn(-1.0, 1.0)
+        val phi2 = asin(sinPhi2)
+        val lambda = Math.toRadians(lon) + atan2(sin(theta) * sin(delta) * cos(phi1), cos(delta) - sin(phi1) * sinPhi2)
+        return Math.toDegrees(phi2) to (Math.toDegrees(lambda) + 540.0) % 360.0 - 180.0
+    }
+
     /** 大気の屈折の標準的な係数。光が地面に沿って少し曲がり、遠くの山が実際より少し高く見える。 */
     const val REFRACTION_COEFFICIENT = 0.13
 
